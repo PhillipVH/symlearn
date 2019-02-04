@@ -195,7 +195,7 @@ public class DiverFactory implements TaskFactory {
 					performRun(classLoader);
 					manager.recordTime(System.currentTimeMillis() - t1);
 					coastal.addPc(symbolicState.getSegmentedPathCondition());
-					broker.publishThread("dive-end", this);
+					broker.publishThread("dive-end", new Tuple(this, symbolicState));
 					if (!symbolicState.mayContinue()) {
 						coastal.stopWork();
 					}
