@@ -1,7 +1,9 @@
 package za.ac.sun.cs.coastal.observers;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import org.apache.commons.configuration2.ImmutableConfiguration;
 import org.apache.logging.log4j.Logger;
@@ -35,45 +37,40 @@ public class PCReporterFactory implements ObserverFactory {
 
 	// ======================================================================
 	//
-	// MANAGER FOR MARKER COVERAGE
+	// MANAGER FOR PATH CONDITION REPORTING
 	//
 	// ======================================================================
 
 	private static class PCReporterManager implements ObserverManager {
 
 		private final Broker broker;
-
-		private final Map<String, Integer> markers = new HashMap<>();
 		
-		private final Map<Integer, Expression> spcs = new HashMap<>();
+		private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
 		
-		private int index = 0;
-
 		PCReporterManager(COASTAL coastal) {
 			broker = coastal.getBroker();
 			broker.subscribe("coastal-stop", this::report);
 		}
 
-		public synchronized void update(Map<Integer, Expression> spcs) {
-			for (Map.Entry<Integer, Expression> entry : spcs.entrySet()) {
-				Integer idx = entry.getKey();
-				Expression spc = entry.getValue();
-				
-				this.spcs.put(idx,  spc);
+		public synchronized void update(Boolean accepted, Expression pathCondition) {
+			HashSet<Expression> pathConditions = conditions.get(accepted);
+			
+			if (pathConditions == null) {
+				pathConditions = new HashSet<>();
+				pathConditions.add(pathCondition);
+				conditions.put(accepted, pathConditions);
+			} else {
+				pathConditions.add(pathCondition);
+				conditions.put(accepted, pathConditions);
 			}
 		}
 		
-		public int getIndex() {
-			return index++;
-		}
-
 		public void report(Object object) {
 			broker.publish("path-condition-report", null);
 			
-			if (spcs.size() > 0) {
-				for (Map.Entry<Integer, Expression> entry : spcs.entrySet()) {
-					broker.publish("report",
-							new Tuple("PCReporter.pc[" + entry.getKey() + "]", entry.getValue().toString()));
+			if (conditions.size() > 0) {
+				for (Entry<Boolean, HashSet<Expression>> entry : conditions.entrySet()) {
+					entry.getValue().forEach(cond -> broker.publish("report", new Tuple("PCReporter.pc[" + entry.getKey() + "]" + cond.toString())));
 				}
 			}
 			
@@ -107,19 +104,15 @@ public class PCReporterFactory implements ObserverFactory {
 		private final Logger log;
 
 		private final PCReporterManager manager;
-
-		private final Map<String, Integer> markers = new HashMap<>();
-		
-		private final Map<Integer, Expression> spcs = new HashMap<>();
 		
 		private final Broker broker;
 		
+		private boolean accepted = false;
 
 		PCReporterObserver(COASTAL coastal, ObserverManager manager) {
 			log = coastal.getLog();
 			this.manager = (PCReporterManager) manager;
 			this.broker = coastal.getBroker();
-			broker.subscribe("marker-coverage-report", this::update);
 			broker.subscribeThread("mark", this::mark);
 			broker.subscribeThread("dive-end", this::diveEnd);
 		}
@@ -128,30 +121,12 @@ public class PCReporterFactory implements ObserverFactory {
 			Tuple result = (Tuple) object;
 			SymbolicState state = (SymbolicState) result.get(1);
 			
-			Map<Integer, Expression> newSPC = new HashMap<>();
-			newSPC.put(manager.getIndex(), state.getSegmentedPathCondition().getPathCondition());
-			manager.update(newSPC);
+			manager.update(accepted, state.getSegmentedPathCondition().getPathCondition());
 		}
 
 		public void mark(Object object) {
-			String marker;
-	
-			if (object instanceof Integer) {
-				marker = Integer.toString((Integer) object);
-			} else {
-				marker = (String) object;
-			}
-			log.debug("%%% mark hit {}", marker);
-			Integer n = markers.get(marker);
-			if (n == null) {
-				markers.put(marker, 1);
-			} else {
-				markers.put(marker, n + 1);
-			}
-		}
-
-		public void update(Object object) {
-			manager.update(spcs);
+			/* 1 represents acceptance, 0 represents failure */
+			accepted = (((Integer) object) == 1) ? true : false;
 		}
 
 	}
