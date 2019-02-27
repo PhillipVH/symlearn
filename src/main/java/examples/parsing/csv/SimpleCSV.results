@@ -1,0 +1,42 @@
+====  PCReporter  ====================================================
+  pc[false](text$1!=44)&&((1<5)&&(text$0==97)): null
+  pc[false](text$2!=97)&&((2!=5)&&((text$1==44)&&((1<5)&&(text$0==97)))): null
+  pc[false](text$3!=44)&&((3<5)&&((text$2==97)&&((2!=5)&&((text$1==44)&&((1<5)&&(text$0==97)))))): null
+  pc[false](text$4!=97)&&((4!=5)&&((text$3==44)&&((3<5)&&((text$2==97)&&((2!=5)&&((text$1==44)&&((1<5)&&(text$0==97)))))))): null
+  pc[false]text$0!=97: null
+  pc[true](5>=5)&&((text$4==97)&&((4!=5)&&((text$3==44)&&((3<5)&&((text$2==97)&&((2!=5)&&((text$1==44)&&((1<5)&&(text$0==97))))))))): null
+
+44 = ,
+97 = a
+
+  a[^,] --> reject
+
+  a,[^a] -> reject
+
+  a,a[^,] --> reject
+
+  a,a,[^a] --> reject
+
+  [^a] --> reject
+
+  a,a,a --> accept
+
+PC to automata
+Start with non-empty automata
+MQ via Coastal
+
+
+Start: 
+- Take symbolci autoamata
+- Translate path conditions into SFA and union thme
+- TACAS 2018 d'Antonio example to Java
+- Unroll automata
+
+check(x,y,k) {
+gval = g(x, y);
+fval = f(x, y);
+assert(gval == fval);
+}
+
+"ReachabilityObserver" ::= Place a "Symbolic.mark()" in the 
+program code, dump the PCs along with the concrete inputs.
