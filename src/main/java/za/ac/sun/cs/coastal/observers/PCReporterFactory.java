@@ -9,11 +9,14 @@ import org.apache.commons.configuration2.ImmutableConfiguration;
 import org.apache.logging.log4j.Logger;
 
 import za.ac.sun.cs.coastal.COASTAL;
-import za.ac.sun.cs.coastal.diver.SegmentedPC;
 import za.ac.sun.cs.coastal.diver.SymbolicState;
 import za.ac.sun.cs.coastal.messages.Broker;
 import za.ac.sun.cs.coastal.messages.Tuple;
 import za.ac.sun.cs.coastal.solver.Expression;
+import za.ac.sun.cs.coastal.solver.IntegerVariable;
+import za.ac.sun.cs.coastal.solver.Operation;
+import za.ac.sun.cs.coastal.solver.Visitor;
+import za.ac.sun.cs.coastal.solver.VisitorException;
 
 public class PCReporterFactory implements ObserverFactory {
 
@@ -40,27 +43,65 @@ public class PCReporterFactory implements ObserverFactory {
 	// MANAGER FOR PATH CONDITION REPORTING
 	//
 	// ======================================================================
+	
+	private static class ConstraintCollectorVisitor extends Visitor {
+		public HashSet<Expression>  constraints = new HashSet<>();
+		public void postVisit(Operation op) {
+//			if (op.getOperand(0).toString().contains("A")) {
+//				constraints.add(op.getOperand(0));
+//			}
+			if (op.getOperand(0) instanceof IntegerVariable) {
+				if (op.getOperand(0).toString().contains("A")) {
+					constraints.add(op);
+				}
+			}
+		}
+		
+		
+	}
 
 	private static class PCReporterManager implements ObserverManager {
 
 		private final Broker broker;
 		
+		private final Logger log;
+		
 		private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
 		
 		PCReporterManager(COASTAL coastal) {
 			broker = coastal.getBroker();
+			log = coastal.getLog();
 			broker.subscribe("coastal-stop", this::report);
+		}
+		
+		private HashSet<Expression> extractConstraints(Expression pathCondition) {
+			try {
+				ConstraintCollectorVisitor collector = new ConstraintCollectorVisitor();
+				pathCondition.accept(collector);
+				return collector.constraints;
+			} catch (VisitorException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			return null;
 		}
 
 		public synchronized void update(Boolean accepted, Expression pathCondition) {
 			HashSet<Expression> pathConditions = conditions.get(accepted);
 			
+			
+			HashSet<Expression> constraints = extractConstraints(pathCondition);
+			log.info("---------------------" + accepted);
+			log.info(constraints);
+			log.info("---------------------");
+			Expression simplified = pathCondition;
+			
 			if (pathConditions == null) {
 				pathConditions = new HashSet<>();
-				pathConditions.add(pathCondition);
+				pathConditions.add(simplified);
 				conditions.put(accepted, pathConditions);
 			} else {
-				pathConditions.add(pathCondition);
+				pathConditions.add(simplified);
 				conditions.put(accepted, pathConditions);
 			}
 		}

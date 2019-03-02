@@ -5,12 +5,12 @@
 		<target>
 			<main>examples.tacas2017.Example</main>
 			<instrument>examples.tacas2017</instrument>
-			<trigger>examples.tacas2017.Example.check(A:int, B:int, C:int)</trigger>
+			<trigger>examples.tacas2017.Example.check(A:int[])</trigger>
 		</target>
 		<divers threads="8"/>
 		<surfers threads="0"/>
 		<observers>
-			<observer>za.ac.sun.cs.coastal.observers.AutomataComparisonReporterFactory</observer>
+			<observer>za.ac.sun.cs.coastal.observers.PCReporterFactory</observer>
 		</observers>
 	</coastal>
 </configuration>
