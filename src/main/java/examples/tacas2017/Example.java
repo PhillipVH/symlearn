@@ -20,8 +20,6 @@ public class Example {
 		return true;
 	}
 	
-				// TODO Remind LExis about back exercises 
-	
 	public static boolean int_pred(int num, int bottom, int upper) {
 		return (num >= bottom && num < upper);
 	}
@@ -94,7 +92,7 @@ public class Example {
 	}
 	
 	public static void main(String[] args) {
-		boolean result = check(new int[] {25, -3});
+		boolean result = check(new int[] {25, 1});
 		System.out.println("<::> " + result);
 	}
 

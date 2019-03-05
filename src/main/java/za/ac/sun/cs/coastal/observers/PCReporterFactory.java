@@ -15,6 +15,7 @@ import za.ac.sun.cs.coastal.messages.Tuple;
 import za.ac.sun.cs.coastal.solver.Expression;
 import za.ac.sun.cs.coastal.solver.IntegerVariable;
 import za.ac.sun.cs.coastal.solver.Operation;
+import za.ac.sun.cs.coastal.solver.Operation.Operator;
 import za.ac.sun.cs.coastal.solver.Visitor;
 import za.ac.sun.cs.coastal.solver.VisitorException;
 
@@ -45,11 +46,8 @@ public class PCReporterFactory implements ObserverFactory {
 	// ======================================================================
 	
 	private static class ConstraintCollectorVisitor extends Visitor {
-		public HashSet<Expression>  constraints = new HashSet<>();
+		public HashSet<Operation>  constraints = new HashSet<>();
 		public void postVisit(Operation op) {
-//			if (op.getOperand(0).toString().contains("A")) {
-//				constraints.add(op.getOperand(0));
-//			}
 			if (op.getOperand(0) instanceof IntegerVariable) {
 				if (op.getOperand(0).toString().contains("A")) {
 					constraints.add(op);
@@ -74,7 +72,12 @@ public class PCReporterFactory implements ObserverFactory {
 			broker.subscribe("coastal-stop", this::report);
 		}
 		
-		private HashSet<Expression> extractConstraints(Expression pathCondition) {
+		/**
+		 * Filter out the constraints in a given path condition relevant to the input array "A"
+		 * @param pathCondition
+		 * @return
+		 */
+		private HashSet<Operation> extractConstraints(Expression pathCondition) {
 			try {
 				ConstraintCollectorVisitor collector = new ConstraintCollectorVisitor();
 				pathCondition.accept(collector);
@@ -85,14 +88,62 @@ public class PCReporterFactory implements ObserverFactory {
 			}
 			return null;
 		}
+		
+		/**
+		 * Transform a set of constraint expressions to a map of character position to upper and lower bounds.
+		 * @param constraints
+		 * @return [lower bound, upper bound)
+		 */
+		private HashMap<Integer, Integer[]> processConstraints(HashSet<Operation> constraints) {
+			HashMap<Integer, Integer[]> bounds = new HashMap<>();
+			
+			constraints.forEach(expr -> {
+				Integer charPosition = Integer.parseInt(expr.getOperand(0).toString().substring(2));
+				Integer bound = Integer.parseInt(expr.getOperand(1).toString());
+				
+				Integer[] currentBounds = bounds.get(charPosition);
+				
+				if (currentBounds == null) {
+					currentBounds = new Integer[2];
+				}
+				
+				Operator op = expr.getOperator();
+				
+				if (op == Operator.GE) {
+					log.info(charPosition + " is greater than or equal to " + bound);
+					if (currentBounds[0] == null || currentBounds[0] < bound) {
+						currentBounds[0] = bound;
+					}
+				} else if (op == Operator.LT) {
+					if (currentBounds[1] == null) {
+						currentBounds[1] = bound;
+					}
+					log.info(charPosition + " is less than " + bound); 
+				} else {
+					log.info("Unsupported");
+				}
+				
+				bounds.put(charPosition, currentBounds);
+				
+			});
+			
+			return bounds;
+		}
 
 		public synchronized void update(Boolean accepted, Expression pathCondition) {
+			
 			HashSet<Expression> pathConditions = conditions.get(accepted);
 			
+			// Extract constraints on the input array
+			HashSet<Operation> constraints = extractConstraints(pathCondition);
 			
-			HashSet<Expression> constraints = extractConstraints(pathCondition);
+			// Transform these constraints in a format symbolic automata can understand
+			HashMap<Integer, Integer[]> processedConstraints = processConstraints(constraints);
 			log.info("---------------------" + accepted);
 			log.info(constraints);
+			processedConstraints.forEach((pos, bounds)-> {
+				log.info(pos + "[" + bounds[0] + ", " + bounds[1] + ")");
+			});
 			log.info("---------------------");
 			Expression simplified = pathCondition;
 			
@@ -111,7 +162,7 @@ public class PCReporterFactory implements ObserverFactory {
 			
 			if (conditions.size() > 0) {
 				for (Entry<Boolean, HashSet<Expression>> entry : conditions.entrySet()) {
-					entry.getValue().forEach(cond -> broker.publish("report", new Tuple("PCReporter.pc[" + entry.getKey() + "]" + cond.toString())));
+//					entry.getValue().forEach(cond -> broker.publish("report", new Tuple("PCReporter.pc[" + entry.getKey() + "]" + cond.toString())));
 				}
 			}
 			
