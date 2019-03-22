@@ -109,24 +109,20 @@ public class PCReporterFactory implements ObserverFactory {
 				
 				Operator op = expr.getOperator();
 				
-				if (op == Operator.GE) {
-					log.info(charPosition + " is greater than or equal to " + bound);
+				if (op == Operator.GE || op == Operator.GT) {
+//					log.info(charPosition + " is greater than or equal to " + bound);
 					if (currentBounds[0] == null || currentBounds[0] < bound) {
 						currentBounds[0] = bound;
 					}
-				} else if (op == Operator.LT) {
-					if (currentBounds[1] == null) {
+				} else if (op == Operator.LT || op == Operator.LE) {
+					if (currentBounds[1] == null || currentBounds[1] > bound) {
 						currentBounds[1] = bound;
-					}
-					log.info(charPosition + " is less than " + bound); 
-				} else {
-					log.info("Unsupported");
-				}
-				
+					} 
+				} 				
 				bounds.put(charPosition, currentBounds);
 				
 			});
-			
+		
 			return bounds;
 		}
 
@@ -139,10 +135,10 @@ public class PCReporterFactory implements ObserverFactory {
 			
 			// Transform these constraints in a format symbolic automata can understand
 			HashMap<Integer, Integer[]> processedConstraints = processConstraints(constraints);
-			log.info("---------------------" + accepted);
-			log.info(constraints);
+			log.info(accepted ? "Accepted: " : "Rejected");
+//			log.info(constraints);
 			processedConstraints.forEach((pos, bounds)-> {
-				log.info(pos + "[" + bounds[0] + ", " + bounds[1] + ")");
+				log.info("A[" + pos + "] "+ "[" + bounds[0] + ", " + bounds[1] + ")");
 			});
 			log.info("---------------------");
 			Expression simplified = pathCondition;

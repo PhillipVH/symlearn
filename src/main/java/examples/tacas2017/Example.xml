@@ -7,7 +7,7 @@
 			<instrument>examples.tacas2017</instrument>
 			<trigger>examples.tacas2017.Example.check(A:int[])</trigger>
 		</target>
-		<divers threads="8"/>
+		<divers threads="1"/>
 		<surfers threads="0"/>
 		<observers>
 			<observer>za.ac.sun.cs.coastal.observers.PCReporterFactory</observer>

@@ -11,14 +11,68 @@ import za.ac.sun.cs.coastal.Symbolic;
 public class Example {
 
 	public static boolean check(int[] input) {
-		boolean fVal = f_array(input);
-//		boolean gVal = g0(x, y, z);
-		return (fVal);
-	}
-	
-	public static boolean g0(int x, int y, int z) {
+		boolean fVal = convertedAutomaton(input);
+//		boolean gVal = candidate0(input);
 		return true;
 	}
+	
+	public static boolean candidate0 (int[] input) {
+		if (input[0] >= 0 && input[0] <= 50) {
+			Symbolic.mark(1);
+			return true;
+		} else {
+			Symbolic.mark(0);
+			return false;
+		}
+	}
+	
+	public static boolean convertedAutomaton(int[] input) {
+		int state = 1;
+		for (int idx = 0; idx < input.length; idx++) {
+			switch (state) {
+			case 1:
+			if ((input[idx] >= 51 && input[idx] <= 100) || false) {
+				state = 2;
+				break;
+			}
+			if ((input[idx] >= 0 && input[idx] <= 50) || (input[idx] >= 101 && input[idx] <= 2147483647) || false) {
+				state = 1;
+				break;
+			}
+			case 2:
+			if ((input[idx] >= 21 && input[idx] <= 2147483647) || false) {
+				state = 3;
+				break;
+			}
+			if ((input[idx] >= 0 && input[idx] <= 20) || false) {
+				state = 4;
+				break;
+			}
+			case 3:
+			if ((input[idx] >= -2147483648 && input[idx] <= 2147483647) || false) {
+				state = 3;
+				break;
+			}
+			case 4:
+			if ((input[idx] >= -2147483648 && input[idx] <= 20) || false) {
+				state = 1;
+				break;
+			}
+			if ((input[idx] >= 21 && input[idx] <= 2147483647) || false) {
+				state = 3;
+				break;
+			}
+		  }
+		  }
+		  if ((state == 1) || false) {
+			Symbolic.mark(1);
+		    return true;
+		  } else { 
+			Symbolic.mark(0);
+			return false; 
+		  }
+
+		}
 	
 	public static boolean int_pred(int num, int bottom, int upper) {
 		return (num >= bottom && num < upper);
@@ -28,72 +82,8 @@ public class Example {
 		return num >= bottom;
 	}
 	
-	// TODO Idea: Magical Bound Counterexamples Using Concolic Execution
-	public static boolean f_array(int[] input) {
-		int state = 0;
-		for (int idx = 0; idx < input.length; idx++) {
-			
-			// Get the input symbol
-			int num = input[idx];
-			
-			// Reject negative input
-			if (num < 0) {
-				Symbolic.mark(0);
-				return false;
-			}
-			
-			if (state == 0) {
-				// Remain in state zero
-				if (int_pred(num, 0, 51) || int_pred(num, 101)) {
-					state = 0;
-					continue;
-				}
-				
-				// Move to state 51
-				if (int_pred(num, 51, 101)) {
-					state = 51;
-					continue;
-				}
-			} else if (state == 51) {
-				// Transition to state 51,21
-				if (int_pred(num, 21)) {
-					state = 5121;
-					continue;
-				} 
-				
-				// Transition to state 51,0
-				if (int_pred(num, 0, 21)) {
-					state = 510;
-					continue;
-				}
-			} else if (state == 510) {
-				// Transition to state 0
-				if (int_pred(num, 0, 21)) {
-					state = 0;
-					continue;
-				}
-				
-				// Transition to state 51,21
-				if (int_pred(num, 21)) {
-					state = 5121;
-					continue;
-				}
-			}
-		}
-		
-		// State 0 is our only final state
-		if (state != 0) {
-			Symbolic.mark(0);
-		} else {
-			Symbolic.mark(1);
-		}
-		
-		return state == 0;
-	}
-	
 	public static void main(String[] args) {
-		boolean result = check(new int[] {25, 1});
-		System.out.println("<::> " + result);
+		boolean result = check(new int[] {1});
 	}
 
 }
