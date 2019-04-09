@@ -83,7 +83,7 @@ public class Example {
 	}
 	
 	public static void main(String[] args) {
-		boolean result = check(new int[] {1});
+		boolean result = check(new int[] {51, 0, 0});
 	}
 
 }

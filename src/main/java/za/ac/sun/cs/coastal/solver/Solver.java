@@ -32,7 +32,7 @@ public class Solver {
 
 	public Solver(COASTAL coastal) {
 		log = coastal.getLog();
-		z3Command = "/usr/local/bin/z3" + ' ' + DEFAULT_Z3_ARGS;
+		z3Command = "/usr/bin/z3" + ' ' + DEFAULT_Z3_ARGS;
 		//		String drive = new File("").getAbsolutePath() + "/";
 		//		String sub = "lib/z3/build/z3";
 		//		String z3Path = drive + sub;

@@ -79,6 +79,7 @@ public class PCReporterFactory implements ObserverFactory {
 		 */
 		private HashSet<Operation> extractConstraints(Expression pathCondition) {
 			try {
+//				log.info(pathCondition.toString());
 				ConstraintCollectorVisitor collector = new ConstraintCollectorVisitor();
 				pathCondition.accept(collector);
 				return collector.constraints;
@@ -136,21 +137,22 @@ public class PCReporterFactory implements ObserverFactory {
 			// Transform these constraints in a format symbolic automata can understand
 			HashMap<Integer, Integer[]> processedConstraints = processConstraints(constraints);
 			log.info(accepted ? "Accepted: " : "Rejected");
-//			log.info(constraints);
+			log.info(pathCondition);
 			processedConstraints.forEach((pos, bounds)-> {
 				log.info("A[" + pos + "] "+ "[" + bounds[0] + ", " + bounds[1] + ")");
 			});
-			log.info("---------------------");
+			log.info("\n");
+//			log.info("---------------------");
 			Expression simplified = pathCondition;
 			
-			if (pathConditions == null) {
-				pathConditions = new HashSet<>();
-				pathConditions.add(simplified);
-				conditions.put(accepted, pathConditions);
-			} else {
-				pathConditions.add(simplified);
-				conditions.put(accepted, pathConditions);
-			}
+//			if (pathConditions == null) {
+//				pathConditions = new HashSet<>();
+//				pathConditions.add(simplified);
+//				conditions.put(accepted, pathConditions);
+//			} else {
+//				pathConditions.add(simplified);
+//				conditions.put(accepted, pathConditions);
+//			}
 		}
 		
 		public void report(Object object) {
