@@ -73,7 +73,7 @@ public class PCReporterFactory implements ObserverFactory {
 		
 		private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
 		
-		private final String output_name = "constraints-depth-6";
+		private final String output_name = "constraints-depth-7";
 		
 		PCReporterManager(COASTAL coastal) {
 			broker = coastal.getBroker();

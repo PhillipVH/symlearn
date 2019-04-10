@@ -58,7 +58,8 @@
                         "constraints-depth-3"
                         "constraints-depth-4"
                         "constraints-depth-5"
-                        "constraints-depth-6"]))
+                        "constraints-depth-6"
+                        "constraints-depth-7"]))
 
 
 (def db (merge-dbs dbs))
@@ -70,8 +71,11 @@
     (filter #(= (second %) constraints) db)
 
     (= mode :prefixes)
-    (for [n (range (count constraints))]
-      (filter #(= (second %) (->> constraints reverse (drop n) reverse)) db))))
+    (mapcat identity
+            (for [n (range (count constraints))]
+              (filter #(= (second %) (->> constraints reverse (drop n) reverse)) db)))))
+
+(def query-memo (memoize query))
 
 ;;;; Usage examples
 
@@ -82,3 +86,16 @@
 (pprint (query [[0 20] [31 98] [25 30] [0 10] [0 20]] :prefixes db))
 
 ;;;; TACASFUBAR
+
+(filter #(= (count (second %)) 1) db)
+
+(def c0 [0 20])
+(def c1 [0 24])
+(def c2 [21 (Integer/MAX_VALUE)])
+(def c3 [25 30])
+(def c4 [0 10])
+(def c5 [99 99])
+(def c6 [0 (Integer/MAX_VALUE)])
+(def c7 [11 (Integer/MAX_VALUE)])
+
+(query [c0 c5 c6] :prefixes db)
