@@ -59,7 +59,7 @@ public class TACASFUBAR {
 
 	public static void main(String[] args) {
 		
-		boolean res = parse(new int[] {0});
+		boolean res = parse(new int[] {0, 0, 0, 0, 0, 0});
 
 	}
 	

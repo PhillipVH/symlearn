@@ -4,17 +4,6 @@
             [clojure.string :as string]
             [clojure.set :as set]))
 
-(defn -main
-  "I don't do a whole lot ... yet."
-  [& args]
-  (println "Hello, World!"))
-
-
-(def data-1 (slurp (get-constraint-file 1)))
-(def data-2 (slurp (get-constraint-file 2)))
-(def data-3 (slurp (get-constraint-file 3)))
-(def data-4 (slurp (get-constraint-file 4)))
-
 (defn get-constraint-file
   [depth]
   (io/resource (str "constraints-depth-" depth)))
@@ -48,31 +37,48 @@
 (defn process-records
   [records]
   (->> records
-       ;; get-records
        (map record->run)
        (into #{})))
 
+(defn build-db
+  [filename]
+  (->> (io/resource filename)
+       slurp
+       get-records
+       process-records))
 
-(def db-4 (->> data-4
-               get-records
-               process-records))
 
-(def db-3 (->> data-3
-               get-records
-               process-records))
+(defn merge-dbs
+  [dbs]
+  (apply set/union dbs))
 
-(def db-2 (->> data-2
-               get-records
-               process-records))
 
-(def db-1 (->> data-1
-               get-records
-               process-records))
+(def dbs (map build-db ["constraints-depth-1"
+                        "constraints-depth-2"
+                        "constraints-depth-3"
+                        "constraints-depth-4"
+                        "constraints-depth-5"
+                        "constraints-depth-6"]))
 
-(def db (apply set/union [db-1 db-2 db-3 db-4]))
+
+(def db (merge-dbs dbs))
 
 (defn query
-  [constraints db]
-  (filter #(= (second %) constraints) db))
+  [constraints mode db]
+  (cond
+    (= mode :exact)
+    (filter #(= (second %) constraints) db)
 
-(query [[21 (Integer/MAX_VALUE)] [21 (Integer/MAX_VALUE)]] db)
+    (= mode :prefixes)
+    (for [n (range (count constraints))]
+      (filter #(= (second %) (->> constraints reverse (drop n) reverse)) db))))
+
+;;;; Usage examples
+
+;; Match only exactly the given path condition
+(query [[0 20] [25 30]] :exact db)
+
+;; Match a path condition, and also match all the prefixes of that path condition
+(pprint (query [[0 20] [31 98] [25 30] [0 10] [0 20]] :prefixes db))
+
+;;;; TACASFUBAR
