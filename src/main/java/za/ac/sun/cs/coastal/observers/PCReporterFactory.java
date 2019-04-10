@@ -1,5 +1,12 @@
 package za.ac.sun.cs.coastal.observers;
 
+import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -65,6 +72,8 @@ public class PCReporterFactory implements ObserverFactory {
 		private final Logger log;
 		
 		private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
+		
+		private final String output_name = "constraints-depth-1";
 		
 		PCReporterManager(COASTAL coastal) {
 			broker = coastal.getBroker();
@@ -138,9 +147,36 @@ public class PCReporterFactory implements ObserverFactory {
 			HashMap<Integer, Integer[]> processedConstraints = processConstraints(constraints);
 			log.info(accepted ? "Accepted: " : "Rejected");
 			log.info(pathCondition);
-			processedConstraints.forEach((pos, bounds)-> {
-				log.info("A[" + pos + "] "+ "[" + bounds[0] + ", " + bounds[1] + ")");
-			});
+			
+			// Write the acceptance result to file
+			File output_file = new File(output_name);
+			try {
+				BufferedWriter writer = new BufferedWriter(new FileWriter(output_file, true));
+				writer.write(accepted ? "Accepted" : "Rejected");
+				writer.newLine();
+				
+				writer.write(pathCondition.toString());
+				writer.newLine();
+				
+				processedConstraints.forEach((pos, bounds)-> {
+					try {
+						writer.write("A[" + pos + "]" + "[" + bounds[0] + "," + bounds[1] + "]");
+						writer.newLine();
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					log.info("A[" + pos + "] "+ "[" + bounds[0] + ", " + bounds[1] + ")");
+				});
+				
+				writer.newLine();
+				writer.flush();
+				writer.close();
+				
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+					
 			log.info("\n");
 //			log.info("---------------------");
 			Expression simplified = pathCondition;
