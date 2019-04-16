@@ -64,18 +64,24 @@
 
 (def db (merge-dbs dbs))
 
-(defn query
+(defn query-naive
   [constraints mode db]
   (cond
     (= mode :exact)
     (filter #(= (second %) constraints) db)
+
+    (= mode :starts-with)
+    (filter #(and
+              (>= (count (second %)) (count constraints))
+              (= (take (count constraints) (second %)) constraints)) db)
 
     (= mode :prefixes)
     (mapcat identity
             (for [n (range (count constraints))]
               (filter #(= (second %) (->> constraints reverse (drop n) reverse)) db)))))
 
-(def query-memo (memoize query))
+
+(def query (memoize query))
 
 ;;;; Usage examples
 
@@ -98,4 +104,4 @@
 (def c6 [0 (Integer/MAX_VALUE)])
 (def c7 [11 (Integer/MAX_VALUE)])
 
-(query [c0 c5 c6] :prefixes db)
+(count (query [c0 c3] :starts-with db))
