@@ -82,6 +82,11 @@
             (for [n (range (count constraints))]
               (filter #(= (second %) (->> constraints reverse (drop n) reverse)) db)))))
 
+(defn sorted-paths
+  [db]
+  (sort #(compare (count (second %1))
+                  (count (second %2)))
+        db))
 
 ;; (def query (memoize query))
 
