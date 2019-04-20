@@ -64,7 +64,7 @@
 
 (def db (merge-dbs dbs))
 
-(defn query-naive
+(defn query
   [constraints mode db]
   (cond
     (= mode :exact)
@@ -81,27 +81,27 @@
               (filter #(= (second %) (->> constraints reverse (drop n) reverse)) db)))))
 
 
-(def query (memoize query))
+;; (def query (memoize query))
 
 ;;;; Usage examples
 
 ;; Match only exactly the given path condition
-(query [[0 20] [25 30]] :exact db)
+;; (query [[0 20] [25 30]] :exact db)
 
 ;; Match a path condition, and also match all the prefixes of that path condition
-(pprint (query [[0 20] [31 98] [25 30] [0 10] [0 20]] :prefixes db))
+;; (pprint (query [[0 20] [31 98] [25 30] [0 10] [0 20]] :prefixes db))
 
 ;;;; TACASFUBAR
 
-(filter #(= (count (second %)) 1) db)
+;; (filter #(= (count (second %)) 1) db)
 
-(def c0 [0 20])
-(def c1 [0 24])
-(def c2 [21 (Integer/MAX_VALUE)])
-(def c3 [25 30])
-(def c4 [0 10])
-(def c5 [99 99])
-(def c6 [0 (Integer/MAX_VALUE)])
-(def c7 [11 (Integer/MAX_VALUE)])
+;; (def c0 [0 20])
+;; (def c1 [0 24])
+;; (def c2 [21 (Integer/MAX_VALUE)])
+;; (def c3 [25 30])
+;; (def c4 [0 10])
+;; (def c5 [99 99])
+;; (def c6 [0 (Integer/MAX_VALUE)])
+;; (def c7 [11 (Integer/MAX_VALUE)])
 
-(count (query [c0 c3] :starts-with db))
+;; (count (query [c0 c3] :starts-with db))
