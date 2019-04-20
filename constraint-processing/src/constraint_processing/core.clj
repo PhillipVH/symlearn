@@ -4,10 +4,6 @@
             [clojure.string :as string]
             [clojure.set :as set]))
 
-(defn get-constraint-file
-  [depth]
-  (io/resource (str "constraints-depth-" depth)))
-
 (defn get-records
   [data]
   (let [entries (-> data
@@ -60,6 +56,12 @@
                         "constraints-depth-5"
                         "constraints-depth-6"
                         "constraints-depth-7"]))
+
+(defn create-database
+  [files]
+  (->> files
+       (map build-db)
+       merge-dbs))
 
 
 (def db (merge-dbs dbs))
