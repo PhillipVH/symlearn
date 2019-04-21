@@ -9,6 +9,29 @@
   (for [constraint path]
     (first constraint)))
 
+(defn mixed->concrete
+  "Take a (potentially mixed) seq of constraints,
+  and return a concrete input that the underlying domain
+  parser understands. Result is an integer array."
+  [path]
+  (let [concrete (reduce (fn [concrete constraint]
+                           (cond
+
+                             (empty? constraint)
+                             concrete
+
+                             (= :c (first constraint))
+                             (concat concrete (rest constraint))
+
+                             (= 2 (count constraint))
+                             (conj concrete (first constraint))))
+                         []
+                         path)]
+    (into [] concrete)))
+
+;; (member? (mixed->concrete [[0 0] [32 40] [:c 1 2 3]]))
+
+;; (identity db)
 
 (defn int-arr
   [list]
@@ -35,22 +58,45 @@
         (update :R #(conj % {:path (second initial-path) :row []})))))
 
 
-{:S [{:path [[]], :row [nil]}], :R [{:path [], :row []}], :E [[]]}
 
-(defn fill-row
+(defn check-membership
+  "Takes a path condition and a seq of evidence. Returns
+  an ordered seq of membership query results."
   [path evidence]
-  (map #(member? (apply concat (make-concrete path) %)) evidence))
+  (map #(member? (mixed->concrete (conj (into [] path) %))) evidence))
+
+(defn fill-entry
+  [entry evidence]
+  (assoc entry :row (into [] (check-membership (:path entry) evidence))))
+
+(defn fill-entries
+  [entries evidence]
+  (reduce (fn [filled entry]
+            (conj filled (fill-entry entry evidence)))
+          []
+          entries))
 
 
-(defn fill-section
-  [section evidence]
-  (map #(fill-row (:path %) evidence) section))
+(def table {:S [{:path [[]], :row [nil]}],
+            :R [{:path [[0 0]], :row []} {:path [[1 1]], :row []}],
+            :E [[] [:c 4] [:c 4 2]]})
+
+(fill-entries (:R table) (:E table))
+
+(fill-entry {:path [1 1]} (:E table)) => [true true]
+
+
+
+
+(fill-row (:R table) (:E table))
 
 (defn fill
   [table]
-  (-> table
-      (update :S #(fill-section % (:E table)))
-      (update :R #(fill-section % (:E table)))))
+  (update table )
+  ;; (fill-section (:S table) (:E table)))
+  ;; (as-> table $
+  ;;     (assoc-in $ :S  (:S #(fill-section % (:E table))))))
+      ;; (update :R #(fill-section % (:E table)))))
 
 (defn process-ce
   [table ce]
@@ -77,11 +123,8 @@
 
 (identity db)
 
-(def table (-> (make-table)
-               (init-table db)))
-
-
 
 (-> (make-table)
-    (init-table db))
+    (init-table db)
+    (fill))
 
