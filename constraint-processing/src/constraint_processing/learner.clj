@@ -4,6 +4,12 @@
   (:import Parser))
 
 
+(defn make-concrete
+  [path]
+  (for [constraint path]
+    (first constraint)))
+
+
 (defn int-arr
   [list]
   (into-array Integer/TYPE list))
@@ -16,48 +22,29 @@
 
 (defn make-table
   []
-  {:S [[[] nil]]
-   :R []
+  {:S [{:path [[]] :row [nil]}]
+   :R [{:path [] :row []}]
    :E [[]]})
 
 
 (defn init-table
   [table db]
-  (let [initial-path (second db)
+  (let [initial-path (nth db 3)
         accepted (= :accept (first initial-path))]
     (-> table
-        (update :R #(conj % [(second initial-path) accepted])))))
+        (update :R #(conj % {:path (second initial-path) :row []})))))
 
 
-(defn row
-  [table path]
-  (->> (:R table)
-       (filter #(= path (first %)))
-       (map second)))
+{:S [{:path [[]], :row [nil]}], :R [{:path [], :row []}], :E [[]]}
 
-
-(defn make-concrete
-  [path]
-  (for [constraint path]
-    (first constraint)))
-
-
-(defn fill-cell
-  [cell evidence]
-  (let [filled (not= nil (second cell))
-        path (first cell)]
-    (if-not filled
-      (let [query (concat (make-concrete path) evidence)]
-        (assoc cell 1 (member? query)))
-      cell)))
+(defn fill-row
+  [path evidence]
+  (map #(member? (apply concat (make-concrete path) %)) evidence))
 
 
 (defn fill-section
   [section evidence]
-  (reduce (fn [result e] (conj result (into [] (mapcat #(fill-cell % e) section))))
-          []
-          evidence))
-
+  (map #(fill-row (:path %) evidence) section))
 
 (defn fill
   [table]
@@ -65,16 +52,36 @@
       (update :S #(fill-section % (:E table)))
       (update :R #(fill-section % (:E table)))))
 
+(defn process-ce
+  [table ce]
+  (-> table
+      (update :R #(conj % [(second ce) (= :accept (first ce))]))))
+
+(defn close
+  [table path]
+  (let [r (keep #{path} (:R table))]
+    (println r)
+    (-> table
+        (update :R #(remove #{path} %))
+        (update :S #(conj % r)))))
+
+(defn add-evidence
+  [table evidence]
+  (-> table
+      (update :E #(conj % evidence))))
+
 ;; Usage
 (def db (-> ["alt-con-1" "alt-con-2"]
             paths/create-database
             paths/sorted-paths))
 
+(identity db)
+
 (def table (-> (make-table)
                (init-table db)))
 
 
+
 (-> (make-table)
-    (init-table db)
-    (fill))
+    (init-table db))
 
