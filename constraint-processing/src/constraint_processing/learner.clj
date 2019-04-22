@@ -44,6 +44,7 @@
 
 
 (defn make-table
+  "Create an empty observation table."
   []
   {:S [{:path [[]] :row [nil]}]
    :R [{:path [] :row []}]
@@ -51,12 +52,13 @@
 
 
 (defn init-table
+  "Add an initial counter example from the database into the
+  observation table."
   [table db]
   (let [initial-path (nth db 3)
-        accepted (= :accept (first initial-path))]
+        accepted (:accepted initial-path)]
     (-> table
-        (update :R #(conj % {:path (second initial-path) :row []})))))
-
+        (update :R #(conj % {:path (:path initial-path) :row []})))))
 
 
 (defn check-membership
@@ -65,9 +67,11 @@
   [path evidence]
   (map #(member? (mixed->concrete (conj (into [] path) %))) evidence))
 
+
 (defn fill-entry
   [entry evidence]
   (assoc entry :row (into [] (check-membership (:path entry) evidence))))
+
 
 (defn fill-entries
   [entries evidence]
@@ -75,11 +79,6 @@
             (conj filled (fill-entry entry evidence)))
           []
           entries))
-
-
-(def table {:S [{:path [[]], :row [nil]}],
-            :R [{:path [[0 0]], :row []} {:path [[1 1]], :row []}],
-            :E [[] [:c 4] [:c 4 2]]})
 
 
 (defn fill
@@ -92,34 +91,66 @@
 (defn process-ce
   [table ce]
   (-> table
-      (update :R #(conj % {:path (second ce) :row [nil]} ))))
+      (update :R #(conj % {:path (:path ce) :row []}))
+      (fill)))
+
 
 (defn close
   [table path]
-  (let [r (keep #{path} (:R table))]
-    (println r)
-    (-> table
-        (update :R #(remove #{path} %))
-        (update :S #(conj % r)))))
+  (-> table
+      (update :R (fn [entries] (into [] (filter #(= (:path %) path) entries))))
+      (update :S (fn [entries] (conj entries {:path path :row []})))
+      (fill)))
+
 
 (defn add-evidence
   [table evidence]
   (-> table
-      (update :E #(conj % evidence))))
+      (update :E #(conj % evidence))
+      (fill)))
 
 ;; Usage
-(def db (-> ["alt-con-1" "alt-con-2"]
+(def tacas-files ["constraints-depth-1"
+                  "constraints-depth-2"
+                  "constraints-depth-3"
+                  "constraints-depth-4"
+                  "constraints-depth-5"
+                  "constraints-depth-6"
+                  "constraints-depth-7"])
+
+(def short-files ["alt-con-1"
+                  "alt-con-2"])
+
+(def short-db (-> short-files
+                  paths/create-database
+                  paths/sorted-paths))
+
+(def db (-> tacas-files
             paths/create-database
             paths/sorted-paths))
 
-(nth (identity db) 2)
-
+(defn sprint
+  [arg message]
+  (do
+    (println "----------------")
+    (println message)
+    (println "----------------")
+    (pprint arg)
+    arg))
 
 (-> (make-table)
+    (sprint "Intital table")
+
     (init-table db)
-    (fill)
-    (process-ce (nth db 1))
-    (fill)
-    (add-evidence [:c 0 1])
-    (fill))
+    (sprint "Table initialized")
+
+    (process-ce (nth db 2))
+    (sprint (str "Processed CE " (nth db 2)))
+
+    (close [[1 1]])
+    (sprint "Close path [[1 1]]")
+
+    (add-evidence [:c 0 1 2])
+
+    (sprint "Added evidence [0 1 2]"))
 

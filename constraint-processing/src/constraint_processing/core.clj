@@ -27,7 +27,8 @@
                          pc)))
                    []
                    constraints)]
-    [(if accepted :accept :reject) processed]))
+    {:accepted accepted
+     :path processed}))
 
 
 (defn process-records
@@ -70,22 +71,22 @@
   [constraints mode db]
   (cond
     (= mode :exact)
-    (filter #(= (second %) constraints) db)
+    (filter #(= (:path %) constraints) db)
 
     (= mode :starts-with)
     (filter #(and
-              (>= (count (second %)) (count constraints))
-              (= (take (count constraints) (second %)) constraints)) db)
+              (>= (count (:path %)) (count constraints))
+              (= (take (count constraints) (:path %)) constraints)) db)
 
     (= mode :prefixes)
     (mapcat identity
             (for [n (range (count constraints))]
-              (filter #(= (second %) (->> constraints reverse (drop n) reverse)) db)))))
+              (filter #(= (:path %) (->> constraints reverse (drop n) reverse)) db)))))
 
 (defn sorted-paths
   [db]
-  (sort #(compare (count (second %1))
-                  (count (second %2)))
+  (sort #(compare (count (:path %1))
+                  (count (:path %2)))
         db))
 
 ;; (def query (memoize query))
