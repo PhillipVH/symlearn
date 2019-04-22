@@ -92,7 +92,7 @@
 (defn process-ce
   [table ce]
   (-> table
-      (update :R #(conj % [(second ce) (= :accept (first ce))]))))
+      (update :R #(conj % {:path (second ce) :row [nil]} ))))
 
 (defn close
   [table path]
@@ -112,10 +112,14 @@
             paths/create-database
             paths/sorted-paths))
 
-(identity db)
+(nth (identity db) 2)
 
 
 (-> (make-table)
     (init-table db)
+    (fill)
+    (process-ce (nth db 1))
+    (fill)
+    (add-evidence [:c 0 1])
     (fill))
 
