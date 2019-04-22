@@ -81,22 +81,13 @@
             :R [{:path [[0 0]], :row []} {:path [[1 1]], :row []}],
             :E [[] [:c 4] [:c 4 2]]})
 
-(fill-entries (:R table) (:E table))
-
-(fill-entry {:path [1 1]} (:E table)) => [true true]
-
-
-
-
-(fill-row (:R table) (:E table))
 
 (defn fill
   [table]
-  (update table )
-  ;; (fill-section (:S table) (:E table)))
-  ;; (as-> table $
-  ;;     (assoc-in $ :S  (:S #(fill-section % (:E table))))))
-      ;; (update :R #(fill-section % (:E table)))))
+  (-> table
+      (assoc :S (fill-entries (:S table) (:E table)))
+      (assoc :R (fill-entries (:R table) (:E table)))))
+
 
 (defn process-ce
   [table ce]
