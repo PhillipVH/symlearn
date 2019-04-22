@@ -3,6 +3,11 @@
             [clojure.pprint :refer [pprint]])
   (:import Parser))
 
+(conj #{} )
+
+(-> #{}
+    (conj [:path [2 3]])
+    (conj [:path [2 3]]))
 
 (defn make-concrete
   [path]
@@ -46,8 +51,8 @@
 (defn make-table
   "Create an empty observation table."
   []
-  {:S [{:path [[]] :row [nil]}]
-   :R [{:path [] :row []}]
+  {:S #{ {:path [[]] :row []} }
+   :R #{ {:path [] :row []} }
    :E [[]]})
 
 
@@ -58,7 +63,8 @@
   (let [initial-path (nth db 3)
         accepted (:accepted initial-path)]
     (-> table
-        (update :R #(conj % {:path (:path initial-path) :row []})))))
+        (update :R #(conj % {:path (:path initial-path) :row []}))
+        (fill))))
 
 
 (defn check-membership
@@ -95,11 +101,17 @@
       (fill)))
 
 
-(defn close
+(defn promote
   [table path]
   (-> table
-      (update :R (fn [entries] (into [] (filter #(= (:path %) path) entries))))
+      (update :R (fn [entries] (into [] (filter #(not= (:path %) path) entries))))
       (update :S (fn [entries] (conj entries {:path path :row []})))
+      (fill)))
+
+(defn add-r
+  [table r]
+  (-> table
+      (update :R #(conj % {:path (:path r) :row []}))
       (fill)))
 
 
@@ -108,6 +120,10 @@
   (-> table
       (update :E #(conj % evidence))
       (fill)))
+
+(defn closed?
+  [table]
+  )
 
 ;; Usage
 (def tacas-files ["constraints-depth-1"
@@ -121,11 +137,7 @@
 (def short-files ["alt-con-1"
                   "alt-con-2"])
 
-(def short-db (-> short-files
-                  paths/create-database
-                  paths/sorted-paths))
-
-(def db (-> tacas-files
+(def db (-> short-files
             paths/create-database
             paths/sorted-paths))
 
@@ -138,19 +150,24 @@
     (pprint arg)
     arg))
 
-(-> (make-table)
-    (sprint "Intital table")
 
+(-> (make-table)
     (init-table db)
-    (sprint "Table initialized")
+    (sprint "1. Table initialized")
 
     (process-ce (nth db 2))
-    (sprint (str "Processed CE " (nth db 2)))
+    (sprint (str "2. Processed CE " (nth db 2)))
 
-    (close [[1 1]])
-    (sprint "Close path [[1 1]]")
+    (promote [[1 1]])
+    (add-r (-> (paths/query [[1 1]] :starts-with db) second))
+    (sprint "3. Close path [[1 1]]")
 
-    (add-evidence [:c 0 1 2])
+    (add-evidence [:c 1])
 
-    (sprint "Added evidence [0 1 2]"))
+    (sprint "4. Added evidence [0 1 2]"))
 
+
+(paths/feasible? [[0 0] [0 Integer/MAX_VALUE]] db)
+
+(-> (paths/query [[0 0]] :starts-with db)
+    second)

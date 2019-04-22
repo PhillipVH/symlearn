@@ -89,6 +89,11 @@
                   (count (:path %2)))
         db))
 
+
+(defn feasible?
+  [path db]
+  (not (empty? (query path :exact db))))
+
 ;; (def query (memoize query))
 
 ;;;; Usage examples
