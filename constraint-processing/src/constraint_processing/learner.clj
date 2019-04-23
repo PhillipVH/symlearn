@@ -1,7 +1,9 @@
 (ns constraint-processing.learner
   (:require [constraint-processing.core :as paths]
             [clojure.pprint :refer [pprint]]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [clojure.string :as str]
+            [clojure.edn :as edn])
   (:import Parser
            TacasParser))
 
@@ -134,7 +136,7 @@
   [table path db]
   (let [follow-candidates (paths/follow-paths path db)]
     (if (empty? follow-candidates)
-      table
+      (promote table path)
       (-> table
           (promote path)
           (add-r (:path (rand-nth follow-candidates)))))))
@@ -245,27 +247,23 @@
          (= input "close")
          (recur true (inc count) (close-auto table))
 
-         (= input "aut")
-         (do (pprint (transitions->automata (conjecture table)))
-             (recur true (inc count) table))
-
          (= input "conj")
          (do
-           (pprint (conjecture table))
+           (pprint (build-sfa table))
            (recur true (inc count) table))
 
-         (= input "evidence")
+         (= input "ce")
+         (do
+           (println "> Enter counter example as vector: ")
+           (let [ce (edn/read-string (read-line))]
+             (recur true (inc count) (process-ce table {:path ce}))))
+
+         (= input "ev")
          (do
            (println "> Enter evidence as vector: ")
-           (let [evidence (read-line)]
-             (class evidence)))
-         )))))
-
-(-> (make-table)
-    (init-table db)
-    (close-auto)
-    (build-sfa)
-    (pprint))
+           (let [evidence (edn/read-string (read-line))]
+             (println (str "Adding evidence " evidence))
+             (recur true (inc count) (add-evidence table evidence)))))))))
 
 (defn get-state-map
   [transitions]
@@ -297,7 +295,6 @@
     {:transitions simple-transitions
      :initial-state (get state-map [])
      :final-states final-states}))
-
 
 [:todo-list
  [:h "Automatic detection of non-determinism in the table."]
