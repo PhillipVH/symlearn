@@ -228,18 +228,35 @@
 
     (closed?)
     (close [[0 20]] db)
+    (closed?)
 
     (sprint "Before accept")
 
-    ;; (process-ce (paths/query [[0 20] [25 30] [0 10]] :exact db))
+    (process-ce (paths/query [[0 20] [25 30] [0 10]] :exact db))
 
     (sprint "Added accept")
 
+    (add-evidence [:c 0])
+
+    (closed?)
+
+    (sprint "Added evidence")
+
+    (close [[0 20] [25 30]] db)
+
+    (closed?)
+
+    (process-ce (second (paths/follow-paths [] db)))
+
+    (sprint "Added ce")
+
+    (closed?)
 
     (conjecture)
 
     (pprint))
 
+(paths/follow-paths [] db)
 
 [:todo-list
  [:h "Automatic detection of non-determinism in the table."]
