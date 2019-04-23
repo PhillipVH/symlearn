@@ -68,7 +68,7 @@
 (defn make-table
   "Create an empty observation table."
   []
-  {:S #{ {:path [[]] :row []} }
+  {:S #{ {:path [] :row []} }
    :R #{}
    :E [[]]})
 
@@ -175,19 +175,18 @@
 
     (pprint))
 
-(defn row->state
+(defn row->entry
   "Given a observation table and a row, return the matching
-  concrete state in S."
+  entry in S."
   [table row]
   (->> table
        :S
-       (filter #(= (:row %) row)))
-  )
+       (filter #(= (:row %) row))
+       first))
 
-
-(defn conjecture
-  "Given a closed and consistent observation table, will produce
-  an EDN data structure that represents the SFA."
+(defn get-prefix-pairs
+  "Given an observation table, produce the proper prefix pairs,
+  such that (len u1) == (- 1 (len u2))."
   [table]
   (let [states (:S table)
         entries (set/union (:R table) (:S table))
@@ -197,8 +196,32 @@
                                            (constantly entry)
                                            #(paths/prefix? (:path %) (:path entry))))
                                 (filter last)
-                                (into [])))
+                                (into [])
+                                (conj transitions)))
                          []
                          entries)]
-    prefixes))
+    (->> prefixes
+         (mapcat identity)
+         (into []))))
+
+(defn pair->transition
+  [table prefix-pair]
+  (let [from (first prefix-pair)
+        to (second prefix-pair)
+        from-row (:row from)
+        to-row (:row to)]
+    {:from (:path (row->entry table from-row))
+     :input (last (:path to))
+     :to (:path (row->entry table to-row))}))
+
+
+(defn conjecture
+  "Given a closed and consistent observation table, will produce
+  an EDN data structure that represents the SFA."
+  [table]
+  (let [states (:S table)
+        prefix-pairs (get-prefix-pairs table)
+        transitions (filter #(not= nil (:input %)) (into [] (for [pair prefix-pairs]
+                                (pair->transition table pair))))]
+    transitions))
 
