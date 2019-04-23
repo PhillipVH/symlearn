@@ -104,7 +104,13 @@
   [path db]
   (not (empty? (query path :exact db))))
 
-;; (def query (memoize query))
+(defn follow-paths
+  "Given a path, find paths in the database that grow the path by one."
+  [path db]
+  (->> db
+       (query path :starts-with)
+       (filter #(= (count (:path %)) (inc (count path))))
+       (into [])))
 
 ;;;; Usage examples
 

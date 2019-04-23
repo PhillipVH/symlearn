@@ -56,7 +56,7 @@
   [entries evidence]
   (reduce (fn [filled entry]
             (conj filled (fill-entry entry evidence)))
-          []
+          #{}
           entries))
 
 (defn fill
@@ -116,6 +116,15 @@
       (update :E #(conj % evidence))
       (fill)))
 
+(defn close
+  [table path db]
+  (let [follow-candidates (paths/follow-paths path db)]
+    (if (empty? follow-candidates)
+      table
+      (-> table
+          (promote path)
+          (add-r (rand-nth follow-candidates))))))
+
 
 ;; Usage
 (def tacas-files ["constraints-depth-1"
@@ -129,7 +138,7 @@
 (def short-files ["alt-con-1"
                   "alt-con-2"])
 
-(def db (-> short-files
+(def db (-> tacas-files
             paths/create-database
             paths/sorted-paths))
 
@@ -144,36 +153,63 @@
 
 
 (-> (make-table)
+    (sprint "0. Preinit")
     (init-table db)
     (sprint "1. Table initialized")
 
-    (process-ce (nth db 2))
-    (sprint (str "2. Processed CE " (nth db 2)))
-
-    (promote [[1 1]])
-    (add-r (-> (paths/query [[1 1]] :starts-with db) second))
-    (sprint "3. Close path [[1 1]]")
-
-
-    (add-r (-> (paths/query [[2 Integer/MAX_VALUE]] :starts-with db) second))
-
-    (sprint "4. Added [[2 Inf] x]")
-
-    (add-evidence [:c 1])
-
-    (sprint "4. Added evidence [0 1 2]")
+    (process-ce (first (paths/follow-paths [] db)))
+    (sprint "2. Processed CE")
 
     (closed?)
 
-    (promote [[2 Integer/MAX_VALUE]])
+    ;; (conjecture)
 
-    (sprint "5. Promoted")
+    (process-ce (second (paths/follow-paths [] db)))
 
     (closed?)
+
+    ;; Close [[1 1]]
+    (sprint "Before close")
+    (close [[0 20]] db)
+    (sprint "After close")
+
+    (add-evidence [:c 0])
+    (sprint "Added evidence")
+
+
+    (add-evidence [:c 0 0 0])
+    (sprint "Added evidence")
+
+    (closed?)
+
 
     (conjecture)
 
     (pprint))
+
+    ;; (promote [[1 1]])
+    ;; (add-r (first (paths/follow-paths [[1 1]] db)))
+    ;; (sprint "3. Close path [[1 1]]")
+
+
+    ;; (add-r (-> (paths/query [[2 Integer/MAX_VALUE]] :starts-with db) second))
+
+    ;; (add-evidence [:c 1])
+
+    ;; (sprint "4. Added evidence [0]")
+
+    ;; (closed?)
+
+    ;; (promote [[2 Integer/MAX_VALUE]])
+
+    ;; (sprint "5. Promoted")
+
+    ;; (closed?)
+
+    ;; (conjecture)
+
+    ;; (pprint))
+
 
 (defn row->entry
   "Given a observation table and a row, return the matching
@@ -214,6 +250,12 @@
      :input (last (:path to))
      :to (:path (row->entry table to-row))}))
 
+(defn pairs->transitions
+  [table prefix-pairs]
+  (->> (for [pair prefix-pairs]
+         (pair->transition table pair))
+       (filter #(not= nil (:input %)))
+       (into [])))
 
 (defn conjecture
   "Given a closed and consistent observation table, will produce
@@ -221,7 +263,15 @@
   [table]
   (let [states (:S table)
         prefix-pairs (get-prefix-pairs table)
-        transitions (filter #(not= nil (:input %)) (into [] (for [pair prefix-pairs]
-                                (pair->transition table pair))))]
+        transitions (pairs->transitions table prefix-pairs)]
     transitions))
 
+[:todo-list
+ [:h "Automatic detection of non-determinism in the table."]
+ [:h "Implementation of `fill` using `promote` and `add-r`."]
+ [:h "Automatic closing of table, including the addition of a new entry in R."
+  :desc
+  "For this we need to figure out an ergonomic way of getting
+   new information from the database component, including filtering
+   for 'smarter', shorter paths."]
+ [:h "`add-r` needs to add prefixes as well."]]
