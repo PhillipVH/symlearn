@@ -169,18 +169,36 @@
 
     (sprint "5. Promoted")
 
-    (closed?))
+    (closed?)
 
-    ;; (conjecture))
+    (conjecture)
+
+    (pprint))
+
+(defn row->state
+  "Given a observation table and a row, return the matching
+  concrete state in S."
+  [table row]
+  (->> table
+       :S
+       (filter #(= (:row %) row)))
+  )
 
 
 (defn conjecture
   "Given a closed and consistent observation table, will produce
   an EDN data structure that represents the SFA."
   [table]
-  (let [states (:S table)]
-    (reduce (fn [transitions entry]
-              (conj transitions (map (partial paths/prefix? (:path entry)) (:path states))))
-            []
-            (:R table))))
+  (let [states (:S table)
+        entries (set/union (:R table) (:S table))
+        prefixes (reduce (fn [transitions entry]
+                           (->> entries
+                                (map (juxt identity
+                                           (constantly entry)
+                                           #(paths/prefix? (:path %) (:path entry))))
+                                (filter last)
+                                (into [])))
+                         []
+                         entries)]
+    prefixes))
 
