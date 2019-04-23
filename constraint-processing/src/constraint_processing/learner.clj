@@ -5,10 +5,6 @@
   (:import Parser
            TacasParser))
 
-(-> #{}
-    (conj [:path [2 3]])
-    (conj [:path [2 3]]))
-
 (defn make-concrete
   [path]
   (for [constraint path]
@@ -79,22 +75,8 @@
   (let [initial-path (nth db 3)
         accepted (:accepted initial-path)]
     (-> table
-        (update :R #(conj % {:path (:path initial-path) :row []}))
+        (add-r (:path initial-path))
         (fill))))
-
-(defn process-ce
-  [table ce]
-  (-> table
-      (add-r (:path ce))
-      ;; (update :R #(conj % {:path (:path ce) :row []}))
-      (fill)))
-
-(defn promote
-  [table path]
-  (-> table
-      (update :R (fn [entries] (into [] (filter #(not= (:path %) path) entries))))
-      (update :S (fn [entries] (conj entries {:path path :row []})))
-      (fill)))
 
 (defn add-r
   [table r]
@@ -107,19 +89,40 @@
                           table
                           prefixes)]
     (fill new-table)))
-    ;; (-> table
-    ;;    (update :R #(conj % {:path (:path r) :row []}))
-    ;;    (fill))))
 
+(defn process-ce
+  [table ce]
+  (-> table
+      (add-r (:path ce))
+      (fill)))
+
+(defn promote
+  [table path]
+  (-> table
+      (update :R (fn [entries] (into [] (filter #(not= (:path %) path) entries))))
+      (update :S (fn [entries] (conj entries {:path path :row []})))
+      (fill)))
 
 (defn closed?
   [table]
   (let [r-rows (into #{} (map first (group-by :row (:R table))))
         s-rows (into #{}(map first (group-by :row (:S table))))]
     (if (set/subset? r-rows s-rows)
-      (println "Closed")
-      (println "Not closed" (set/difference r-rows s-rows)))
-    table))
+      true
+      false)))
+
+(defn get-close-candidates
+  [table]
+  (let [r-rows (into #{} (map first (group-by :row (:R table))))
+        s-rows (into #{}(map first (group-by :row (:S table))))]
+    (if-not (set/subset? r-rows s-rows)
+      (let [candidate-rows (set/difference r-rows s-rows)
+            candidate-row (first candidate-rows)]
+        (into #{} (filter #(= candidate-row (:row %)) (:R table)))))))
+
+(defn close-auto
+  [table]
+  (promote table (:path (first (get-close-candidates table)))))
 
 (defn add-evidence
   [table evidence]
@@ -184,14 +187,17 @@
        (filter #(not= nil (:input %)))
        (into [])))
 
-(defn conjecture
-  "Given a closed and consistent observation table, will produce
-  an EDN data structure that represents the SFA."
+(defn get-transitions
   [table]
   (let [states (:S table)
         prefix-pairs (get-prefix-pairs table)
         transitions (pairs->transitions table prefix-pairs)]
     transitions))
+
+(defn get-states
+  [transitions]
+  (let [states (group-by :from transitions)]
+    states))
 
 ;; Usage
 (def tacas-files ["constraints-depth-1"
@@ -218,45 +224,80 @@
     (pprint arg)
     arg))
 
+(let [table (-> (make-table) (init-table db))]
+  (loop [read true
+         count 0
+         table table]
+    (println (str "----------" count "----------"))
+    (pprint table)
+    (println ">")
+   (if read
+     (let [input (read-line)]
+       (cond
+         (= input "quit")
+         (println "Bye!")
+
+         (= input "closed?")
+         (do
+           (println (closed? table))
+           (recur true (inc count) table))
+
+         (= input "close")
+         (recur true (inc count) (close-auto table))
+
+         (= input "aut")
+         (do (pprint (transitions->automata (conjecture table)))
+             (recur true (inc count) table))
+
+         (= input "conj")
+         (do
+           (pprint (conjecture table))
+           (recur true (inc count) table))
+
+         (= input "evidence")
+         (do
+           (println "> Enter evidence as vector: ")
+           (let [evidence (read-line)]
+             (class evidence)))
+         )))))
 
 (-> (make-table)
     (init-table db)
-    (sprint "1. Table initialized")
-
-    (process-ce (first (paths/follow-paths [] db)))
-    (sprint "2. Processed CE")
-
-    (closed?)
-    (close [[0 20]] db)
-    (closed?)
-
-    (sprint "Before accept")
-
-    (process-ce (paths/query [[0 20] [25 30] [0 10]] :exact db))
-
-    (sprint "Added accept")
-
-    (add-evidence [:c 0])
-
-    (closed?)
-
-    (sprint "Added evidence")
-
-    (close [[0 20] [25 30]] db)
-
-    (closed?)
-
-    (process-ce (second (paths/follow-paths [] db)))
-
-    (sprint "Added ce")
-
-    (closed?)
-
-    (conjecture)
-
+    (close-auto)
+    (build-sfa)
     (pprint))
 
-(paths/follow-paths [] db)
+(defn get-state-map
+  [transitions]
+  (as-> transitions $
+    (group-by :from $)
+    (map first $)
+    (map vector $ (iterate inc 0))
+    (into {} $)))
+
+(defn get-final-states
+  [table state-map]
+  (->> (:S table)
+       (filter #(first (:row %)))
+       (map :path)
+       (map (partial get state-map))
+       (into [])))
+
+(defn build-sfa
+  [table]
+  (let [transitions (get-transitions table)
+        state-map (get-state-map transitions)
+        final-states (get-final-states table state-map)
+        simple-transitions (reduce (fn [steps transition]
+                                     (conj steps {:from (get state-map (:from transition))
+                                                  :input (:input transition)
+                                                  :to (get state-map (:to transition))}))
+                                   []
+                                   transitions)]
+    {:transitions simple-transitions
+     :initial-state (get state-map [])
+     :final-states final-states}))
+
 
 [:todo-list
  [:h "Automatic detection of non-determinism in the table."]
