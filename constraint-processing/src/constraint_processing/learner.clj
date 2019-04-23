@@ -2,7 +2,8 @@
   (:require [constraint-processing.core :as paths]
             [clojure.pprint :refer [pprint]]
             [clojure.set :as set])
-  (:import Parser))
+  (:import Parser
+           TacasParser))
 
 (-> #{}
     (conj [:path [2 3]])
@@ -20,7 +21,6 @@
   [path]
   (let [concrete (reduce (fn [concrete constraint]
                            (cond
-
                              (empty? constraint)
                              concrete
 
@@ -39,7 +39,7 @@
 
 (defn member?
   [w]
-  (Parser/parse (int-arr w)))
+  (TacasParser/parse (int-arr w)))
 
 (defn check-membership
   "Takes a path condition and a seq of evidence. Returns
@@ -85,7 +85,8 @@
 (defn process-ce
   [table ce]
   (-> table
-      (update :R #(conj % {:path (:path ce) :row []}))
+      (add-r (:path ce))
+      ;; (update :R #(conj % {:path (:path ce) :row []}))
       (fill)))
 
 (defn promote
@@ -97,9 +98,16 @@
 
 (defn add-r
   [table r]
-  (-> table
-      (update :R #(conj % {:path (:path r) :row []}))
-      (fill)))
+  (let [prefixes (paths/prefixes r)
+        new-table (reduce (fn [new-table prefix]
+                            (update new-table :R #(conj % {:path prefix :row []})))
+                          table
+                          prefixes)]
+    (fill new-table)))
+    ;; (-> table
+    ;;    (update :R #(conj % {:path (:path r) :row []}))
+    ;;    (fill))))
+
 
 (defn closed?
   [table]
@@ -124,92 +132,6 @@
       (-> table
           (promote path)
           (add-r (rand-nth follow-candidates))))))
-
-
-;; Usage
-(def tacas-files ["constraints-depth-1"
-                  "constraints-depth-2"
-                  "constraints-depth-3"
-                  "constraints-depth-4"
-                  "constraints-depth-5"
-                  "constraints-depth-6"
-                  "constraints-depth-7"])
-
-(def short-files ["alt-con-1"
-                  "alt-con-2"])
-
-(def db (-> tacas-files
-            paths/create-database
-            paths/sorted-paths))
-
-(defn sprint
-  [arg message]
-  (do
-    (println "----------------")
-    (println message)
-    (println "----------------")
-    (pprint arg)
-    arg))
-
-
-(-> (make-table)
-    (sprint "0. Preinit")
-    (init-table db)
-    (sprint "1. Table initialized")
-
-    (process-ce (first (paths/follow-paths [] db)))
-    (sprint "2. Processed CE")
-
-    (closed?)
-
-    ;; (conjecture)
-
-    (process-ce (second (paths/follow-paths [] db)))
-
-    (closed?)
-
-    ;; Close [[1 1]]
-    (sprint "Before close")
-    (close [[0 20]] db)
-    (sprint "After close")
-
-    (add-evidence [:c 0])
-    (sprint "Added evidence")
-
-
-    (add-evidence [:c 0 0 0])
-    (sprint "Added evidence")
-
-    (closed?)
-
-
-    (conjecture)
-
-    (pprint))
-
-    ;; (promote [[1 1]])
-    ;; (add-r (first (paths/follow-paths [[1 1]] db)))
-    ;; (sprint "3. Close path [[1 1]]")
-
-
-    ;; (add-r (-> (paths/query [[2 Integer/MAX_VALUE]] :starts-with db) second))
-
-    ;; (add-evidence [:c 1])
-
-    ;; (sprint "4. Added evidence [0]")
-
-    ;; (closed?)
-
-    ;; (promote [[2 Integer/MAX_VALUE]])
-
-    ;; (sprint "5. Promoted")
-
-    ;; (closed?)
-
-    ;; (conjecture)
-
-    ;; (pprint))
-
 
 (defn row->entry
   "Given a observation table and a row, return the matching
@@ -265,6 +187,90 @@
         prefix-pairs (get-prefix-pairs table)
         transitions (pairs->transitions table prefix-pairs)]
     transitions))
+
+
+;; Usage
+(def tacas-files ["constraints-depth-1"
+                  "constraints-depth-2"
+                  "constraints-depth-3"
+                  "constraints-depth-4"
+                  "constraints-depth-5"
+                  "constraints-depth-6"
+                  "constraints-depth-7"])
+
+(def short-files ["alt-con-1"
+                  "alt-con-2"])
+
+(def db (-> tacas-files
+            paths/create-database
+            paths/sorted-paths))
+
+(defn sprint
+  [arg message]
+  (do
+    (println "----------------")
+    (println message)
+    (println "----------------")
+    (pprint arg)
+    arg))
+
+
+(-> (make-table)
+    (init-table db)
+    (sprint "1. Table initialized")
+
+    (process-ce (first (paths/follow-paths [] db)))
+    (sprint "2. Processed CE")
+
+    (closed?)
+
+    ;; (conjecture)
+
+    (process-ce (second (paths/follow-paths [] db)))
+
+    (closed?)
+
+
+    (sprint "Before accept")
+
+    (process-ce (paths/query [[0 20] [25 30] [0 10]] :exact db))
+
+    (sprint "Added accept")
+    ;; (add-evidence [:c 0])
+    ;; (sprint "Added evidence")
+
+
+    ;; (closed?)
+
+
+    (conjecture)
+
+    (pprint))
+
+    ;; (promote [[1 1]])
+    ;; (add-r (first (paths/follow-paths [[1 1]] db)))
+    ;; (sprint "3. Close path [[1 1]]")
+
+
+    ;; (add-r (-> (paths/query [[2 Integer/MAX_VALUE]] :starts-with db) second))
+
+    ;; (add-evidence [:c 1])
+
+    ;; (sprint "4. Added evidence [0]")
+
+    ;; (closed?)
+
+    ;; (promote [[2 Integer/MAX_VALUE]])
+
+    ;; (sprint "5. Promoted")
+
+    ;; (closed?)
+
+    ;; (conjecture)
+
+    ;; (pprint))
+
+
 
 [:todo-list
  [:h "Automatic detection of non-determinism in the table."]

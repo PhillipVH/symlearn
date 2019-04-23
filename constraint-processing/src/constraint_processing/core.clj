@@ -93,6 +93,11 @@
             (for [n (range (count constraints))]
               (filter #(= (:path %) (->> constraints reverse (drop n) reverse)) db)))))
 
+(defn prefixes
+  [path]
+  (for [n (range (count path))]
+    (->> path reverse (drop n) reverse (into []))))
+
 (defn sorted-paths
   [db]
   (sort #(compare (count (:path %1))
