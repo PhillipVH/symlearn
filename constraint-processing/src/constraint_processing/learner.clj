@@ -69,7 +69,7 @@
   "Create an empty observation table."
   []
   {:S #{ {:path [[]] :row []} }
-   :R #{ {:path [] :row []} }
+   :R #{}
    :E [[]]})
 
 (defn init-table
@@ -169,9 +169,9 @@
 
     (sprint "5. Promoted")
 
-    (closed?)
+    (closed?))
 
-    (conjecture))
+    ;; (conjecture))
 
 
 (defn conjecture
