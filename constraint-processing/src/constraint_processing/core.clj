@@ -67,11 +67,21 @@
 
 (def db (merge-dbs dbs))
 
+(defn prefix?
+  "Returns true if s1 is a prefix of s2."
+  [s1 s2]
+  (=
+   s1
+   (->> s2
+        (reverse)
+        (drop 1)
+        (reverse))))
+
 (defn query
   [constraints mode db]
   (cond
     (= mode :exact)
-    (filter #(= (:path %) constraints) db)
+    (first (filter #(= (:path %) constraints) db))
 
     (= mode :starts-with)
     (filter #(and

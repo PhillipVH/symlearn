@@ -1,9 +1,8 @@
 (ns constraint-processing.learner
   (:require [constraint-processing.core :as paths]
-            [clojure.pprint :refer [pprint]])
+            [clojure.pprint :refer [pprint]]
+            [clojure.set :as set])
   (:import Parser))
-
-(conj #{} )
 
 (-> #{}
     (conj [:path [2 3]])
@@ -34,38 +33,13 @@
                          path)]
     (into [] concrete)))
 
-;; (member? (mixed->concrete [[0 0] [32 40] [:c 1 2 3]]))
-
-;; (identity db)
-
 (defn int-arr
   [list]
   (into-array Integer/TYPE list))
 
-
 (defn member?
   [w]
   (Parser/parse (int-arr w)))
-
-
-(defn make-table
-  "Create an empty observation table."
-  []
-  {:S #{ {:path [[]] :row []} }
-   :R #{ {:path [] :row []} }
-   :E [[]]})
-
-
-(defn init-table
-  "Add an initial counter example from the database into the
-  observation table."
-  [table db]
-  (let [initial-path (nth db 3)
-        accepted (:accepted initial-path)]
-    (-> table
-        (update :R #(conj % {:path (:path initial-path) :row []}))
-        (fill))))
-
 
 (defn check-membership
   "Takes a path condition and a seq of evidence. Returns
@@ -78,7 +52,6 @@
   [entry evidence]
   (assoc entry :row (into [] (check-membership (:path entry) evidence))))
 
-
 (defn fill-entries
   [entries evidence]
   (reduce (fn [filled entry]
@@ -86,20 +59,34 @@
           []
           entries))
 
-
 (defn fill
   [table]
   (-> table
       (assoc :S (fill-entries (:S table) (:E table)))
       (assoc :R (fill-entries (:R table) (:E table)))))
 
+(defn make-table
+  "Create an empty observation table."
+  []
+  {:S #{ {:path [[]] :row []} }
+   :R #{ {:path [] :row []} }
+   :E [[]]})
+
+(defn init-table
+  "Add an initial counter example from the database into the
+  observation table."
+  [table db]
+  (let [initial-path (nth db 3)
+        accepted (:accepted initial-path)]
+    (-> table
+        (update :R #(conj % {:path (:path initial-path) :row []}))
+        (fill))))
 
 (defn process-ce
   [table ce]
   (-> table
       (update :R #(conj % {:path (:path ce) :row []}))
       (fill)))
-
 
 (defn promote
   [table path]
@@ -114,6 +101,14 @@
       (update :R #(conj % {:path (:path r) :row []}))
       (fill)))
 
+(defn closed?
+  [table]
+  (let [r-rows (into #{} (map first (group-by :row (:R table))))
+        s-rows (into #{}(map first (group-by :row (:S table))))]
+    (if (set/subset? r-rows s-rows)
+      (println "Closed")
+      (println "Not closed" (set/difference r-rows s-rows)))
+    table))
 
 (defn add-evidence
   [table evidence]
@@ -121,9 +116,6 @@
       (update :E #(conj % evidence))
       (fill)))
 
-(defn closed?
-  [table]
-  )
 
 ;; Usage
 (def tacas-files ["constraints-depth-1"
@@ -162,12 +154,33 @@
     (add-r (-> (paths/query [[1 1]] :starts-with db) second))
     (sprint "3. Close path [[1 1]]")
 
+
+    (add-r (-> (paths/query [[2 Integer/MAX_VALUE]] :starts-with db) second))
+
+    (sprint "4. Added [[2 Inf] x]")
+
     (add-evidence [:c 1])
 
-    (sprint "4. Added evidence [0 1 2]"))
+    (sprint "4. Added evidence [0 1 2]")
+
+    (closed?)
+
+    (promote [[2 Integer/MAX_VALUE]])
+
+    (sprint "5. Promoted")
+
+    (closed?)
+
+    (conjecture))
 
 
-(paths/feasible? [[0 0] [0 Integer/MAX_VALUE]] db)
+(defn conjecture
+  "Given a closed and consistent observation table, will produce
+  an EDN data structure that represents the SFA."
+  [table]
+  (let [states (:S table)]
+    (reduce (fn [transitions entry]
+              (conj transitions (map (partial paths/prefix? (:path entry)) (:path states))))
+            []
+            (:R table))))
 
-(-> (paths/query [[0 0]] :starts-with db)
-    second)
