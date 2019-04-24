@@ -70,16 +70,6 @@
    :R #{}
    :E [[]]})
 
-(defn init-table
-  "Add an initial counter example from the database into the
-  observation table."
-  [table db]
-  (let [initial-path (nth db 3)
-        accepted (:accepted initial-path)]
-    (-> table
-        (add-r (:path initial-path))
-        (fill))))
-
 (defn add-r
   [table r]
   (let [prefixes (paths/prefixes r)
@@ -90,6 +80,17 @@
                               (update new-table :R #(conj % {:path prefix :row []}))))
                           table
                           prefixes)]
+    (fill new-table)))
+
+(defn init-table
+  "Add an initial counter example from the database into the
+  observation table."
+  [table db]
+  (let [follow-paths (paths/follow-paths [] db)
+        new-table (reduce (fn [new-table r]
+                            (add-r new-table (:path r)))
+                            table
+                            follow-paths)]
     (fill new-table)))
 
 (defn process-ce
@@ -126,20 +127,21 @@
   [table]
   (promote table (:path (first (get-close-candidates table)))))
 
+(defn close
+  [table db]
+  (let [close-candidate (-> table get-close-candidates first :path)
+        follow-candidates (paths/follow-paths close-candidate db)]
+    (if (empty? follow-candidates)
+      (promote table close-candidate)
+      (-> table
+          (promote close-candidate)
+          (add-r (:path (rand-nth follow-candidates)))))))
+
 (defn add-evidence
   [table evidence]
   (-> table
       (update :E #(conj % evidence))
       (fill)))
-
-(defn close
-  [table path db]
-  (let [follow-candidates (paths/follow-paths path db)]
-    (if (empty? follow-candidates)
-      (promote table path)
-      (-> table
-          (promote path)
-          (add-r (:path (rand-nth follow-candidates)))))))
 
 (defn row->entry
   "Given a observation table and a row, return the matching
@@ -201,6 +203,37 @@
   (let [states (group-by :from transitions)]
     states))
 
+(defn get-state-map
+  [transitions]
+  (as-> transitions $
+    (group-by :from $)
+    (map first $)
+    (map vector $ (iterate inc 0))
+    (into {} $)))
+
+(defn get-final-states
+  [table state-map]
+  (->> (:S table)
+       (filter #(first (:row %)))
+       (map :path)
+       (map (partial get state-map))
+       (into [])))
+
+(defn build-sfa
+  [table]
+  (let [transitions (get-transitions table)
+        state-map (get-state-map transitions)
+        final-states (get-final-states table state-map)
+        simple-transitions (reduce (fn [steps transition]
+                                     (conj steps {:from (get state-map (:from transition))
+                                                  :input (:input transition)
+                                                  :to (get state-map (:to transition))}))
+                                   []
+                                   transitions)]
+    {:transitions simple-transitions
+     :initial-state (get state-map [])
+     :final-states final-states}))
+
 ;; Usage
 (def tacas-files ["constraints-depth-1"
                   "constraints-depth-2"
@@ -245,7 +278,7 @@
            (recur true (inc count) table))
 
          (= input "close")
-         (recur true (inc count) (close-auto table))
+         (recur true (inc count) (close table db))
 
          (= input "conj")
          (do
@@ -265,36 +298,6 @@
              (println (str "Adding evidence " evidence))
              (recur true (inc count) (add-evidence table evidence)))))))))
 
-(defn get-state-map
-  [transitions]
-  (as-> transitions $
-    (group-by :from $)
-    (map first $)
-    (map vector $ (iterate inc 0))
-    (into {} $)))
-
-(defn get-final-states
-  [table state-map]
-  (->> (:S table)
-       (filter #(first (:row %)))
-       (map :path)
-       (map (partial get state-map))
-       (into [])))
-
-(defn build-sfa
-  [table]
-  (let [transitions (get-transitions table)
-        state-map (get-state-map transitions)
-        final-states (get-final-states table state-map)
-        simple-transitions (reduce (fn [steps transition]
-                                     (conj steps {:from (get state-map (:from transition))
-                                                  :input (:input transition)
-                                                  :to (get state-map (:to transition))}))
-                                   []
-                                   transitions)]
-    {:transitions simple-transitions
-     :initial-state (get state-map [])
-     :final-states final-states}))
 
 [:todo-list
  [:h "Automatic detection of non-determinism in the table."]
