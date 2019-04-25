@@ -315,55 +315,76 @@
     ;; (build-sfa) -- ce
     (process-ce {:path [[1 1] [0 0] [0 Integer/MAX_VALUE]]})
     (sprint "Added ce 1 . 0 . [0 inf]")
-    ;; (closed?) -- true
-    ;; (build-sfa) -- non-det
-    (add-evidence [:c 1 3])
+    ;; (closed?) ; -- true
+    (is-consistent)
+    ;; (build-sfa) ;-- non-det
+    ;; (add-evidence [:c 1 3])
     ;; (closed?) -- false
-    (close db)
+    ;; (close db)
     ;; (closed?) -- true
-    (build-sfa)
-    (= target)
+    ;; (build-sfa)
+    ;; (= target)
+    (pprint)
     )
 
+(defn intersects?
+  "Given two constraint pairs, determine if the first intersects the second."
+  [[x1 x2] [y1 y2]]
+  (and
+   (<= x1 y2)
+   (<= y1 x2)))
 
-(let [table (-> (make-table) (init-table db))]
-  (loop [read true
-         count 0
-         table table]
-    (println (str "----------" count "----------"))
-    (pprint table)
-    (println ">")
-   (if read
-     (let [input (read-line)]
-       (cond
-         (= input "quit")
-         (println "Bye!")
+(defn intersection
+  "Given two constraint pairs, determine the intersection."
+  [[[x1 x2] [y1 y2]]]
+  [(max x1 y1) (max x2 y2)])
 
-         (= input "closed?")
-         (do
-           (println (closed? table))
-           (recur true (inc count) table))
+(defn is-consistent
+  [table]
+  (let [transitions (-> (build-sfa table) :transitions vals)
+        f-transitions (mapcat identity transitions)
+        from-to-pairs (->> f-transitions (group-by (juxt :from :to)))]
+    ))
 
-         (= input "close")
-         (recur true (inc count) (close table db))
 
-         (= input "conj")
-         (do
-           (pprint (build-sfa table))
-           (recur true (inc count) table))
+;; (let [table (-> (make-table) (init-table db))]
+;;   (loop [read true
+;;          count 0
+;;          table table]
+;;     (println (str "----------" count "----------"))
+;;     (pprint table)
+;;     (println ">")
+;;    (if read
+;;      (let [input (read-line)]
+;;        (cond
+;;          (= input "quit")
+;;          (println "Bye!")
 
-         (= input "ce")
-         (do
-           (println "> Enter counter example as vector: ")
-           (let [ce (edn/read-string (read-line))]
-             (recur true (inc count) (process-ce table {:path ce}))))
+;;          (= input "closed?")
+;;          (do
+;;            (println (closed? table))
+;;            (recur true (inc count) table))
 
-         (= input "ev")
-         (do
-           (println "> Enter evidence as vector: ")
-           (let [evidence (edn/read-string (read-line))]
-             (println (str "Adding evidence " evidence))
-             (recur true (inc count) (add-evidence table evidence)))))))))
+;;          (= input "close")
+;;          (recur true (inc count) (close table db))
+
+;;          (= input "conj")
+;;          (do
+;;            (pprint (build-sfa table))
+;;            (recur true (inc count) table))
+
+;;          (= input "ce")
+;;          (do
+;;            (println "> Enter counter example as vector: ")
+;;            (let [ce (edn/read-string (read-line))]
+;;              (recur true (inc count) (process-ce table {:path ce}))))
+
+;;          (= input "ev")
+;;          (do
+;;            (println "> Enter evidence as vector: ")
+;;            (let [evidence (edn/read-string (read-line))]
+;;              (println (str "Adding evidence " evidence))
+;;              (recur true (inc count) (add-evidence table evidence)))))))))
 
 
 [:todo-list
