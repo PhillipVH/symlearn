@@ -271,15 +271,30 @@
     (pprint arg)
     arg))
 
-;; REPL
-
-(def tablll (edn/read-string "{:S #{{:path [[1 1]], :row [false]} {:path [], :row [true]}},
- :R
- #{{:path [[0 0]], :row [false]} {:path [[3 2147483647]], :row [false]}
-   {:path [[2 2]], :row [false]} {:path [[1 1] [2 2]], :row [false]}},
- :E [[]]}"))
-
-(paths/query [[2 2]] :exact db)
+;; Single Values Example
+(def target (edn/read-string "
+{:transitions
+ {0
+  [{:from 0, :input [0 0], :to 3}
+   {:from 0, :input [3 3], :to 1}
+   {:from 0, :input [1 1], :to 2}
+   {:from 0, :input [4 2147483647], :to 3}
+   {:from 0, :input [2 2], :to 0}],
+  1
+  [{:from 1, :input [0 0], :to 3}
+   {:from 1, :input [3 2147483647], :to 3}
+   {:from 1, :input [2 2], :to 1}
+   {:from 1, :input [1 1], :to 2}],
+  2
+  [{:from 2, :input [2 2], :to 2}
+   {:from 2, :input [1 1], :to 0}
+   {:from 2, :input [0 0], :to 3}
+   {:from 2, :input [3 2147483647], :to 3}],
+  3
+  [{:from 3, :input [0 2147483647], :to 3}
+   {:from 3, :input [0 2147483647], :to 3}]},
+ :initial-state 1,
+ :final-states [1]}"))
 
 (-> (make-table)
     (init-table db)
@@ -301,9 +316,15 @@
     (process-ce {:path [[1 1] [0 0] [0 Integer/MAX_VALUE]]})
     (sprint "Added ce 1 . 0 . [0 inf]")
     ;; (closed?) -- true
+    ;; (build-sfa) -- non-det
+    (add-evidence [:c 1 3])
+    ;; (closed?) -- false
+    (close db)
+    ;; (closed?) -- true
     (build-sfa)
-    (pprint)
+    (= target)
     )
+
 
 (let [table (-> (make-table) (init-table db))]
   (loop [read true
@@ -349,5 +370,5 @@
  [:h "Automatic detection of non-determinism in the table."]
  [:h "Implementation of `fill` using `promote` and `add-r`." :done]
  [:h "Automatic closing of table, including the addition of a new entry in R."
-  :desc "For this we need to figure out an ergonomic way of getting new information from the database component, including filtering for 'smarter', shorter paths."]
+  :desc "For this we need to figure out an ergonomic way of getting new information from the database component, including filtering for 'smarter', shorter paths." :done]
  [:h "`add-r` needs to add prefixes as well." :done]]
