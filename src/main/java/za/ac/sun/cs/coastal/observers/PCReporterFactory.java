@@ -73,7 +73,7 @@ public class PCReporterFactory implements ObserverFactory {
 		
 		private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
 		
-		private final String output_name = "alt-con-2";
+		private final String output_name = "single-value-6";
 		
 		PCReporterManager(COASTAL coastal) {
 			broker = coastal.getBroker();

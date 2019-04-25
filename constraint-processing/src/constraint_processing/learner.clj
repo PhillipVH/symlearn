@@ -5,7 +5,8 @@
             [clojure.string :as str]
             [clojure.edn :as edn])
   (:import Parser
-           TacasParser))
+           TacasParser
+           SingleParser))
 
 (defn make-concrete
   [path]
@@ -37,7 +38,7 @@
 
 (defn member?
   [w]
-  (TacasParser/parse (int-arr w)))
+  (SingleParser/parse (int-arr w)))
 
 (defn check-membership
   "Takes a path condition and a seq of evidence. Returns
@@ -127,6 +128,13 @@
   [table]
   (promote table (:path (first (get-close-candidates table)))))
 
+(defn add-rs
+  [table rs]
+  (reduce (fn [new-table r]
+            (add-r new-table (:path r)))
+          table
+          rs))
+
 (defn close
   [table db]
   (let [close-candidate (-> table get-close-candidates first :path)
@@ -135,7 +143,9 @@
       (promote table close-candidate)
       (-> table
           (promote close-candidate)
-          (add-r (:path (rand-nth follow-candidates)))))))
+          (add-rs follow-candidates)
+          ;; (add-r (:path (rand-nth follow-candidates)))
+          ))))
 
 (defn add-evidence
   [table evidence]
@@ -230,7 +240,7 @@
                                                   :to (get state-map (:to transition))}))
                                    []
                                    transitions)]
-    {:transitions simple-transitions
+    {:transitions (group-by :from simple-transitions)
      :initial-state (get state-map [])
      :final-states final-states}))
 
@@ -246,7 +256,9 @@
 (def short-files ["alt-con-1"
                   "alt-con-2"])
 
-(def db (-> tacas-files
+(def single-value-files (map #(str "single-value-" %) (range 1 7)))
+
+(def db (-> single-value-files
             paths/create-database
             paths/sorted-paths))
 
@@ -258,6 +270,40 @@
     (println "----------------")
     (pprint arg)
     arg))
+
+;; REPL
+
+(def tablll (edn/read-string "{:S #{{:path [[1 1]], :row [false]} {:path [], :row [true]}},
+ :R
+ #{{:path [[0 0]], :row [false]} {:path [[3 2147483647]], :row [false]}
+   {:path [[2 2]], :row [false]} {:path [[1 1] [2 2]], :row [false]}},
+ :E [[]]}"))
+
+(paths/query [[2 2]] :exact db)
+
+(-> (make-table)
+    (init-table db)
+    (sprint "Initial table")
+    ;; (closed?) ;; false
+    (close db)
+    (sprint "Closed table")
+    ;; (build-sfa) -- ce
+    (process-ce {:path [[1 1] [1 1] [3 3]]})
+    (sprint "Added ce 1 . 1 . 3 ")
+    ;; (closed?) -- true
+    ;; (build-sfa) -- non-det
+    (add-evidence [:c 3])
+    (sprint "Added evidence 3")
+    ;; (closed?) -- false
+    (close db)
+    ;; (closed?)
+    ;; (build-sfa) -- ce
+    (process-ce {:path [[1 1] [0 0] [0 Integer/MAX_VALUE]]})
+    (sprint "Added ce 1 . 0 . [0 inf]")
+    ;; (closed?) -- true
+    (build-sfa)
+    (pprint)
+    )
 
 (let [table (-> (make-table) (init-table db))]
   (loop [read true
