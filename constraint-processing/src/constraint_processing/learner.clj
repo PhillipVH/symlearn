@@ -284,12 +284,23 @@
         from-to-pairs (->> f-transitions (group-by (juxt :from)))]
     (->> (get-intersecting-pairs from-to-pairs)
          (flatten)
-         (apply set/union)
-         ;; (filter #(not (empty? %)))
-         ;; (map first)
-         ;; (first)
-         ;; (apply set/union)
-         )))
+         (apply set/union))))
+
+(defn row-equivalent?
+  "Return `true` if adding the new evidence doesn't
+  introduce a new unique row, `false` otherwise."
+  [table evidence]
+  (let [new-table (-> table
+                      (add-evidence evidence))
+        old-s-rows (map :row (:S table))
+        old-r-rows (map :row (:R table))
+        s-rows (map :row (:S new-table))
+        r-rows (map :row (:R new-table))
+        rows (set/union s-rows r-rows)
+        old-rows (set/union old-s-rows old-r-rows)]
+    (=
+     (count (set old-rows))
+     (count (set rows)))))
 
 (defn consistent?
   [table]
@@ -322,6 +333,27 @@
     (pprint arg)
     arg))
 
+
+
+;; (def le-table (edn/read-string "{:S
+;;  #{{:path [], :row [true false]}
+;;    {:path [[1 1] [1 1]], :row [false true]}
+;;    {:path [[1 1]], :row [false false]}},
+;;  :R
+;;  #{{:path [[1 1] [1 1] [0 0]], :row [false false]}
+;;    {:path [[2 2]], :row [true false]}
+;;    {:path [[1 1] [1 1] [2 2]], :row [false true]}
+;;    {:path [[0 0]], :row [false false]}
+;;    {:path [[1 1] [0 0] [0 2147483647]], :row [false false]}
+;;    {:path [[1 1] [3 2147483647]], :row [false false]}
+;;    {:path [[1 1] [1 1] [3 3]], :row [true false]}
+;;    {:path [[1 1] [1 1] [1 1]], :row [false false]}
+;;    {:path [[1 1] [0 0]], :row [false false]}
+;;    {:path [[3 2147483647]], :row [false false]}
+;;    {:path [[1 1] [2 2]], :row [false false]}
+;;    {:path [[1 1] [1 1] [4 2147483647]], :row [false false]}},
+;;  :E [[] [:c 3]]}"))
+
 ;; Single Values Example
 (def target (edn/read-string "
 {:transitions
@@ -347,6 +379,11 @@
  :initial-state 1,
  :final-states [1]}"))
 
+(defn sprint-sfa
+  [table]
+  (pprint (build-sfa table))
+  table)
+
 (-> (make-table)
     (init-table db)
     (sprint "Initial table")
@@ -357,7 +394,7 @@
     (sprint "Closed table")
 
     ;; (consistent?) ; true
-    (#(do (pprint (build-sfa %)) %)) ; ce
+    (sprint-sfa) ; ce
     (process-ce {:path [[1 1] [1 1] [3 3]]})
     (sprint "Added ce 1 . 1 . 3 ")
 
@@ -371,7 +408,7 @@
     ;; (consistent?) ; true
     (sprint "Added evidence [3]")
 
-    (#(do (pprint (build-sfa %)) %)) ; ce
+    (sprint-sfa) ; ce
     (process-ce {:path [[1 1] [0 0] [0 Integer/MAX_VALUE]]})
     (sprint "Added ce 1 . 0 . [0 inf]")
 
@@ -387,7 +424,7 @@
     ;; (consistent?) ;-- true
     (sprint "Closed table")
 
-    (#(do (pprint (build-sfa %)) %))
+    (sprint-sfa)
     (build-sfa)
     (= target)) ; QED
 
