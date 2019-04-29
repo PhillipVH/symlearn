@@ -46,7 +46,6 @@
   [path evidence]
   (map #(member? (mixed->concrete (conj (into [] path) %))) evidence))
 
-
 (defn fill-entry
   [entry evidence]
   (assoc entry :row (into [] (check-membership (:path entry) evidence))))
@@ -143,9 +142,7 @@
       (promote table close-candidate)
       (-> table
           (promote close-candidate)
-          (add-rs follow-candidates)
-          ;; (add-r (:path (rand-nth follow-candidates)))
-          ))))
+          (add-rs follow-candidates)))))
 
 (defn add-evidence
   [table evidence]
@@ -244,6 +241,60 @@
      :initial-state (get state-map [])
      :final-states final-states}))
 
+(defn intersects?
+  "Given two constraint pairs, determine if the first intersects the second."
+  [[x1 x2] [y1 y2]]
+  (and
+   (<= x1 y2)
+   (<= y1 x2)))
+
+(defn intersection
+  "Given two constraint pairs, determine the intersection."
+  [[[x1 x2] [y1 y2]]]
+  [(max x1 y1) (max x2 y2)])
+
+(defn get-from-to-pairs
+  [table]
+  (let [transitions (-> (build-sfa table) :transitions vals)
+        f-transitions (mapcat identity transitions)
+        from-to-pairs (->> f-transitions (group-by (juxt :from :to)))]
+    from-to-pairs))
+
+(defn get-intersecting-pairs
+  [from-to-pairs]
+  (for [pair from-to-pairs]
+    (for [transition (first (drop 1 pair))]
+      (reduce (fn [intersections other-transition]
+                (cond
+                  (= transition other-transition)
+                  intersections
+
+                  (intersects? (:input transition) (:input other-transition))
+                  (conj intersections #{transition other-transition})
+
+                  :else
+                  intersections))
+              []
+              (first (drop 1 pair))))))
+
+(defn get-inconsistent-transitions
+  [table]
+  (let [transitions (-> (build-sfa table) :transitions vals)
+        f-transitions (mapcat identity transitions)
+        from-to-pairs (->> f-transitions (group-by (juxt :from)))]
+    (->> (get-intersecting-pairs from-to-pairs)
+         (flatten)
+         (apply set/union)
+         ;; (filter #(not (empty? %)))
+         ;; (map first)
+         ;; (first)
+         ;; (apply set/union)
+         )))
+
+(defn consistent?
+  [table]
+  (empty? (get-inconsistent-transitions table)))
+
 ;; Usage
 (def tacas-files ["constraints-depth-1"
                   "constraints-depth-2"
@@ -299,52 +350,47 @@
 (-> (make-table)
     (init-table db)
     (sprint "Initial table")
-    ;; (closed?) ;; false
+
+    ;; (closed?) ; false
     (close db)
+    ;; (closed?) ; true
     (sprint "Closed table")
-    ;; (build-sfa) -- ce
+
+    ;; (consistent?) ; true
+    (#(do (pprint (build-sfa %)) %)) ; ce
     (process-ce {:path [[1 1] [1 1] [3 3]]})
     (sprint "Added ce 1 . 1 . 3 ")
-    ;; (closed?) -- true
-    ;; (build-sfa) -- non-det
+
+    ;; (closed?) ; true
+    ;; (consistent?) ; false
+    ;; (get-inconsistent-transitions)
     (add-evidence [:c 3])
-    (sprint "Added evidence 3")
-    ;; (closed?) -- false
+    ;; (closed?) ; false
     (close db)
-    ;; (closed?)
-    ;; (build-sfa) -- ce
+    ;; (closed?) ; true
+    ;; (consistent?) ; true
+    (sprint "Added evidence [3]")
+
+    (#(do (pprint (build-sfa %)) %)) ; ce
     (process-ce {:path [[1 1] [0 0] [0 Integer/MAX_VALUE]]})
     (sprint "Added ce 1 . 0 . [0 inf]")
+
     ;; (closed?) ; -- true
-    (is-consistent)
-    ;; (build-sfa) ;-- non-det
-    ;; (add-evidence [:c 1 3])
-    ;; (closed?) -- false
-    ;; (close db)
-    ;; (closed?) -- true
-    ;; (build-sfa)
-    ;; (= target)
-    (pprint)
-    )
+    ;; (consistent?) ; -- false
+    ;; (get-inconsistent-transitions)
+    (add-evidence [:c 1 3])
+    (sprint "Added evidence [1 3]")
 
-(defn intersects?
-  "Given two constraint pairs, determine if the first intersects the second."
-  [[x1 x2] [y1 y2]]
-  (and
-   (<= x1 y2)
-   (<= y1 x2)))
+    ;; (closed?) ;-- false
+    (close db)
+    ;; (closed?) ;-- true
+    ;; (consistent?) ;-- true
+    (sprint "Closed table")
 
-(defn intersection
-  "Given two constraint pairs, determine the intersection."
-  [[[x1 x2] [y1 y2]]]
-  [(max x1 y1) (max x2 y2)])
+    (#(do (pprint (build-sfa %)) %))
+    (build-sfa)
+    (= target)) ; QED
 
-(defn is-consistent
-  [table]
-  (let [transitions (-> (build-sfa table) :transitions vals)
-        f-transitions (mapcat identity transitions)
-        from-to-pairs (->> f-transitions (group-by (juxt :from :to)))]
-    ))
 
 
 ;; (let [table (-> (make-table) (init-table db))]
@@ -388,7 +434,7 @@
 
 
 [:todo-list
- [:h "Automatic detection of non-determinism in the table."]
+ [:h "Automatic detection of non-determinism in the table." :done]
  [:h "Implementation of `fill` using `promote` and `add-r`." :done]
  [:h "Automatic closing of table, including the addition of a new entry in R."
   :desc "For this we need to figure out an ergonomic way of getting new information from the database component, including filtering for 'smarter', shorter paths." :done]
