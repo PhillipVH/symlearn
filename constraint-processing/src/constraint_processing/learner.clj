@@ -243,17 +243,6 @@
      :initial-state (get state-map [])
      :final-states final-states}))
 
-(defn execute-sfa
-  "Takes an SFA and a vector of input, and returns the acceptance status of the
-  SFA after the given run of input."
-  [sfa input]
-  (loop [state (:initial-state sfa)
-         input input]
-    (if (empty? input)
-      (contains? (:final-states sfa) state)
-      (let [trans (first (filter #(intersects? (:input %) [(first input) (first input)])
-                                 (get (:transitions sfa) state)))]
-        (recur (:to trans) (rest input))))))
 
 (defn intersects?
   "Given two constraint pairs, determine if the first intersects the second."
@@ -266,6 +255,18 @@
   "Given two constraint pairs, determine the intersection."
   [[[x1 x2] [y1 y2]]]
   [(max x1 y1) (max x2 y2)])
+
+(defn execute-sfa
+  "Takes an SFA and a vector of input, and returns the acceptance status of the
+  SFA after the given run of input."
+  [sfa input]
+  (loop [state (:initial-state sfa)
+         input input]
+    (if (empty? input)
+      (contains? (:final-states sfa) state)
+      (let [trans (first (filter #(intersects? (:input %) [(first input) (first input)])
+                                 (get (:transitions sfa) state)))]
+        (recur (:to trans) (rest input))))))
 
 (defn get-from-to-pairs
   [table]
