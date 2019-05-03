@@ -117,6 +117,14 @@
        (filter #(= (count (:path %)) (inc (count path))))
        (into [])))
 
+(defn load-db-from-prefix
+  "Load n files with the given prefix into a database, and
+  return that database."
+  [prefix n]
+  (-> (map (partial str prefix) (range 1 n))
+      create-database
+      sorted-paths))
+
 ;;;; Usage examples
 
 ;; Match only exactly the given path condition

@@ -8,6 +8,8 @@
            TacasParser
            SingleParser))
 
+(def inf Integer/MAX_VALUE)
+
 (defn make-concrete
   [path]
   (for [constraint path]
@@ -235,7 +237,7 @@
                                      (conj steps {:from (get state-map (:from transition))
                                                   :input (:input transition)
                                                   :to (get state-map (:to transition))}))
-                                   []
+                                   #{}
                                    transitions)]
     {:transitions (group-by :from simple-transitions)
      :initial-state (get state-map [])
@@ -324,6 +326,8 @@
             paths/create-database
             paths/sorted-paths))
 
+(def db (paths/load-db-from-prefix "single-value-" 7))
+
 (defn sprint
   [arg message]
   (do
@@ -333,26 +337,6 @@
     (pprint arg)
     arg))
 
-
-
-;; (def le-table (edn/read-string "{:S
-;;  #{{:path [], :row [true false]}
-;;    {:path [[1 1] [1 1]], :row [false true]}
-;;    {:path [[1 1]], :row [false false]}},
-;;  :R
-;;  #{{:path [[1 1] [1 1] [0 0]], :row [false false]}
-;;    {:path [[2 2]], :row [true false]}
-;;    {:path [[1 1] [1 1] [2 2]], :row [false true]}
-;;    {:path [[0 0]], :row [false false]}
-;;    {:path [[1 1] [0 0] [0 2147483647]], :row [false false]}
-;;    {:path [[1 1] [3 2147483647]], :row [false false]}
-;;    {:path [[1 1] [1 1] [3 3]], :row [true false]}
-;;    {:path [[1 1] [1 1] [1 1]], :row [false false]}
-;;    {:path [[1 1] [0 0]], :row [false false]}
-;;    {:path [[3 2147483647]], :row [false false]}
-;;    {:path [[1 1] [2 2]], :row [false false]}
-;;    {:path [[1 1] [1 1] [4 2147483647]], :row [false false]}},
-;;  :E [[] [:c 3]]}"))
 
 ;; Single Values Example
 (def target (edn/read-string "
@@ -378,6 +362,25 @@
    {:from 3, :input [0 2147483647], :to 3}]},
  :initial-state 1,
  :final-states [1]}"))
+
+(def lol (edn/read-string "{:S
+  #{{:path [], :row [true false]}
+    {:path [[1 1] [1 1]], :row [false true]}
+    {:path [[1 1]], :row [false false]}},
+  :R
+  #{{:path [[1 1] [1 1] [0 0]], :row [false false]}
+    {:path [[2 2]], :row [true false]}
+    {:path [[1 1] [1 1] [2 2]], :row [false true]}
+    {:path [[0 0]], :row [false false]}
+    {:path [[1 1] [0 0] [0 2147483647]], :row [false false]}
+    {:path [[1 1] [3 2147483647]], :row [false false]}
+    {:path [[1 1] [1 1] [3 3]], :row [true false]}
+    {:path [[1 1] [1 1] [1 1]], :row [false false]}
+    {:path [[1 1] [0 0]], :row [false false]}
+    {:path [[3 2147483647]], :row [false false]}
+    {:path [[1 1] [2 2]], :row [false false]}
+    {:path [[1 1] [1 1] [4 2147483647]], :row [false false]}},
+  :E [[] [:c 3]]}"))
 
 (defn sprint-sfa
   [table]
@@ -411,10 +414,11 @@
     (sprint-sfa) ; ce
     (process-ce {:path [[1 1] [0 0] [0 Integer/MAX_VALUE]]})
     (sprint "Added ce 1 . 0 . [0 inf]")
+    (sprint-sfa)
 
     ;; (closed?) ; -- true
+    ;; (as-> $ (pprint (get-inconsistent-transitions $)))
     ;; (consistent?) ; -- false
-    ;; (get-inconsistent-transitions)
     (add-evidence [:c 1 3])
     (sprint "Added evidence [1 3]")
 
@@ -425,54 +429,6 @@
     (sprint "Closed table")
 
     (sprint-sfa)
-    (build-sfa)
-    (= target)) ; QED
-
-
-
-;; (let [table (-> (make-table) (init-table db))]
-;;   (loop [read true
-;;          count 0
-;;          table table]
-;;     (println (str "----------" count "----------"))
-;;     (pprint table)
-;;     (println ">")
-;;    (if read
-;;      (let [input (read-line)]
-;;        (cond
-;;          (= input "quit")
-;;          (println "Bye!")
-
-;;          (= input "closed?")
-;;          (do
-;;            (println (closed? table))
-;;            (recur true (inc count) table))
-
-;;          (= input "close")
-;;          (recur true (inc count) (close table db))
-
-;;          (= input "conj")
-;;          (do
-;;            (pprint (build-sfa table))
-;;            (recur true (inc count) table))
-
-;;          (= input "ce")
-;;          (do
-;;            (println "> Enter counter example as vector: ")
-;;            (let [ce (edn/read-string (read-line))]
-;;              (recur true (inc count) (process-ce table {:path ce}))))
-
-;;          (= input "ev")
-;;          (do
-;;            (println "> Enter evidence as vector: ")
-;;            (let [evidence (edn/read-string (read-line))]
-;;              (println (str "Adding evidence " evidence))
-;;              (recur true (inc count) (add-evidence table evidence)))))))))
-
-
-[:todo-list
- [:h "Automatic detection of non-determinism in the table." :done]
- [:h "Implementation of `fill` using `promote` and `add-r`." :done]
- [:h "Automatic closing of table, including the addition of a new entry in R."
-  :desc "For this we need to figure out an ergonomic way of getting new information from the database component, including filtering for 'smarter', shorter paths." :done]
- [:h "`add-r` needs to add prefixes as well." :done]]
+    ;; ;; (build-sfa)
+    ;; (= target)) ; QED
+    )
