@@ -232,7 +232,7 @@
   [table]
   (let [transitions (get-transitions table)
         state-map (get-state-map transitions)
-        final-states (get-final-states table state-map)
+        final-states (into #{} (get-final-states table state-map))
         simple-transitions (reduce (fn [steps transition]
                                      (conj steps {:from (get state-map (:from transition))
                                                   :input (:input transition)
@@ -242,6 +242,18 @@
     {:transitions (group-by :from simple-transitions)
      :initial-state (get state-map [])
      :final-states final-states}))
+
+(defn execute-sfa
+  "Takes an SFA and a vector of input, and returns the acceptance status of the
+  SFA after the given run of input."
+  [sfa input]
+  (loop [state (:initial-state sfa)
+         input input]
+    (if (empty? input)
+      (contains? (:final-states sfa) state)
+      (let [trans (first (filter #(intersects? (:input %) [(first input) (first input)])
+                                 (get (:transitions sfa) state)))]
+        (recur (:to trans) (rest input))))))
 
 (defn intersects?
   "Given two constraint pairs, determine if the first intersects the second."
@@ -429,6 +441,9 @@
     (sprint "Closed table")
 
     (sprint-sfa)
-    ;; ;; (build-sfa)
+    (build-sfa)
+    (execute-sfa [1 1 3 3 1 1 3])
     ;; (= target)) ; QED
     )
+
+(pprint (paths/sorted-paths db))
