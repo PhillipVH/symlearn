@@ -243,17 +243,7 @@
      :initial-state (get state-map [])
      :final-states final-states}))
 
-(defn execute-sfa
-  "Takes an SFA and a vector of input, and returns the acceptance status of the
-  SFA after the given run of input."
-  [sfa input]
-  (loop [state (:initial-state sfa)
-         input input]
-    (if (empty? input)
-      (contains? (:final-states sfa) state)
-      (let [trans (first (filter #(intersects? (:input %) [(first input) (first input)])
-                                 (get (:transitions sfa) state)))]
-        (recur (:to trans) (rest input))))))
+
 
 (defn intersects?
   "Given two constraint pairs, determine if the first intersects the second."
@@ -266,6 +256,18 @@
   "Given two constraint pairs, determine the intersection."
   [[[x1 x2] [y1 y2]]]
   [(max x1 y1) (max x2 y2)])
+
+(defn execute-sfa
+  "Takes an SFA and a vector of input, and returns the acceptance status of the
+  SFA after the given run of input."
+  [sfa input]
+  (loop [state (:initial-state sfa)
+         input input]
+    (if (empty? input)
+      (contains? (:final-states sfa) state)
+      (let [trans (first (filter #(intersects? (:input %) [(first input) (first input)])
+                                 (get (:transitions sfa) state)))]
+        (recur (:to trans) (rest input))))))
 
 (defn get-from-to-pairs
   [table]
@@ -442,8 +444,21 @@
 
     (sprint-sfa)
     (build-sfa)
-    (execute-sfa [1 1 3 3 1 1 3])
+    (run-all-from-db db)
+    ;; (execute-sfa [1 1 3 3 1 1 3])
     ;; (= target)) ; QED
     )
 
-(pprint (paths/sorted-paths db))
+(defn run-all-from-db
+  [sfa db]
+  (let [paths (paths/sorted-paths db)]
+    (loop [paths paths]
+      (if (empty? paths)
+        true
+        (let [path (first paths)
+              should-accept (:accepted path)
+              input (make-concrete (:path path))
+              accepted (execute-sfa sfa input)]
+          (if (= accepted should-accept)
+            (recur (rest paths))
+            path))))))
