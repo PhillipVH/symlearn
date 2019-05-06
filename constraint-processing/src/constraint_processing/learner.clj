@@ -243,8 +243,6 @@
      :initial-state (get state-map [])
      :final-states final-states}))
 
-
-
 (defn intersects?
   "Given two constraint pairs, determine if the first intersects the second."
   [[x1 x2] [y1 y2]]
