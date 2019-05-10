@@ -6,7 +6,8 @@
             [clojure.edn :as edn])
   (:import Parser
            TacasParser
-           SingleParser))
+           SingleParser
+           LearnLarge))
 
 (def inf Integer/MAX_VALUE)
 
@@ -40,7 +41,7 @@
 
 (defn member?
   [w]
-  (SingleParser/parse (int-arr w)))
+  (LearnLarge/parse (int-arr w)))
 
 (defn check-membership
   "Takes a path condition and a seq of evidence. Returns
@@ -320,6 +321,20 @@
   [table]
   (empty? (get-inconsistent-transitions table)))
 
+(defn run-all-from-db
+  [sfa db]
+  (let [paths (paths/sorted-paths db)]
+    (loop [paths paths]
+      (if (empty? paths)
+        true
+        (let [path (first paths)
+              should-accept (:accepted path)
+              input (make-concrete (:path path))
+              accepted (execute-sfa sfa input)]
+          (if (= accepted should-accept)
+            (recur (rest paths))
+            path))))))
+
 ;; Usage
 (def tacas-files ["constraints-depth-1"
                   "constraints-depth-2"
@@ -332,13 +347,23 @@
 (def short-files ["alt-con-1"
                   "alt-con-2"])
 
-(def single-value-files (map #(str "single-value-" %) (range 1 7)))
+(def large-files ["learn-large-1"
+                  "learn-large-2"
+                  "learn-large-3"
+                  "learn-large-4"
+                  "learn-large-5"])
 
-(def db (-> single-value-files
+
+
+(def single-value-files (map #(str "alt-con-" %) (range 1 3)))
+
+(def db (-> large-files
             paths/create-database
             paths/sorted-paths))
 
-(def db (paths/load-db-from-prefix "single-value-" 7))
+
+;; (def db (paths/load-db-from-prefix "single-value-" 7))
+(def db (paths/load-db-from-prefix "learn-large-" 3))
 
 (defn sprint
   [arg message]
@@ -349,6 +374,69 @@
     (pprint arg)
     arg))
 
+
+(defn learn
+  [db]
+  (loop [table (init-table (make-table) db)]
+    (cond
+      ;; First handle the case in which the table is not closed
+      (not (closed? table))
+      (recur (close table db))
+
+      ;; Do an equivalence query and handle the evidence prefix addition
+      (map? (run-all-from-db (build-sfa table) db))
+      (let [counter-example (:path (run-all-from-db (build-sfa table) db))
+            path (into [] (concat [:c] counter-example))
+            table-with-ce (process-ce table {:path counter-example})
+            evidences (make-evidences (drop 1 path))
+            table-with-evidence (apply-evidences table-with-ce evidences)
+            ;; table-with-evidence (add-evidence table (concat [:c] (map first (drop 1 path))))
+            ]
+        (recur table-with-evidence))
+
+      ;; Uh, are we done?
+      :default
+      (pprint (build-sfa table)))))
+
+
+(defn make-evidences
+  [path]
+  (map #(concat [:c] %) (paths/suffixes (map first path))))
+
+(defn apply-evidences
+  [table evidences]
+  (reduce
+   (fn [new-table evidence]
+     (add-evidence new-table evidence))
+   table
+   evidences))
+
+
+(concat [:c] [[0 20] [25 30]])
+
+(-> (make-table)
+    (init-table db)
+    ;; (closed?)
+    (close db)
+    ;; (build-sfa)
+    ;; (run-all-from-db db) ;[[0 20] [25 30] [0 10]]
+    (process-ce {:path [[0 20] [25 30] [0 10]]})
+    ;; (closed?)
+    ;; (consistent?)
+    (add-evidence [:c 0 25 0])
+    (add-evidence [:c 25 0])
+    (add-evidence [:c 0])
+    ;; (closed?)
+    (close db)
+    ;; (closed?)
+    (close db)
+    ;; (closed?)
+    ;; (consistent?)
+    ;; (build-sfa)
+    ;; (run-all-from-db db)
+
+    (sprint-sfa)
+    )
 
 ;; Single Values Example
 (def target (edn/read-string "
@@ -409,54 +497,59 @@
     (sprint "Closed table")
 
     ;; (consistent?) ; true
+    ;; (build-sfa)
+    ;; (run-all-from-db db)
     (sprint-sfa) ; ce
-    (process-ce {:path [[1 1] [1 1] [3 3]]})
-    (sprint "Added ce 1 . 1 . 3 ")
 
-    ;; (closed?) ; true
-    ;; (consistent?) ; false
-    ;; (get-inconsistent-transitions)
+    (process-ce {:path [[1 1] [1 1] [3 3]]})
+    (add-evidence [:c 1 1 3])
+    (add-evidence [:c 1 3])
     (add-evidence [:c 3])
     ;; (closed?) ; false
     (close db)
-    ;; (closed?) ; true
-    ;; (consistent?) ; true
-    (sprint "Added evidence [3]")
-
-    (sprint-sfa) ; ce
-    (process-ce {:path [[1 1] [0 0] [0 Integer/MAX_VALUE]]})
-    (sprint "Added ce 1 . 0 . [0 inf]")
-    (sprint-sfa)
-
-    ;; (closed?) ; -- true
-    ;; (as-> $ (pprint (get-inconsistent-transitions $)))
-    ;; (consistent?) ; -- false
-    (add-evidence [:c 1 3])
-    (sprint "Added evidence [1 3]")
-
-    ;; (closed?) ;-- false
+    ;; (closed?) ; false
     (close db)
-    ;; (closed?) ;-- true
-    ;; (consistent?) ;-- true
-    (sprint "Closed table")
+    ;; (closed?)
+    ;; (consistent?)
+    ;; ;; (add-evidence [:c 3])
+    ;; (consistent?) ; true
+    ;; (add-evidence [:c 3])
+    ;; ;; (consistent?)
+    ;; ;; (closed?)
+    ;; (close db)
+    ;; ;; (consistent?)
 
+    ;; (build-sfa)
+    ;; (run-all-from-db db)
+    ;; (get-inconsistent-transitions)
     (sprint-sfa)
-    (build-sfa)
-    (run-all-from-db db)
-    ;; (execute-sfa [1 1 3 3 1 1 3])
-    ;; (= target)) ; QED
-    )
 
-(defn run-all-from-db
-  [sfa db]
-  (let [paths (paths/sorted-paths db)]
-    (loop [paths paths]
-      (if (empty? paths)
-        true
-        (let [path (first paths)
-              should-accept (:accepted path)
-              input (make-concrete (:path path))
-              accepted (execute-sfa sfa input)]
-          (if (= accepted should-accept)
-            (recur (rest paths))
-            path))))))
+    ;; (sprint "Added evidence [3]")
+
+    ;; (sprint-sfa) ; ce
+    ;; (process-ce {:path [[1 1] [0 0] [0 Integer/MAX_VALUE]]})
+    ;; (sprint "Added ce 1 . 0 . [0 inf]")
+    ;; (sprint-sfa)
+
+    ;; ;; (closed?) ; -- true
+    ;; ;; (as-> $ (pprint (get-inconsistent-transitions $)))
+    ;; ;; (consistent?) ; -- false
+    ;; (add-evidence [:c 1 3])
+    ;; (sprint "Added evidence [1 3]")
+
+    ;; ;; (closed?) ;-- false
+    ;; (close db)
+    ;; ;; (closed?) ;-- true
+    ;; ;; (consistent?) ;-- true
+    ;; (sprint "Closed table")
+
+    ;; (sprint-sfa)
+    ;; (build-sfa)
+    ;; ;; (run-all-from-db db)
+    ;; ;; (execute-sfa [1 1 3 3 1 1 3])
+    ;; (= target)
+    ) 
+
+
+
+

@@ -98,6 +98,12 @@
   (for [n (range (count path))]
     (->> path reverse (drop n) reverse (into []))))
 
+
+(defn suffixes
+  [path]
+  (for [n (range (count path))]
+    (->> path (drop n) (into []))))
+
 (defn sorted-paths
   [db]
   (sort #(compare (count (:path %1))

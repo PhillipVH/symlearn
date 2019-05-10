@@ -73,7 +73,7 @@ public class PCReporterFactory implements ObserverFactory {
 		
 		private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
 		
-		private final String output_name = "single-value-6";
+		private final String output_name = "learn-large-1";
 		
 		PCReporterManager(COASTAL coastal) {
 			broker = coastal.getBroker();
