@@ -69,7 +69,7 @@
 (defn make-table
   "Create an empty observation table."
   []
-  {:S #{ {:path [] :row []} }
+  {:S #{{:path [] :row []}}
    :R #{}
    :E [[]]})
 
@@ -92,8 +92,8 @@
   (let [follow-paths (paths/follow-paths [] db)
         new-table (reduce (fn [new-table r]
                             (add-r new-table (:path r)))
-                            table
-                            follow-paths)]
+                          table
+                          follow-paths)]
     (fill new-table)))
 
 (defn process-ce
@@ -112,7 +112,7 @@
 (defn closed?
   [table]
   (let [r-rows (into #{} (map first (group-by :row (:R table))))
-        s-rows (into #{}(map first (group-by :row (:S table))))]
+        s-rows (into #{} (map first (group-by :row (:S table))))]
     (if (set/subset? r-rows s-rows)
       true
       false)))
@@ -120,7 +120,7 @@
 (defn get-close-candidates
   [table]
   (let [r-rows (into #{} (map first (group-by :row (:R table))))
-        s-rows (into #{}(map first (group-by :row (:S table))))]
+        s-rows (into #{} (map first (group-by :row (:S table))))]
     (if-not (set/subset? r-rows s-rows)
       (let [candidate-rows (set/difference r-rows s-rows)
             candidate-row (first candidate-rows)]
@@ -354,21 +354,15 @@
                   ;; "learn-large-5"
                   ])
 
-
-
 (def single-value-files (map #(str "alt-con-" %) (range 1 3)))
 
 (def db (-> large-files
             paths/create-database
             paths/sorted-paths))
 
-
 (def db (-> tacas-files
             paths/create-database
             paths/sorted-paths))
-
-;; (def db (paths/load-db-from-prefix "single-value-" 7))
-(def db (paths/load-db-from-prefix "learn-large-" 3))
 
 ;; (spit "depth4.dot" (sfa->dot (learn db)))
 
@@ -404,7 +398,9 @@
 
       ;; Uh, are we done?
       :default
-      (build-sfa table))))
+      (let [n-rows (count (set/union (:R table) (:S table)))
+            n-cols (count (:E table))]
+        (build-sfa table)))))
 
 (defn sfa->dot
   "Given some SFA, generate the dot code that will draw
