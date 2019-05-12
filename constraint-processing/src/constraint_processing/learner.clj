@@ -351,7 +351,8 @@
                   "learn-large-2"
                   "learn-large-3"
                   "learn-large-4"
-                  "learn-large-5"])
+                  ;; "learn-large-5"
+                  ])
 
 
 
@@ -362,18 +363,27 @@
             paths/sorted-paths))
 
 
+(def db (-> tacas-files
+            paths/create-database
+            paths/sorted-paths))
+
 ;; (def db (paths/load-db-from-prefix "single-value-" 7))
 (def db (paths/load-db-from-prefix "learn-large-" 3))
 
-(defn sprint
-  [arg message]
-  (do
-    (println "----------------")
-    (println message)
-    (println "----------------")
-    (pprint arg)
-    arg))
+;; (spit "depth4.dot" (sfa->dot (learn db)))
 
+
+(defn make-evidences
+  [path]
+  (map #(concat [:c] %) (paths/suffixes (map first path))))
+
+(defn apply-evidences
+  [table evidences]
+  (reduce
+   (fn [new-table evidence]
+     (add-evidence new-table evidence))
+   table
+   evidences))
 
 (defn learn
   [db]
@@ -389,167 +399,33 @@
             path (into [] (concat [:c] counter-example))
             table-with-ce (process-ce table {:path counter-example})
             evidences (make-evidences (drop 1 path))
-            table-with-evidence (apply-evidences table-with-ce evidences)
-            ;; table-with-evidence (add-evidence table (concat [:c] (map first (drop 1 path))))
-            ]
+            table-with-evidence (apply-evidences table-with-ce evidences)]
         (recur table-with-evidence))
 
       ;; Uh, are we done?
       :default
-      (pprint (build-sfa table)))))
+      (build-sfa table))))
 
-
-(defn make-evidences
-  [path]
-  (map #(concat [:c] %) (paths/suffixes (map first path))))
-
-(defn apply-evidences
-  [table evidences]
-  (reduce
-   (fn [new-table evidence]
-     (add-evidence new-table evidence))
-   table
-   evidences))
-
-
-(concat [:c] [[0 20] [25 30]])
-
-(-> (make-table)
-    (init-table db)
-    ;; (closed?)
-    (close db)
-    ;; (build-sfa)
-    ;; (run-all-from-db db) ;[[0 20] [25 30] [0 10]]
-    (process-ce {:path [[0 20] [25 30] [0 10]]})
-    ;; (closed?)
-    ;; (consistent?)
-    (add-evidence [:c 0 25 0])
-    (add-evidence [:c 25 0])
-    (add-evidence [:c 0])
-    ;; (closed?)
-    (close db)
-    ;; (closed?)
-    (close db)
-    ;; (closed?)
-    ;; (consistent?)
-    ;; (build-sfa)
-    ;; (run-all-from-db db)
-
-    (sprint-sfa)
-    )
-
-;; Single Values Example
-(def target (edn/read-string "
-{:transitions
- {0
-  [{:from 0, :input [0 0], :to 3}
-   {:from 0, :input [3 3], :to 1}
-   {:from 0, :input [1 1], :to 2}
-   {:from 0, :input [4 2147483647], :to 3}
-   {:from 0, :input [2 2], :to 0}],
-  1
-  [{:from 1, :input [0 0], :to 3}
-   {:from 1, :input [3 2147483647], :to 3}
-   {:from 1, :input [2 2], :to 1}
-   {:from 1, :input [1 1], :to 2}],
-  2
-  [{:from 2, :input [2 2], :to 2}
-   {:from 2, :input [1 1], :to 0}
-   {:from 2, :input [0 0], :to 3}
-   {:from 2, :input [3 2147483647], :to 3}],
-  3
-  [{:from 3, :input [0 2147483647], :to 3}
-   {:from 3, :input [0 2147483647], :to 3}]},
- :initial-state 1,
- :final-states [1]}"))
-
-(def lol (edn/read-string "{:S
-  #{{:path [], :row [true false]}
-    {:path [[1 1] [1 1]], :row [false true]}
-    {:path [[1 1]], :row [false false]}},
-  :R
-  #{{:path [[1 1] [1 1] [0 0]], :row [false false]}
-    {:path [[2 2]], :row [true false]}
-    {:path [[1 1] [1 1] [2 2]], :row [false true]}
-    {:path [[0 0]], :row [false false]}
-    {:path [[1 1] [0 0] [0 2147483647]], :row [false false]}
-    {:path [[1 1] [3 2147483647]], :row [false false]}
-    {:path [[1 1] [1 1] [3 3]], :row [true false]}
-    {:path [[1 1] [1 1] [1 1]], :row [false false]}
-    {:path [[1 1] [0 0]], :row [false false]}
-    {:path [[3 2147483647]], :row [false false]}
-    {:path [[1 1] [2 2]], :row [false false]}
-    {:path [[1 1] [1 1] [4 2147483647]], :row [false false]}},
-  :E [[] [:c 3]]}"))
-
-(defn sprint-sfa
-  [table]
-  (pprint (build-sfa table))
-  table)
-
-(-> (make-table)
-    (init-table db)
-    (sprint "Initial table")
-
-    ;; (closed?) ; false
-    (close db)
-    ;; (closed?) ; true
-    (sprint "Closed table")
-
-    ;; (consistent?) ; true
-    ;; (build-sfa)
-    ;; (run-all-from-db db)
-    (sprint-sfa) ; ce
-
-    (process-ce {:path [[1 1] [1 1] [3 3]]})
-    (add-evidence [:c 1 1 3])
-    (add-evidence [:c 1 3])
-    (add-evidence [:c 3])
-    ;; (closed?) ; false
-    (close db)
-    ;; (closed?) ; false
-    (close db)
-    ;; (closed?)
-    ;; (consistent?)
-    ;; ;; (add-evidence [:c 3])
-    ;; (consistent?) ; true
-    ;; (add-evidence [:c 3])
-    ;; ;; (consistent?)
-    ;; ;; (closed?)
-    ;; (close db)
-    ;; ;; (consistent?)
-
-    ;; (build-sfa)
-    ;; (run-all-from-db db)
-    ;; (get-inconsistent-transitions)
-    (sprint-sfa)
-
-    ;; (sprint "Added evidence [3]")
-
-    ;; (sprint-sfa) ; ce
-    ;; (process-ce {:path [[1 1] [0 0] [0 Integer/MAX_VALUE]]})
-    ;; (sprint "Added ce 1 . 0 . [0 inf]")
-    ;; (sprint-sfa)
-
-    ;; ;; (closed?) ; -- true
-    ;; ;; (as-> $ (pprint (get-inconsistent-transitions $)))
-    ;; ;; (consistent?) ; -- false
-    ;; (add-evidence [:c 1 3])
-    ;; (sprint "Added evidence [1 3]")
-
-    ;; ;; (closed?) ;-- false
-    ;; (close db)
-    ;; ;; (closed?) ;-- true
-    ;; ;; (consistent?) ;-- true
-    ;; (sprint "Closed table")
-
-    ;; (sprint-sfa)
-    ;; (build-sfa)
-    ;; ;; (run-all-from-db db)
-    ;; ;; (execute-sfa [1 1 3 3 1 1 3])
-    ;; (= target)
-    ) 
-
-
-
-
+(defn sfa->dot
+  "Given some SFA, generate the dot code that will draw
+  the automaton."
+  [sfa]
+  (let [header "digraph finite_state_machine { \nrankdir=LR; size=\"8.5\"\n "
+        final-state-style (str "node [ shape = doublecircle]; " (str/join "; " (:final-states sfa)) ";\n")
+        initial-state-style (str "node [ shape = point ]; qi;\n")
+        normal-state-style (str "node [ shape = circle ];\n")
+        first-transition (str "qi -> " (:initial-state sfa) ";\n")
+        transitions (reduce
+                     (fn [trans-string {:keys [from to input]}]
+                       (let [input (if (= (second input) Integer/MAX_VALUE) [(first input) "∞"] input)]
+                         (str trans-string "\n" from " -> " to " [ label = \"[" (first input) " " (second input) "]\"];")))
+                     ""
+                     (apply concat (map second (filter map-entry? (:transitions sfa)))))
+        footer "\n}"]
+    (-> header
+        (str final-state-style)
+        (str initial-state-style)
+        (str normal-state-style)
+        (str first-transition)
+        (str transitions)
+        (str footer))))
