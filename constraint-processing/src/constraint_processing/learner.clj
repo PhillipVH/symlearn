@@ -486,15 +486,29 @@
   [trans-table node]
   (reduce (fn [children trans]
             (let [child-parent (conj (:parent node) (:input trans))
-                  child-label (:to trans)]
-              (conj children {:parent child-parent
-                              :label child-label})))
+                  child-label (:to trans)
+                  child {:parent child-parent
+                         :label child-label}]
+              (println "----IS A CHILD----")
+              (pprint child)
+              (println "------------------")
+              (conj children child)))
           []
           (get trans-table (:label node))))
 
-(let [trans-table (:transitions lol)
-      root {:parent []
-            :label (:initial-state lol)}
-      children (expand-node (:transitions lol) root)]
-  (expand-node trans-table (first children)))
+(induce-words lol 10)
 
+(defn induce-words
+  [sfa n]
+  (let [root {:parent []
+              :label (:initial-state sfa)}
+        tt (:transitions sfa)]
+    (depth-limited-search root n tt)))
+
+(defn depth-limited-search
+  "Takes an SFA and generates all the words of length N "
+  [node n tt]
+  (if-not (>= 0 n)
+    (let [children (expand-node tt node)]
+      (for [child children]
+        (depth-limited-search child (dec n) tt)))))
