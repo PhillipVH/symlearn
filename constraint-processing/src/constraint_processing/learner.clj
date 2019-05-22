@@ -3,7 +3,9 @@
             [clojure.pprint :refer [pprint]]
             [clojure.set :as set]
             [clojure.string :as str]
-            [clojure.edn :as edn])
+            [clojure.edn :as edn]
+            [clojure.java.shell :refer [sh]]
+            [clojure.walk :as walk])
   (:import Parser
            TacasParser
            SingleParser
@@ -41,7 +43,7 @@
 
 (defn member?
   [w]
-  (LearnLarge/parse (int-arr w)))
+  (TacasParser/parse (int-arr w)))
 
 (defn check-membership
   "Takes a path condition and a seq of evidence. Returns
@@ -125,10 +127,6 @@
       (let [candidate-rows (set/difference r-rows s-rows)
             candidate-row (first candidate-rows)]
         (into #{} (filter #(= candidate-row (:row %)) (:R table)))))))
-
-(defn close-auto
-  [table]
-  (promote table (:path (first (get-close-candidates table)))))
 
 (defn add-rs
   [table rs]
@@ -335,73 +333,6 @@
             (recur (rest paths))
             path))))))
 
-;; Usage
-(def tacas-files ["constraints-depth-1"
-                  "constraints-depth-2"
-                  "constraints-depth-3"
-                  "constraints-depth-4"
-                  "constraints-depth-5"
-                  "constraints-depth-6"
-                  "constraints-depth-7"])
-
-(def short-files ["alt-con-1"
-                  "alt-con-2"])
-
-(def large-files ["learn-large-1"
-                  "learn-large-2"
-                  "learn-large-3"
-                  "learn-large-4"
-                  ;; "learn-large-5"
-                  ])
-
-(def single-value-files (map #(str "alt-con-" %) (range 1 3)))
-
-(def db (-> large-files
-            paths/create-database
-            paths/sorted-paths))
-
-(def db (-> tacas-files
-            paths/create-database
-            paths/sorted-paths))
-
-;; (spit "depth4.dot" (sfa->dot (learn db)))
-
-
-(defn make-evidences
-  [path]
-  (map #(concat [:c] %) (paths/suffixes (map first path))))
-
-(defn apply-evidences
-  [table evidences]
-  (reduce
-   (fn [new-table evidence]
-     (add-evidence new-table evidence))
-   table
-   evidences))
-
-(defn learn
-  [db]
-  (loop [table (init-table (make-table) db)]
-    (cond
-      ;; First handle the case in which the table is not closed
-      (not (closed? table))
-      (recur (close table db))
-
-      ;; Do an equivalence query and handle the evidence prefix addition
-      (map? (run-all-from-db (build-sfa table) db))
-      (let [counter-example (:path (run-all-from-db (build-sfa table) db))
-            path (into [] (concat [:c] counter-example))
-            table-with-ce (process-ce table {:path counter-example})
-            evidences (make-evidences (drop 1 path))
-            table-with-evidence (apply-evidences table-with-ce evidences)]
-        (recur table-with-evidence))
-
-      ;; Uh, are we done?
-      :default
-      (let [n-rows (count (set/union (:R table) (:S table)))
-            n-cols (count (:E table))]
-        (build-sfa table)))))
-
 (defn sfa->dot
   "Given some SFA, generate the dot code that will draw
   the automaton."
@@ -425,3 +356,145 @@
         (str first-transition)
         (str transitions)
         (str footer))))
+
+;; Usage
+(def tacas-files ["constraints-depth-1"
+                  "constraints-depth-2"
+                  "constraints-depth-3"
+                  "constraints-depth-4"
+                  "constraints-depth-5"
+                  "constraints-depth-6"
+                  "constraints-depth-7"])
+
+(def short-files ["alt-con-1"
+                  "alt-con-2"])
+
+(def large-files ["learn-large-1"
+                  "learn-large-2"
+                  "learn-large-3"
+                  "learn-large-4"
+                  ;; "learn-large-5"
+                  ])
+
+(def single-value-files (map #(str "alt-con-" %) (range 1 3)))
+
+;; (def db (-> large-files
+;;             paths/create-database
+;;             paths/sorted-paths))
+
+(def db (-> tacas-files
+            paths/create-database
+            paths/sorted-paths))
+
+(defn safe-dot
+  [sfa name tag]
+  (let [dot-content (sfa->dot sfa)
+        filename (str name "." tag ".dot")]
+    (spit filename dot-content)))
+
+(defn make-image
+  [{:keys [dot-file dpi type show] :or {dpi 300
+                                        type "png"
+                                            show true}}]
+  (sh "dot"
+      (str "-Gdpi=" dpi)
+      (str "-T" type)
+      dot-file
+      "-o"
+      (str dot-file "." type))
+  (if show
+    (sh "xdg-open" (str dot-file "." type))))
+
+(defn make-evidences
+  [path]
+  (map #(concat [:c] %) (paths/suffixes (map first path))))
+
+(defn apply-evidences
+  [table evidences]
+  (reduce
+   (fn [new-table evidence]
+     (if-not (row-equivalent? new-table evidence)
+       (add-evidence new-table evidence)
+       new-table))
+   table
+   evidences))
+
+(defn learn
+  [db]
+  (let [counter (atom 0)]
+    (loop [table (init-table (make-table) db)]
+      (swap! counter inc)
+      (cond
+        ;; First handle the case in which the table is not closed
+        (not (closed? table))
+        (do
+          (println "----" @counter "----")
+          (println "Closed Table")
+          (pprint (close table db))
+          (recur (close table db)))
+
+        ;; Do an equivalence query and handle the evidence prefix addition
+        (map? (run-all-from-db (build-sfa table) db))
+        (let [counter-example (:path (run-all-from-db (build-sfa table) db))
+              path (into [] (concat [:c] counter-example))
+              table-with-ce (process-ce table {:path counter-example})
+              evidences (make-evidences (drop 1 path))
+              table-with-evidence (apply-evidences table-with-ce evidences)]
+          (do
+            (println "----" @counter "----")
+            (println "Added Counter Example & Evidence")
+            (println counter-example)
+            (safe-dot (build-sfa table) "tacas" @counter)
+            (pprint table-with-evidence)
+            (recur table-with-evidence)))
+
+        ;; Uh, are we done?
+        :default
+        (let [n-rows (count (set/union (:R table) (:S table)))
+              n-cols (count (:E table))]
+          (println "----" @counter "----")
+          (println "Done!")
+          (pprint table)
+          (println "Number of rows in R: "(count (:R table)))
+          (println "Number of rows in S: "(count (:S table)))
+          (println "Number of columns in R: "(count (:E table)))
+          (safe-dot (build-sfa table) "tacas" @counter)
+          (pprint (build-sfa table)))))))
+
+
+(def lol
+  {:transitions
+   {0
+    [{:from 0, :input [11 2147483647], :to 0}
+     {:from 0, :input [0 10], :to 3}],
+    1
+    [{:from 1, :input [31 98], :to 1}
+     {:from 1, :input [25 30], :to 0}
+     {:from 1, :input [0 24], :to 1}
+     {:from 1, :input [100 2147483647], :to 1}
+     {:from 1, :input [99 99], :to 2}],
+    3
+    [{:from 3, :input [21 2147483647], :to 3}
+     {:from 3, :input [0 20], :to 1}],
+    2 [{:from 2, :input [0 2147483647], :to 2}]},
+   :initial-state 3,
+   :final-states #{3}})
+
+(defn expand-node
+  "Takes a node and returns all the children of that node.
+  Each child has the transition that generated them as a field."
+  [trans-table node]
+  (reduce (fn [children trans]
+            (let [child-parent (conj (:parent node) (:input trans))
+                  child-label (:to trans)]
+              (conj children {:parent child-parent
+                              :label child-label})))
+          []
+          (get trans-table (:label node))))
+
+(let [trans-table (:transitions lol)
+      root {:parent []
+            :label (:initial-state lol)}
+      children (expand-node (:transitions lol) root)]
+  (expand-node trans-table (first children)))
+
