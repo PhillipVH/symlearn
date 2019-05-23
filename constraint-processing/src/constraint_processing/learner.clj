@@ -489,21 +489,9 @@
                   child-label (:to trans)
                   child {:parent child-parent
                          :label child-label}]
-              (println "----IS A CHILD----")
-              (pprint child)
-              (println "------------------")
               (conj children child)))
           []
           (get trans-table (:label node))))
-
-(induce-words lol 10)
-
-(defn induce-words
-  [sfa n]
-  (let [root {:parent []
-              :label (:initial-state sfa)}
-        tt (:transitions sfa)]
-    (depth-limited-search root n tt)))
 
 (defn depth-limited-search
   "Takes an SFA and generates all the words of length N "
@@ -511,4 +499,80 @@
   (if-not (>= 0 n)
     (let [children (expand-node tt node)]
       (for [child children]
-        (depth-limited-search child (dec n) tt)))))
+        (depth-limited-search child (dec n) tt)))
+    node))
+
+(def dls (memoize depth-limited-search))
+
+(defn induce-words
+  [sfa n]
+  (let [root {:parent []
+              :label (:initial-state sfa)}
+        tt (:transitions sfa)]
+    (flatten (dls root n tt))))
+
+(-> (make-table)
+    (init-table db)
+    ;; (closed?)
+    (close db)
+    ;; (build-sfa)
+    ;; (run-all-from-db db) ; CE
+    (process-ce [[0 20] [25 30] [0 10]])
+    (add-evidence [:c 0])
+    (close db)
+    ;; (build-sfa)
+    ;; (run-all-from-db db) ; no Ce
+    ;; (build-sfa)
+    (process-ce [[0 20] [99 99] [25 30] [0 10]])
+    ;; (closed?)
+
+    (pprint)
+    )
+
+(defn make-queries
+  [sfa depth]
+  (loop [depth depth
+         queries []]
+    (if (>= depth 0)
+      (let [words (induce-words sfa depth)
+            new-queries (reduce (fn [queries word]
+                                  (let [accept (set/subset? #{(:label word)} (:final-states lol2))
+                                        path (:parent word)]
+                                    (conj queries {:accepted accept :path path})))
+                                []
+                                words)]
+        (recur (dec depth) (conj queries new-queries)))
+      (flatten queries))))
+
+;; (pprint (run-all-from-sfa lol2 (make-queries lol2 4)))
+
+(defn run-all-from-sfa
+  [sfa db]
+  (let [paths (paths/sorted-paths db)]
+    (loop [paths paths]
+      (if (empty? paths)
+        true
+        (let [path (first paths)
+              should-accept (:accepted path)
+              input (make-concrete (:path path))
+              accepted (member? input)]
+          (if (= accepted should-accept)
+            (recur (rest paths))
+            path))))))
+
+(def lol2 {:transitions
+  {0
+   [{:from 0, :input [11 2147483647], :to 0}
+    {:from 0, :input [0 10], :to 2}],
+   1
+   [{:from 1, :input [31 98], :to 1}
+    {:from 1, :input [25 30], :to 0}
+    {:from 1, :input [0 24], :to 1}
+    {:from 1, :input [99 99], :to 1}
+    {:from 1, :input [100 2147483647], :to 1}],
+   2
+   [{:from 2, :input [21 2147483647], :to 2}
+    {:from 2, :input [0 20], :to 1}]},
+  :initial-state 2,
+  :final-states #{2}})
+
