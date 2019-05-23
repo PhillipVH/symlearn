@@ -393,17 +393,16 @@
     (spit filename dot-content)))
 
 (defn make-image
-  [{:keys [dot-file dpi type show] :or {dpi 300
-                                        type "png"
-                                            show true}}]
+  [sfa ]
+  (spit "tmp.dot" (sfa->dot sfa))
   (sh "dot"
-      (str "-Gdpi=" dpi)
-      (str "-T" type)
-      dot-file
+      (str "-Gdpi=" 300)
+      (str "-T" "png")
+      "tmp.dot"
       "-o"
-      (str dot-file "." type))
-  (if show
-    (sh "xdg-open" (str dot-file "." type))))
+      (str "tmp.dot" "." "png"))
+  (if true
+    (sh "xdg-open" (str "tmp.dot" "." "png"))))
 
 (defn make-evidences
   [path]
@@ -519,13 +518,20 @@
     ;; (run-all-from-db db) ; CE
     (process-ce [[0 20] [25 30] [0 10]])
     (add-evidence [:c 0])
+    ;; (closed?)
     (close db)
+    ;; (closed?)
     ;; (build-sfa)
     ;; (run-all-from-db db) ; no Ce
-    ;; (build-sfa)
+    ;; ;; (build-sfa)
     (process-ce [[0 20] [99 99] [25 30] [0 10]])
+    ;; ;; (closed?)
+    (add-evidence [:c 25 0])
     ;; (closed?)
-
+    (close db)
+    ;; (closed?)
+    (build-sfa)
+    (make-image)
     (pprint)
     )
 
@@ -536,7 +542,7 @@
     (if (>= depth 0)
       (let [words (induce-words sfa depth)
             new-queries (reduce (fn [queries word]
-                                  (let [accept (set/subset? #{(:label word)} (:final-states lol2))
+                                  (let [accept (contains? (:final-states sfa) (:label word) )
                                         path (:parent word)]
                                     (conj queries {:accepted accept :path path})))
                                 []
@@ -544,7 +550,13 @@
         (recur (dec depth) (conj queries new-queries)))
       (flatten queries))))
 
-;; (pprint (run-all-from-sfa lol2 (make-queries lol2 4)))
+(defn reverse-eqv
+  [sfa depth]
+  (let [ce (make-concrete (:path (run-all-from-sfa sfa (make-queries sfa depth))))]
+    (if-not (empty? ce)
+      ce)))
+
+
 
 (defn run-all-from-sfa
   [sfa db]
@@ -576,3 +588,20 @@
   :initial-state 2,
   :final-states #{2}})
 
+
+(def lol3 {:transitions
+  {0
+   [{:from 0, :input [25 30], :to 3}
+    {:from 0, :input [100 2147483647], :to 0}
+    {:from 0, :input [31 98], :to 0}
+    {:from 0, :input [99 99], :to 2}
+    {:from 0, :input [0 24], :to 0}],
+   3
+   [{:from 3, :input [11 2147483647], :to 3}
+    {:from 3, :input [0 10], :to 1}],
+   2 [{:from 2, :input [0 2147483647], :to 2}],
+   1
+   [{:from 1, :input [0 20], :to 0}
+    {:from 1, :input [21 2147483647], :to 1}]},
+  :initial-state 1,
+  :final-states #{1}})
