@@ -360,11 +360,12 @@
 ;; Usage
 (def tacas-files ["constraints-depth-1"
                   "constraints-depth-2"
-                  "constraints-depth-3"
-                  "constraints-depth-4"
-                  "constraints-depth-5"
-                  "constraints-depth-6"
-                  "constraints-depth-7"])
+                  ;; "constraints-depth-3"
+                  ;; "constraints-depth-4"
+                  ;; "constraints-depth-5"
+                  ;; "constraints-depth-6"
+                  ;; "constraints-depth-7"
+                  ])
 
 (def short-files ["alt-con-1"
                   "alt-con-2"])
@@ -378,9 +379,9 @@
 
 (def single-value-files (map #(str "alt-con-" %) (range 1 3)))
 
-;; (def db (-> large-files
-;;             paths/create-database
-;;             paths/sorted-paths))
+(def db (-> large-files
+            paths/create-database
+            paths/sorted-paths))
 
 (def db (-> tacas-files
             paths/create-database
@@ -475,7 +476,7 @@
         (do
           (println "----" @counter "----")
           (println "Closed Table")
-          ;; (pprint (close table db))
+          (pprint table)
           (recur (close table db)))
 
         ;; Do an equivalence query and handle the evidence prefix addition
@@ -483,28 +484,30 @@
         (let [counter-example (:path (run-all-from-db (build-sfa table) db))
               path (into [] (concat [:c] counter-example))
               table-with-ce (process-ce table {:path counter-example})
-              evidences (make-evidences (drop 1 path))
+              ;; evidences (make-evidences (drop 1 path))
+              evidences (make-evidences (suffix-difference (drop 1 path) (longest-matching-prefix db (drop 1 path))))
               table-with-evidence (apply-evidences table-with-ce evidences)]
           (do
             (println "----" @counter "----")
             (println "Added Counter Example & Evidence (Forward)")
-            ;; (println counter-example)
-            (safe-dot (build-sfa table) "tacas" @counter)
+            (pprint counter-example)
+            (safe-dot (build-sfa table-with-evidence) "tacas" @counter)
             ;; (pprint table-with-evidence)
             (recur table-with-evidence)))
 
         ;; Do a reverse equivalence check
-        (map? (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 10)))
-        (let [counter-example (:path (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 10)))
+        (map? (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 3)))
+        (let [counter-example (:path (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 3)))
               path (into [] (concat [:c] counter-example))
               table-with-ce (process-ce table {:path counter-example})
-              evidences (make-evidences (drop 1 path))
+              ;; evidences (make-evidences (drop 1 path))
+              evidences (make-evidences (suffix-difference (drop 1 path) (longest-matching-prefix db (drop 1 path))))
               table-with-evidence (apply-evidences table-with-ce evidences)]
           (do
             (println "----" @counter "----")
             (println "Added Counter Example & Evidence (Backward)")
-            ;; (println counter-example)
-            (safe-dot (build-sfa table) "tacas" @counter)
+            (pprint counter-example)
+            (safe-dot (build-sfa table-with-evidence) "tacas" @counter)
             ;; (pprint table-with-evidence)
             (recur table-with-evidence)))
 
@@ -514,7 +517,7 @@
               n-cols (count (:E table))]
           (println "----" @counter "----")
           (println "Done!")
-          ;; (pprint table)
+          (pprint table)
           (println "Number of rows in R: "(count (:R table)))
           (println "Number of rows in S: "(count (:S table)))
           (println "Number of columns in E: "(count (:E table)))
@@ -599,14 +602,16 @@
 (defn longest-matching-prefix
   "Given a CE and a database, get the shortest prefix of the CE in the database"
   [db ce-path]
-  (last (filter (fn [{:keys [path]}]
-                  (let [n (count path)
-                        shorter (< n (count ce-path))]
-                    (if shorter
-                      (let [prefix (take n ce-path)
-                            is-prefix-of (= prefix path)]
-                        is-prefix-of))))
-                db)))
+  (last
+   (sort (fn [p1 p2] (< (count (:path p1)) (count (:path p2))))
+         (filter (fn [{:keys [path]}]
+                   (let [n (count path)
+                         shorter (< n (count ce-path))]
+                     (if shorter
+                       (let [prefix (take n ce-path)
+                             is-prefix-of (= prefix path)]
+                         is-prefix-of))))
+                 db))))
 
 (longest-matching-prefix db [[0 20] [99 99] [25 30] [0 10]])
 (longest-matching-prefix db [[0 20] [25 30] [0 10]])
