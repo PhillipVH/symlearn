@@ -456,9 +456,70 @@
           (pprint table)
           (println "Number of rows in R: "(count (:R table)))
           (println "Number of rows in S: "(count (:S table)))
-          (println "Number of columns in R: "(count (:E table)))
+          (println "Number of columns in E: "(count (:E table)))
           (safe-dot (build-sfa table) "tacas" @counter)
           (pprint (build-sfa table)))))))
+
+(make-image (learn-2 db))
+
+
+
+(defn learn-2
+  [db]
+  (let [counter (atom 0)]
+    (loop [table (init-table (make-table) db)]
+      (swap! counter inc)
+      (cond
+        ;; First handle the case in which the table is not closed
+        (not (closed? table))
+        (do
+          (println "----" @counter "----")
+          (println "Closed Table")
+          ;; (pprint (close table db))
+          (recur (close table db)))
+
+        ;; Do an equivalence query and handle the evidence prefix addition
+        (map? (run-all-from-db (build-sfa table) db))
+        (let [counter-example (:path (run-all-from-db (build-sfa table) db))
+              path (into [] (concat [:c] counter-example))
+              table-with-ce (process-ce table {:path counter-example})
+              evidences (make-evidences (drop 1 path))
+              table-with-evidence (apply-evidences table-with-ce evidences)]
+          (do
+            (println "----" @counter "----")
+            (println "Added Counter Example & Evidence (Forward)")
+            ;; (println counter-example)
+            (safe-dot (build-sfa table) "tacas" @counter)
+            ;; (pprint table-with-evidence)
+            (recur table-with-evidence)))
+
+        ;; Do a reverse equivalence check
+        (map? (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 10)))
+        (let [counter-example (:path (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 10)))
+              path (into [] (concat [:c] counter-example))
+              table-with-ce (process-ce table {:path counter-example})
+              evidences (make-evidences (drop 1 path))
+              table-with-evidence (apply-evidences table-with-ce evidences)]
+          (do
+            (println "----" @counter "----")
+            (println "Added Counter Example & Evidence (Backward)")
+            ;; (println counter-example)
+            (safe-dot (build-sfa table) "tacas" @counter)
+            ;; (pprint table-with-evidence)
+            (recur table-with-evidence)))
+
+        ;; Uh, are we done?
+        :default
+        (let [n-rows (count (set/union (:R table) (:S table)))
+              n-cols (count (:E table))]
+          (println "----" @counter "----")
+          (println "Done!")
+          ;; (pprint table)
+          (println "Number of rows in R: "(count (:R table)))
+          (println "Number of rows in S: "(count (:S table)))
+          (println "Number of columns in E: "(count (:E table)))
+          (safe-dot (build-sfa table) "tacas" @counter)
+          (build-sfa table))))))
 
 
 (def lol
@@ -535,6 +596,34 @@
     (pprint)
     )
 
+(defn longest-matching-prefix
+  "Given a CE and a database, get the shortest prefix of the CE in the database"
+  [db ce-path]
+  (last (filter (fn [{:keys [path]}]
+                  (let [n (count path)
+                        shorter (< n (count ce-path))]
+                    (if shorter
+                      (let [prefix (take n ce-path)
+                            is-prefix-of (= prefix path)]
+                        is-prefix-of))))
+                db)))
+
+(longest-matching-prefix db [[0 20] [99 99] [25 30] [0 10]])
+(longest-matching-prefix db [[0 20] [25 30] [0 10]])
+
+(suffix-difference [[0 20] [99 99] [25 30] [0 10]]
+                   [[0 20] [99 99]])
+
+(defn suffix-difference
+  "Given a CE and a path, get the suffix that differentiates them."
+  [ce-path path]
+  (let [n (count path)]
+    (->> ce-path
+         reverse
+         (take n)
+         reverse
+         (into []))))
+
 (defn make-queries
   [sfa depth]
   (loop [depth depth
@@ -550,14 +639,6 @@
         (recur (dec depth) (conj queries new-queries)))
       (flatten queries))))
 
-(defn reverse-eqv
-  [sfa depth]
-  (let [ce (make-concrete (:path (run-all-from-sfa sfa (make-queries sfa depth))))]
-    (if-not (empty? ce)
-      ce)))
-
-
-
 (defn run-all-from-sfa
   [sfa db]
   (let [paths (paths/sorted-paths db)]
@@ -571,6 +652,15 @@
           (if (= accepted should-accept)
             (recur (rest paths))
             path))))))
+
+(defn reverse-eqv
+  [sfa depth]
+  (let [ce (make-concrete (:path (run-all-from-sfa sfa (make-queries sfa depth))))]
+    (if-not (empty? ce)
+      ce)))
+
+
+
 
 (def lol2 {:transitions
   {0
