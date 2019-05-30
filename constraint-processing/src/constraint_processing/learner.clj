@@ -461,7 +461,94 @@
           (safe-dot (build-sfa table) "tacas" @counter)
           (pprint (build-sfa table)))))))
 
-(make-image (learn-2 db))
+;; (make-image (learn-2 db))
+
+;; (spit "hmm.dot" (sfa->dot (learn-2 db)))
+
+(defn longest-matching-prefix
+  "Given a CE and a database, get the shortest prefix of the CE in the database"
+  [db ce-path]
+  (last
+   (sort (fn [p1 p2] (< (count (:path p1)) (count (:path p2))))
+         (filter (fn [{:keys [path]}]
+                   (let [n (count path)
+                         shorter (< n (count ce-path))]
+                     (if shorter
+                       (let [prefix (take n ce-path)
+                             is-prefix-of (= prefix path)]
+                         is-prefix-of))))
+                 db))))
+
+
+(defn suffix-difference
+  "Given a CE and a path, get the suffix that differentiates them."
+  [ce-path path]
+  (let [n (count path)]
+    (->> ce-path
+         reverse
+         (take n)
+         reverse
+         (into []))))
+
+(defn expand-node
+  "Takes a node and returns all the children of that node.
+  Each child has the transition that generated them as a field."
+  [trans-table node]
+  (reduce (fn [children trans]
+            (let [child-parent (conj (:parent node) (:input trans))
+                  child-label (:to trans)
+                  child {:parent child-parent
+                         :label child-label}]
+              (conj children child)))
+          []
+          (get trans-table (:label node))))
+
+(defn depth-limited-search
+  "Takes an SFA and generates all the words of length N "
+  [node n tt]
+  (if-not (>= 0 n)
+    (let [children (expand-node tt node)]
+      (for [child children]
+        (depth-limited-search child (dec n) tt)))
+    node))
+
+(def dls (memoize depth-limited-search))
+
+(defn induce-words
+  [sfa n]
+  (let [root {:parent []
+              :label (:initial-state sfa)}
+        tt (:transitions sfa)]
+    (flatten (dls root n tt))))
+
+(defn make-queries
+  [sfa depth]
+  (loop [depth depth
+         queries []]
+    (if (>= depth 0)
+      (let [words (induce-words sfa depth)
+            new-queries (reduce (fn [queries word]
+                                  (let [accept (contains? (:final-states sfa) (:label word) )
+                                        path (:parent word)]
+                                    (conj queries {:accepted accept :path path})))
+                                []
+                                words)]
+        (recur (dec depth) (conj queries new-queries)))
+      (flatten queries))))
+
+(defn run-all-from-sfa
+  [sfa db]
+  (let [paths (paths/sorted-paths db)]
+    (loop [paths paths]
+      (if (empty? paths)
+        true
+        (let [path (first paths)
+              should-accept (:accepted path)
+              input (make-concrete (:path path))
+              accepted (member? input)]
+          (if (= accepted should-accept)
+            (recur (rest paths))
+            path))))))
 
 
 
@@ -543,120 +630,39 @@
    :initial-state 3,
    :final-states #{3}})
 
-(defn expand-node
-  "Takes a node and returns all the children of that node.
-  Each child has the transition that generated them as a field."
-  [trans-table node]
-  (reduce (fn [children trans]
-            (let [child-parent (conj (:parent node) (:input trans))
-                  child-label (:to trans)
-                  child {:parent child-parent
-                         :label child-label}]
-              (conj children child)))
-          []
-          (get trans-table (:label node))))
 
-(defn depth-limited-search
-  "Takes an SFA and generates all the words of length N "
-  [node n tt]
-  (if-not (>= 0 n)
-    (let [children (expand-node tt node)]
-      (for [child children]
-        (depth-limited-search child (dec n) tt)))
-    node))
+;; (-> (make-table)
+;;     (init-table db)
+;;     ;; (closed?)
+;;     (close db)
+;;     ;; (build-sfa)
+;;     ;; (run-all-from-db db) ; CE
+;;     (process-ce [[0 20] [25 30] [0 10]])
+;;     (add-evidence [:c 0])
+;;     ;; (closed?)
+;;     (close db)
+;;     ;; (closed?)
+;;     ;; (build-sfa)
+;;     ;; (run-all-from-db db) ; no Ce
+;;     ;; ;; (build-sfa)
+;;     (process-ce [[0 20] [99 99] [25 30] [0 10]])
+;;     ;; ;; (closed?)
+;;     (add-evidence [:c 25 0])
+;;     ;; (closed?)
+;;     (close db)
+;;     ;; (closed?)
+;;     (build-sfa)
+;;     (make-image)
+;;     (pprint)
+;;     )
 
-(def dls (memoize depth-limited-search))
 
-(defn induce-words
-  [sfa n]
-  (let [root {:parent []
-              :label (:initial-state sfa)}
-        tt (:transitions sfa)]
-    (flatten (dls root n tt))))
+;; (longest-matching-prefix db [[0 20] [99 99] [25 30] [0 10]])
+;; (longest-matching-prefix db [[0 20] [25 30] [0 10]])
 
-(-> (make-table)
-    (init-table db)
-    ;; (closed?)
-    (close db)
-    ;; (build-sfa)
-    ;; (run-all-from-db db) ; CE
-    (process-ce [[0 20] [25 30] [0 10]])
-    (add-evidence [:c 0])
-    ;; (closed?)
-    (close db)
-    ;; (closed?)
-    ;; (build-sfa)
-    ;; (run-all-from-db db) ; no Ce
-    ;; ;; (build-sfa)
-    (process-ce [[0 20] [99 99] [25 30] [0 10]])
-    ;; ;; (closed?)
-    (add-evidence [:c 25 0])
-    ;; (closed?)
-    (close db)
-    ;; (closed?)
-    (build-sfa)
-    (make-image)
-    (pprint)
-    )
+;; (suffix-difference [[0 20] [99 99] [25 30] [0 10]]
+;;                    [[0 20] [99 99]])
 
-(defn longest-matching-prefix
-  "Given a CE and a database, get the shortest prefix of the CE in the database"
-  [db ce-path]
-  (last
-   (sort (fn [p1 p2] (< (count (:path p1)) (count (:path p2))))
-         (filter (fn [{:keys [path]}]
-                   (let [n (count path)
-                         shorter (< n (count ce-path))]
-                     (if shorter
-                       (let [prefix (take n ce-path)
-                             is-prefix-of (= prefix path)]
-                         is-prefix-of))))
-                 db))))
-
-(longest-matching-prefix db [[0 20] [99 99] [25 30] [0 10]])
-(longest-matching-prefix db [[0 20] [25 30] [0 10]])
-
-(suffix-difference [[0 20] [99 99] [25 30] [0 10]]
-                   [[0 20] [99 99]])
-
-(defn suffix-difference
-  "Given a CE and a path, get the suffix that differentiates them."
-  [ce-path path]
-  (let [n (count path)]
-    (->> ce-path
-         reverse
-         (take n)
-         reverse
-         (into []))))
-
-(defn make-queries
-  [sfa depth]
-  (loop [depth depth
-         queries []]
-    (if (>= depth 0)
-      (let [words (induce-words sfa depth)
-            new-queries (reduce (fn [queries word]
-                                  (let [accept (contains? (:final-states sfa) (:label word) )
-                                        path (:parent word)]
-                                    (conj queries {:accepted accept :path path})))
-                                []
-                                words)]
-        (recur (dec depth) (conj queries new-queries)))
-      (flatten queries))))
-
-(defn run-all-from-sfa
-  [sfa db]
-  (let [paths (paths/sorted-paths db)]
-    (loop [paths paths]
-      (if (empty? paths)
-        true
-        (let [path (first paths)
-              should-accept (:accepted path)
-              input (make-concrete (:path path))
-              accepted (member? input)]
-          (if (= accepted should-accept)
-            (recur (rest paths))
-            path))))))
 
 (defn reverse-eqv
   [sfa depth]
