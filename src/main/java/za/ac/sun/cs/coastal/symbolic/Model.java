@@ -18,7 +18,7 @@ public class Model {
 	 * are still represented by symbolic GREEN expressions, but as the type
 	 * indicates, the expressions are constant values.
 	 */
-	private final Map<String, Object> concreteValues;
+	private Map<String, Object> concreteValues;
 
 	/**
 	 * Additional information about this model.

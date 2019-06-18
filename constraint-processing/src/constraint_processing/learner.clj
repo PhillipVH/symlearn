@@ -5,11 +5,17 @@
             [clojure.string :as str]
             [clojure.edn :as edn]
             [clojure.java.shell :refer [sh]]
-            [clojure.walk :as walk])
+            [clojure.walk :as walk]
+            [taoensso.carmine :as car :refer [wcar]])
   (:import Parser
            TacasParser
            SingleParser
            LearnLarge))
+
+(def server1-conn {:pool {} :spec {:host "127.0.0.1" :port 6379}}) ; See `wcar` docstring for opts
+(defmacro wcar* [& body] `(car/wcar server1-conn ~@body))
+
+(wcar* (car/set "refine" "0 2 43 87 2")) ;; simulates putting a PC in for processing by Coastal
 
 (def inf Integer/MAX_VALUE)
 
@@ -360,8 +366,8 @@
 ;; Usage
 (def tacas-files ["constraints-depth-1"
                   "constraints-depth-2"
-                  ;; "constraints-depth-3"
-                  ;; "constraints-depth-4"
+                  "constraints-depth-3"
+                  "constraints-depth-4"
                   ;; "constraints-depth-5"
                   ;; "constraints-depth-6"
                   ;; "constraints-depth-7"
@@ -394,7 +400,7 @@
     (spit filename dot-content)))
 
 (defn make-image
-  [sfa ]
+  [sfa]
   (spit "tmp.dot" (sfa->dot sfa))
   (sh "dot"
       (str "-Gdpi=" 300)
@@ -455,9 +461,9 @@
           (println "----" @counter "----")
           (println "Done!")
           (pprint table)
-          (println "Number of rows in R: "(count (:R table)))
-          (println "Number of rows in S: "(count (:S table)))
-          (println "Number of columns in E: "(count (:E table)))
+          (println "Number of rows in R: " (count (:R table)))
+          (println "Number of rows in S: " (count (:S table)))
+          (println "Number of columns in E: " (count (:E table)))
           (safe-dot (build-sfa table) "tacas" @counter)
           (pprint (build-sfa table)))))))
 
@@ -478,7 +484,6 @@
                              is-prefix-of (= prefix path)]
                          is-prefix-of))))
                  db))))
-
 
 (defn suffix-difference
   "Given a CE and a path, get the suffix that differentiates them."
@@ -528,7 +533,7 @@
     (if (>= depth 0)
       (let [words (induce-words sfa depth)
             new-queries (reduce (fn [queries word]
-                                  (let [accept (contains? (:final-states sfa) (:label word) )
+                                  (let [accept (contains? (:final-states sfa) (:label word))
                                         path (:parent word)]
                                     (conj queries {:accepted accept :path path})))
                                 []
@@ -549,8 +554,6 @@
           (if (= accepted should-accept)
             (recur (rest paths))
             path))))))
-
-
 
 (defn learn-2
   [db]
@@ -605,12 +608,11 @@
           (println "----" @counter "----")
           (println "Done!")
           (pprint table)
-          (println "Number of rows in R: "(count (:R table)))
-          (println "Number of rows in S: "(count (:S table)))
-          (println "Number of columns in E: "(count (:E table)))
+          (println "Number of rows in R: " (count (:R table)))
+          (println "Number of rows in S: " (count (:S table)))
+          (println "Number of columns in E: " (count (:E table)))
           (safe-dot (build-sfa table) "tacas" @counter)
           (build-sfa table))))))
-
 
 (def lol
   {:transitions
@@ -670,39 +672,35 @@
     (if-not (empty? ce)
       ce)))
 
-
-
-
 (def lol2 {:transitions
-  {0
-   [{:from 0, :input [11 2147483647], :to 0}
-    {:from 0, :input [0 10], :to 2}],
-   1
-   [{:from 1, :input [31 98], :to 1}
-    {:from 1, :input [25 30], :to 0}
-    {:from 1, :input [0 24], :to 1}
-    {:from 1, :input [99 99], :to 1}
-    {:from 1, :input [100 2147483647], :to 1}],
-   2
-   [{:from 2, :input [21 2147483647], :to 2}
-    {:from 2, :input [0 20], :to 1}]},
-  :initial-state 2,
-  :final-states #{2}})
-
+           {0
+            [{:from 0, :input [11 2147483647], :to 0}
+             {:from 0, :input [0 10], :to 2}],
+            1
+            [{:from 1, :input [31 98], :to 1}
+             {:from 1, :input [25 30], :to 0}
+             {:from 1, :input [0 24], :to 1}
+             {:from 1, :input [99 99], :to 1}
+             {:from 1, :input [100 2147483647], :to 1}],
+            2
+            [{:from 2, :input [21 2147483647], :to 2}
+             {:from 2, :input [0 20], :to 1}]},
+           :initial-state 2,
+           :final-states #{2}})
 
 (def lol3 {:transitions
-  {0
-   [{:from 0, :input [25 30], :to 3}
-    {:from 0, :input [100 2147483647], :to 0}
-    {:from 0, :input [31 98], :to 0}
-    {:from 0, :input [99 99], :to 2}
-    {:from 0, :input [0 24], :to 0}],
-   3
-   [{:from 3, :input [11 2147483647], :to 3}
-    {:from 3, :input [0 10], :to 1}],
-   2 [{:from 2, :input [0 2147483647], :to 2}],
-   1
-   [{:from 1, :input [0 20], :to 0}
-    {:from 1, :input [21 2147483647], :to 1}]},
-  :initial-state 1,
-  :final-states #{1}})
+           {0
+            [{:from 0, :input [25 30], :to 3}
+             {:from 0, :input [100 2147483647], :to 0}
+             {:from 0, :input [31 98], :to 0}
+             {:from 0, :input [99 99], :to 2}
+             {:from 0, :input [0 24], :to 0}],
+            3
+            [{:from 3, :input [11 2147483647], :to 3}
+             {:from 3, :input [0 10], :to 1}],
+            2 [{:from 2, :input [0 2147483647], :to 2}],
+            1
+            [{:from 1, :input [0 20], :to 0}
+             {:from 1, :input [21 2147483647], :to 1}]},
+           :initial-state 1,
+           :final-states #{1}})

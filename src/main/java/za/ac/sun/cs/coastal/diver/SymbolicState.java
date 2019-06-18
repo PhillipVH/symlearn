@@ -546,10 +546,12 @@ public class SymbolicState implements State {
 			Function<Object, Long> unconvert, Function<Long, Object> convert) {
 		Trigger trigger = coastal.getTrigger(triggerIndex);
 		String name = trigger.getParamName(index);
-		int length = Array.getLength(currentArray);
+//		int length = Array.getLength(currentArray);
 		int arrayId = createArray();
-		setArrayLength(arrayId, length);
 		if (name == null) { // not symbolic
+			int length = Array.getLength(currentArray);
+			setArrayLength(arrayId, length);
+
 			for (int i = 0; i < length; i++) {
 				setArrayValue(arrayId, i, new IntegerConstant(unconvert.apply(Array.get(currentArray, i)), size));
 			}
@@ -559,6 +561,17 @@ public class SymbolicState implements State {
 			Class<?> type = trigger.getParamType(index);
 			assert type.isArray();
 			Class<?> elementType = type.getComponentType();
+
+			int length;
+
+			if (concreteValues == null) {
+				length = Array.getLength(currentArray);
+				setArrayLength(arrayId, length);
+			} else {
+				length = concreteValues.size();
+				setArrayLength(arrayId, length);
+			}
+
 			Object newArray = Array.newInstance(elementType, length);
 			for (int i = 0; i < length; i++) {
 				String entryName = name + INDEX_SEPARATOR + i;
