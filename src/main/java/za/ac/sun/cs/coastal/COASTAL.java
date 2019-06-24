@@ -1625,10 +1625,10 @@ public class COASTAL {
 		int n = 0;
 		try {
 			for (Model m : mdls) {
-				if (visitedDiverModels.add(m.getConcreteValues().toString())) {
+//				if (visitedDiverModels.add(m.getConcreteValues().toString())) {
 					diverModelQueue.put(m);
 					n++;
-				}
+//				}
 			}
 		} catch (InterruptedException e) {
 			e.printStackTrace();

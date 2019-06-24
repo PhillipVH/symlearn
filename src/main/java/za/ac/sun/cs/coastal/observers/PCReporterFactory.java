@@ -15,6 +15,7 @@ import java.util.Map.Entry;
 import org.apache.commons.configuration2.ImmutableConfiguration;
 import org.apache.logging.log4j.Logger;
 
+import redis.clients.jedis.Jedis;
 import za.ac.sun.cs.coastal.COASTAL;
 import za.ac.sun.cs.coastal.diver.SymbolicState;
 import za.ac.sun.cs.coastal.messages.Broker;
@@ -74,6 +75,7 @@ public class PCReporterFactory implements ObserverFactory {
 		private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
 		
 		private final String output_name = "learn-large-1";
+
 		
 		PCReporterManager(COASTAL coastal) {
 			broker = coastal.getBroker();
@@ -152,6 +154,11 @@ public class PCReporterFactory implements ObserverFactory {
 			File output_file = new File(output_name);
 			try {
 				BufferedWriter writer = new BufferedWriter(new FileWriter(output_file, true));
+
+				// Construct the redis formatted output
+				StringBuilder redisResponse = new StringBuilder();
+				redisResponse.append("[");
+
 				writer.write(accepted ? "Accepted" : "Rejected");
 				writer.newLine();
 				
@@ -161,6 +168,7 @@ public class PCReporterFactory implements ObserverFactory {
 				processedConstraints.forEach((pos, bounds)-> {
 					try {
 						writer.write("A[" + pos + "]" + "[" + bounds[0] + "," + bounds[1] + "]");
+						redisResponse.append("[" + bounds[0] + " " + bounds[1] + "]");
 						writer.newLine();
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
@@ -168,6 +176,13 @@ public class PCReporterFactory implements ObserverFactory {
 					}
 					log.info("A[" + pos + "] "+ "[" + bounds[0] + ", " + bounds[1] + ")");
 				});
+
+				redisResponse.append("]");
+
+				// Write the respone to Redis
+				Jedis jedis = new Jedis();
+				jedis.set("refined", redisResponse.toString());
+
 				
 				writer.newLine();
 				writer.flush();
@@ -235,12 +250,15 @@ public class PCReporterFactory implements ObserverFactory {
 		
 		private boolean accepted = false;
 
+		private final Jedis jedis;
+
 		PCReporterObserver(COASTAL coastal, ObserverManager manager) {
 			log = coastal.getLog();
 			this.manager = (PCReporterManager) manager;
 			this.broker = coastal.getBroker();
 			broker.subscribeThread("mark", this::mark);
 			broker.subscribeThread("dive-end", this::diveEnd);
+			this.jedis = new Jedis();
 		}
 		
 		public void diveEnd(Object object) {

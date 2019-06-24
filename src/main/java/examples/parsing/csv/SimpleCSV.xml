@@ -17,7 +17,6 @@
 		<surfers threads="0"/>
 		<observers>
 			<observer>za.ac.sun.cs.coastal.observers.PCReporterFactory</observer>
-			<observer>za.ac.sun.cs.coastal.observers.GUIFactory</observer>
 		</observers>
 	</coastal>
 </configuration>

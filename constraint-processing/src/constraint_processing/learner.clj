@@ -12,10 +12,10 @@
            SingleParser
            LearnLarge))
 
-(def server1-conn {:pool {} :spec {:host "127.0.0.1" :port 6379}}) ; See `wcar` docstring for opts
-(defmacro wcar* [& body] `(car/wcar server1-conn ~@body))
+(def redis-conn {:pool {} :spec {:host "127.0.0.1" :port 6379}}) ; See `wcar` docstring for opts
+(defmacro wcar* [& body] `(car/wcar redis-conn ~@body))
 
-(wcar* (car/set "refine" "0 2 43 87 2")) ;; simulates putting a PC in for processing by Coastal
+;; (wcar* (car/set "refine" "0 2 43 87 2")) ;; simulates putting a PC in for processing by Coastal
 
 (def inf Integer/MAX_VALUE)
 
@@ -366,8 +366,8 @@
 ;; Usage
 (def tacas-files ["constraints-depth-1"
                   "constraints-depth-2"
-                  "constraints-depth-3"
-                  "constraints-depth-4"
+                  ;; "constraints-depth-3"
+                  ;; "constraints-depth-4"
                   ;; "constraints-depth-5"
                   ;; "constraints-depth-6"
                   ;; "constraints-depth-7"
@@ -385,7 +385,7 @@
 
 (def single-value-files (map #(str "alt-con-" %) (range 1 3)))
 
-(def db (-> large-files
+(def db (-> tacas-files
             paths/create-database
             paths/sorted-paths))
 
@@ -467,7 +467,10 @@
           (safe-dot (build-sfa table) "tacas" @counter)
           (pprint (build-sfa table)))))))
 
-;; (make-image (learn-2 db))
+
+;; (pprint (learn-2 db))
+
+;; (refine-path "0 99 3")
 
 ;; (spit "hmm.dot" (sfa->dot (learn-2 db)))
 
@@ -555,6 +558,19 @@
             (recur (rest paths))
             path))))))
 
+(defn refine-path
+  [input]
+  (wcar* (car/del "refined")
+         (car/set "refine" input))
+
+  (while (not= 1 (wcar* (car/exists "refined"))))
+
+  (let [refined-path (wcar* (car/get "refined"))]
+    (wcar* (car/del "refined"))
+    (read-string refined-path)))
+
+(refine-path "0 2 232 23 800")
+
 (defn learn-2
   [db]
   (let [counter (atom 0)]
@@ -588,18 +604,31 @@
         ;; Do a reverse equivalence check
         (map? (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 3)))
         (let [counter-example (:path (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 3)))
-              path (into [] (concat [:c] counter-example))
-              table-with-ce (process-ce table {:path counter-example})
+              ;; path (into [] (concat [:c] counter-example))
+              ;; table-with-ce (process-ce table {:path counter-example})
               ;; evidences (make-evidences (drop 1 path))
-              evidences (make-evidences (suffix-difference (drop 1 path) (longest-matching-prefix db (drop 1 path))))
-              table-with-evidence (apply-evidences table-with-ce evidences)]
+              ;; evidences (make-evidences (suffix-difference (drop 1 path) (longest-matching-prefix db (drop 1 path))))
+              ;; table-with-evidence (apply-evidences table-with-ce evidences)
+              ]
           (do
             (println "----" @counter "----")
             (println "Added Counter Example & Evidence (Backward)")
+            ;; (wcar* (car/set "refine" (str/join " " (map first counter-example)))) ;; simulates putting a PC in for processing by Coastal
             (pprint counter-example)
-            (safe-dot (build-sfa table-with-evidence) "tacas" @counter)
-            ;; (pprint table-with-evidence)
-            (recur table-with-evidence)))
+            ;; (while (not= 1 (wcar* (car/exists "refined")))
+            ;;   (println "Waiting for refinement from Coastal...")
+            ;;   (Thread/sleep 1000))
+            (let [refined-counter (refine-path (str/join " " (map first counter-example)))
+                  ;; refined-counter (read-string (wcar* (car/get "refined")))
+                  refined-evidences (make-evidences (suffix-difference refined-counter (longest-matching-prefix db refined-counter)))
+                  table-with-ce (process-ce table {:path refined-counter})
+                  table-with-refined-ev (apply-evidences table-with-ce refined-evidences)]
+              ;; (wcar* (car/del "refined"))
+              (pprint refined-counter)
+
+              (safe-dot (build-sfa table-with-refined-ev) "tacas" @counter)
+              (pprint table-with-refined-ev)
+              (recur table-with-refined-ev))))
 
         ;; Uh, are we done?
         :default
