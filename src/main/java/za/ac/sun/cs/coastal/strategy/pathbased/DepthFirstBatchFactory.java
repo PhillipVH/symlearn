@@ -1,41 +1,38 @@
 package za.ac.sun.cs.coastal.strategy.pathbased;
 
-import java.util.Random;
-
 import org.apache.commons.configuration2.ImmutableConfiguration;
-
 import za.ac.sun.cs.coastal.COASTAL;
 import za.ac.sun.cs.coastal.diver.SegmentedPC;
 import za.ac.sun.cs.coastal.pathtree.PathTree;
 import za.ac.sun.cs.coastal.pathtree.PathTreeNode;
 
-public class RandomPathFactory extends PathBasedInteractiveFactory {
+public class DepthFirstBatchFactory extends PathBasedBatchFactory {
 
-	public RandomPathFactory(COASTAL coastal, ImmutableConfiguration options) {
+	public DepthFirstBatchFactory(COASTAL coastal, ImmutableConfiguration options) {
 	}
 
 	@Override
 	public StrategyManager createManager(COASTAL coastal) {
-		return new RandomStrategyManager(coastal);
+		return new DepthFirstStrategyManager(coastal);
 	}
 
 	@Override
 	public Strategy createTask(COASTAL coastal, TaskManager manager) {
-		((RandomStrategyManager) manager).incrementTaskCount();
-		return new RandomPathStrategy(coastal, (StrategyManager) manager);
+		((DepthFirstStrategyManager) manager).incrementTaskCount();
+		return new DepthFirstStrategy(coastal, (StrategyManager) manager);
 	}
 
 	// ======================================================================
 	//
-	// RANDOM SEARCH STRATEGY MANAGER
+	// DEPTH-FIRST SEARCH STRATEGY MANAGER
 	//
 	// ======================================================================
 
-	private static class RandomStrategyManager extends PathBasedManager {
+	private static class DepthFirstStrategyManager extends PathBasedManager {
 
 		protected int taskCount = 0;
 
-		RandomStrategyManager(COASTAL coastal) {
+		DepthFirstStrategyManager(COASTAL coastal) {
 			super(coastal);
 		}
 
@@ -45,7 +42,7 @@ public class RandomPathFactory extends PathBasedInteractiveFactory {
 
 		@Override
 		public String getName() {
-			return "RandomStrategy";
+			return "DepthFirstStrategy";
 		}
 
 		@Override
@@ -57,20 +54,14 @@ public class RandomPathFactory extends PathBasedInteractiveFactory {
 
 	// ======================================================================
 	//
-	// STRATEGY THAT FINDS NEW PATHS WITH RANDOM SEARCH
+	// STRATEGY THAT FINDS NEW PATHS WITH DEPTH-FIRST SEARCH
 	//
 	// ======================================================================
 
-	private static class RandomPathStrategy extends PathBasedStrategy {
+	private static class DepthFirstStrategy extends PathBasedStrategy {
 
-		private final Random rng = new Random();
-
-		RandomPathStrategy(COASTAL coastal, StrategyManager manager) {
+		DepthFirstStrategy(COASTAL coastal, StrategyManager manager) {
 			super(coastal, manager);
-			Long seed = coastal.getConfig().getLong("coastal.strategy[@seed]");
-			if (seed != null) {
-				rng.setSeed(seed);
-			}
 		}
 
 		@Override
@@ -79,8 +70,7 @@ public class RandomPathFactory extends PathBasedInteractiveFactory {
 			PathTreeNode cur = pathTree.getRoot();
 			outer: while (true) {
 				int n = cur.getChildCount();
-				int i = rng.nextInt(n);
-				for (int j = 0; j < n; j++, i = (i + 1) % n) {
+				for (int i = 0; i < n; i++) {
 					PathTreeNode ch = cur.getChild(i);
 					if ((ch != null) && !ch.isComplete()) {
 						pc = (SegmentedPC) cur.getExecutionForChild(i, pc);
@@ -88,7 +78,7 @@ public class RandomPathFactory extends PathBasedInteractiveFactory {
 						continue outer;
 					}
 				}
-				for (int j = 0; j < n; j++, i = (i + 1) % n) {
+				for (int i = 0; i < n; i++) {
 					PathTreeNode ch = cur.getChild(i);
 					if (ch == null) {
 						return (SegmentedPC) cur.getExecutionForChild(i, pc);

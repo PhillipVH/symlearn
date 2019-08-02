@@ -14,7 +14,7 @@ import za.ac.sun.cs.coastal.pathtree.PathTreeNode;
 import za.ac.sun.cs.coastal.solver.Expression;
 import za.ac.sun.cs.coastal.symbolic.Model;
 
-public class GenerationalFactory extends PathBasedFactory {
+public class GenerationalFactory extends PathBasedInteractiveFactory {
 
 	public GenerationalFactory(COASTAL coastal, ImmutableConfiguration options) {
 	}

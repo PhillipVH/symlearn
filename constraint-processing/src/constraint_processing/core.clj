@@ -2,7 +2,8 @@
   (:gen-class)
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [constraint-processing.core :as paths]))
 
 (defn get-records
   [data]
@@ -50,22 +51,22 @@
   (apply set/union dbs))
 
 
-(def dbs (map build-db ["constraints-depth-1"
-                        "constraints-depth-2"
-                        "constraints-depth-3"
-                        "constraints-depth-4"
-                        "constraints-depth-5"
-                        "constraints-depth-6"
-                        "constraints-depth-7"]))
+;; (def dbs (map build-db ["constraints-depth-1"
+;;                         "constraints-depth-2"
+;;                         "constraints-depth-3"
+;;                         "constraints-depth-4"
+;;                         "constraints-depth-5"
+;;                         "constraints-depth-6"
+;;                         "constraints-depth-7"]))
 
 (defn create-database
   [files]
   (->> files
        (map build-db)
-       merge-dbs))
+       (apply set/union)))
 
 
-(def db (merge-dbs dbs))
+;; (def db (merge-dbs dbs))
 
 (defn prefix?
   "Returns true if s1 is a prefix of s2."
@@ -116,12 +117,12 @@
   (not (empty? (query path :exact db))))
 
 (defn follow-paths
-  "Given a path, find paths in the database that grow the path by one."
+  ""
   [path db]
   (->> db
        (query path :starts-with)
        (filter #(= (count (:path %)) (inc (count path))))
-       (into [])))
+       vec))
 
 (defn load-db-from-prefix
   "Load n files with the given prefix into a database, and
@@ -131,25 +132,9 @@
       create-database
       sorted-paths))
 
-;;;; Usage examples
-
-;; Match only exactly the given path condition
-;; (query [[0 20] [25 30]] :exact db)
-
-;; Match a path condition, and also match all the prefixes of that path condition
-;; (pprint (query [[0 20] [31 98] [25 30] [0 10] [0 20]] :prefixes db))
-
-;;;; TACASFUBAR
-
-;; (filter #(= (count (second %)) 1) db)
-
-;; (def c0 [0 20])
-;; (def c1 [0 24])
-;; (def c2 [21 (Integer/MAX_VALUE)])
-;; (def c3 [25 30])
-;; (def c4 [0 10])
-;; (def c5 [99 99])
-;; (def c6 [0 (Integer/MAX_VALUE)])
-;; (def c7 [11 (Integer/MAX_VALUE)])
-
-;; (count (query [c0 c3] :starts-with db))
+(defn load-files
+  "Take a list of files and load them into a database."
+  [files]
+  (-> files
+      paths/create-database
+      paths/sorted-paths))

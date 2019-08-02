@@ -2071,7 +2071,7 @@ public class COASTAL {
 	public static void main(String[] args) {
 		args = parseOptions(args);
 		final Logger log = LogManager.getLogger(quietLogging ? "COASTAL-QUIET" : "COASTAL");
-		new Banner('~').println("COASTAL version " + Version.read()).display(log);
+//		new Banner('~').println("COASTAL version " + Version.read()).display(log);
 		ImmutableConfiguration config = ConfigHelper.loadConfiguration(log, args);
 		if (config != null) {
 			new COASTAL(log, config).start(false);

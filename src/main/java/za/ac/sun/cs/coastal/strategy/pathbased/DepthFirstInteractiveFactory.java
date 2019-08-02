@@ -7,9 +7,9 @@ import za.ac.sun.cs.coastal.diver.SegmentedPC;
 import za.ac.sun.cs.coastal.pathtree.PathTree;
 import za.ac.sun.cs.coastal.pathtree.PathTreeNode;
 
-public class DepthFirstFactory extends PathBasedFactory {
+public class DepthFirstInteractiveFactory extends PathBasedInteractiveFactory {
 
-	public DepthFirstFactory(COASTAL coastal, ImmutableConfiguration options) {
+	public DepthFirstInteractiveFactory(COASTAL coastal, ImmutableConfiguration options) {
 	}
 
 	@Override

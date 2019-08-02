@@ -10,7 +10,7 @@ import za.ac.sun.cs.coastal.diver.SegmentedPC;
 import za.ac.sun.cs.coastal.pathtree.PathTree;
 import za.ac.sun.cs.coastal.pathtree.PathTreeNode;
 
-public class BreadthFirstFactory extends PathBasedFactory {
+public class BreadthFirstFactory extends PathBasedInteractiveFactory {
 
 	public BreadthFirstFactory(COASTAL coastal, ImmutableConfiguration options) {
 	}

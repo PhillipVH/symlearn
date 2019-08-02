@@ -16,7 +16,7 @@ import za.ac.sun.cs.coastal.strategy.StrategyFactory;
 import za.ac.sun.cs.coastal.symbolic.Execution;
 import za.ac.sun.cs.coastal.symbolic.Model;
 
-public abstract class PathBasedFactory implements StrategyFactory {
+public abstract class PathBasedInteractiveFactory implements StrategyFactory {
 
     // ======================================================================
     //
@@ -200,32 +200,27 @@ public abstract class PathBasedFactory implements StrategyFactory {
                     manager.recordWaitTime(t1 - t0);
                     manager.incrementRefinements();
 
-                    String request;
 
+                    // Wait for a refinement request to be issued
+                    String request;
                     while ((request = jedis.get("refine")) == null) {
                         continue;
                     }
 
-                    log.info(request);
-
+                    // Remove refinement request from redis
                     jedis.del("refine");
 
+                    log.info(request);
 
 
-//                    HashMap concreteValues = new HashMap<String, Long>();
-//                    concreteValues.put("A$0", new Long(32));
-//                    concreteValues.put("A$1", new Long(22));
-//                    int priority = 0;
 
                     Model mdl = createModelFromInput(request);
 
-//                    Model mdl = new Model(priority, concreteValues);
-
-                    int d = -1;
 
                     log.info("Adding model" + mdl);
 
                     int m = coastal.addDiverModels(Collections.singletonList(mdl));
+                    int d = -1;
                     if (m > 0) {
                         d += m;
                     }

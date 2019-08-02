@@ -4,10 +4,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.lib.RepositoryBuilder;
 
 /**
  * Static methods to compute the current version of COASTAL.
@@ -150,18 +146,18 @@ public class Version {
 	 * @return the current version of COASTAL as computed by Jgit
 	 */
 	private static String readJgitVersion() {
-		try {
-			Repository repo = new RepositoryBuilder().readEnvironment().findGitDir().build();
-			if (repo != null) {
-				@SuppressWarnings("resource")
-				String version = new Git(repo).describe().setTags(true).call();
-				if (version != null) {
-					return version;
-				}
-			}
-		} catch (IOException | GitAPIException x) {
-			// ignore
-		}
+//		try {
+//			Repository repo = new RepositoryBuilder().readEnvironment().findGitDir().build();
+//			if (repo != null) {
+//				@SuppressWarnings("resource")
+//				String version = new Git(repo).describe().setTags(true).call();
+//				if (version != null) {
+//					return version;
+//				}
+//			}
+//		} catch (IOException | GitAPIException x) {
+//			// ignore
+//		}
 		return DEFAULT_VERSION;
 	}
 

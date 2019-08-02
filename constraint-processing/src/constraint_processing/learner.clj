@@ -15,8 +15,6 @@
 (def redis-conn {:pool {} :spec {:host "127.0.0.1" :port 6379}}) ; See `wcar` docstring for opts
 (defmacro wcar* [& body] `(car/wcar redis-conn ~@body))
 
-;; (wcar* (car/set "refine" "0 2 43 87 2")) ;; simulates putting a PC in for processing by Coastal
-
 (def inf Integer/MAX_VALUE)
 
 (defn make-concrete
@@ -363,35 +361,6 @@
         (str transitions)
         (str footer))))
 
-;; Usage
-(def tacas-files ["constraints-depth-1"
-                  "constraints-depth-2"
-                  ;; "constraints-depth-3"
-                  ;; "constraints-depth-4"
-                  ;; "constraints-depth-5"
-                  ;; "constraints-depth-6"
-                  ;; "constraints-depth-7"
-                  ])
-
-(def short-files ["alt-con-1"
-                  "alt-con-2"])
-
-(def large-files ["learn-large-1"
-                  "learn-large-2"
-                  "learn-large-3"
-                  "learn-large-4"
-                  ;; "learn-large-5"
-                  ])
-
-(def single-value-files (map #(str "alt-con-" %) (range 1 3)))
-
-(def db (-> tacas-files
-            paths/create-database
-            paths/sorted-paths))
-
-(def db (-> tacas-files
-            paths/create-database
-            paths/sorted-paths))
 
 (defn safe-dot
   [sfa name tag]
@@ -425,7 +394,7 @@
    table
    evidences))
 
-(defn learn
+(defn learn-without-coastal
   [db]
   (let [counter (atom 0)]
     (loop [table (init-table (make-table) db)]
@@ -467,12 +436,6 @@
           (safe-dot (build-sfa table) "tacas" @counter)
           (pprint (build-sfa table)))))))
 
-
-;; (pprint (learn-2 db))
-
-;; (refine-path "0 99 3")
-
-;; (spit "hmm.dot" (sfa->dot (learn-2 db)))
 
 (defn longest-matching-prefix
   "Given a CE and a database, get the shortest prefix of the CE in the database"
@@ -520,7 +483,7 @@
         (depth-limited-search child (dec n) tt)))
     node))
 
-(def dls (memoize depth-limited-search))
+(def dls depth-limited-search #_(memoize depth-limited-search))
 
 (defn induce-words
   [sfa n]
@@ -569,9 +532,7 @@
     (wcar* (car/del "refined"))
     (read-string refined-path)))
 
-(refine-path "0 2 232 23 800")
-
-(defn learn-2
+(defn learn-with-coastal
   [db]
   (let [counter (atom 0)]
     (loop [table (init-table (make-table) db)]
@@ -602,22 +563,12 @@
             (recur table-with-evidence)))
 
         ;; Do a reverse equivalence check
-        (map? (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 3)))
-        (let [counter-example (:path (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 3)))
-              ;; path (into [] (concat [:c] counter-example))
-              ;; table-with-ce (process-ce table {:path counter-example})
-              ;; evidences (make-evidences (drop 1 path))
-              ;; evidences (make-evidences (suffix-difference (drop 1 path) (longest-matching-prefix db (drop 1 path))))
-              ;; table-with-evidence (apply-evidences table-with-ce evidences)
-              ]
+        (map? (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 7)))
+        (let [counter-example (:path (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 7)))]
           (do
             (println "----" @counter "----")
             (println "Added Counter Example & Evidence (Backward)")
-            ;; (wcar* (car/set "refine" (str/join " " (map first counter-example)))) ;; simulates putting a PC in for processing by Coastal
             (pprint counter-example)
-            ;; (while (not= 1 (wcar* (car/exists "refined")))
-            ;;   (println "Waiting for refinement from Coastal...")
-            ;;   (Thread/sleep 1000))
             (let [refined-counter (refine-path (str/join " " (map first counter-example)))
                   ;; refined-counter (read-string (wcar* (car/get "refined")))
                   refined-evidences (make-evidences (suffix-difference refined-counter (longest-matching-prefix db refined-counter)))
@@ -642,94 +593,3 @@
           (println "Number of columns in E: " (count (:E table)))
           (safe-dot (build-sfa table) "tacas" @counter)
           (build-sfa table))))))
-
-(def lol
-  {:transitions
-   {0
-    [{:from 0, :input [11 2147483647], :to 0}
-     {:from 0, :input [0 10], :to 3}],
-    1
-    [{:from 1, :input [31 98], :to 1}
-     {:from 1, :input [25 30], :to 0}
-     {:from 1, :input [0 24], :to 1}
-     {:from 1, :input [100 2147483647], :to 1}
-     {:from 1, :input [99 99], :to 2}],
-    3
-    [{:from 3, :input [21 2147483647], :to 3}
-     {:from 3, :input [0 20], :to 1}],
-    2 [{:from 2, :input [0 2147483647], :to 2}]},
-   :initial-state 3,
-   :final-states #{3}})
-
-
-;; (-> (make-table)
-;;     (init-table db)
-;;     ;; (closed?)
-;;     (close db)
-;;     ;; (build-sfa)
-;;     ;; (run-all-from-db db) ; CE
-;;     (process-ce [[0 20] [25 30] [0 10]])
-;;     (add-evidence [:c 0])
-;;     ;; (closed?)
-;;     (close db)
-;;     ;; (closed?)
-;;     ;; (build-sfa)
-;;     ;; (run-all-from-db db) ; no Ce
-;;     ;; ;; (build-sfa)
-;;     (process-ce [[0 20] [99 99] [25 30] [0 10]])
-;;     ;; ;; (closed?)
-;;     (add-evidence [:c 25 0])
-;;     ;; (closed?)
-;;     (close db)
-;;     ;; (closed?)
-;;     (build-sfa)
-;;     (make-image)
-;;     (pprint)
-;;     )
-
-
-;; (longest-matching-prefix db [[0 20] [99 99] [25 30] [0 10]])
-;; (longest-matching-prefix db [[0 20] [25 30] [0 10]])
-
-;; (suffix-difference [[0 20] [99 99] [25 30] [0 10]]
-;;                    [[0 20] [99 99]])
-
-
-(defn reverse-eqv
-  [sfa depth]
-  (let [ce (make-concrete (:path (run-all-from-sfa sfa (make-queries sfa depth))))]
-    (if-not (empty? ce)
-      ce)))
-
-(def lol2 {:transitions
-           {0
-            [{:from 0, :input [11 2147483647], :to 0}
-             {:from 0, :input [0 10], :to 2}],
-            1
-            [{:from 1, :input [31 98], :to 1}
-             {:from 1, :input [25 30], :to 0}
-             {:from 1, :input [0 24], :to 1}
-             {:from 1, :input [99 99], :to 1}
-             {:from 1, :input [100 2147483647], :to 1}],
-            2
-            [{:from 2, :input [21 2147483647], :to 2}
-             {:from 2, :input [0 20], :to 1}]},
-           :initial-state 2,
-           :final-states #{2}})
-
-(def lol3 {:transitions
-           {0
-            [{:from 0, :input [25 30], :to 3}
-             {:from 0, :input [100 2147483647], :to 0}
-             {:from 0, :input [31 98], :to 0}
-             {:from 0, :input [99 99], :to 2}
-             {:from 0, :input [0 24], :to 0}],
-            3
-            [{:from 3, :input [11 2147483647], :to 3}
-             {:from 3, :input [0 10], :to 1}],
-            2 [{:from 2, :input [0 2147483647], :to 2}],
-            1
-            [{:from 1, :input [0 20], :to 0}
-             {:from 1, :input [21 2147483647], :to 1}]},
-           :initial-state 1,
-           :final-states #{1}})
