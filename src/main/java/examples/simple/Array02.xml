@@ -10,7 +10,7 @@
 		<divers threads="1"/>
 		<surfers threads="0"/>
 		<strategies>
-			<strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstFactory</strategy>
+			<strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstInteractiveFactory</strategy>
 			<!--
 			<strategy>
 				za.ac.sun.cs.coastal.strategy.tracebased.RandomTestingFactory

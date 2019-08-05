@@ -2,8 +2,7 @@
   (:gen-class)
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
-            [clojure.set :as set]
-            [constraint-processing.core :as paths]))
+            [clojure.set :as set]))
 
 (defn get-records
   [data]
@@ -49,15 +48,6 @@
 (defn merge-dbs
   [dbs]
   (apply set/union dbs))
-
-
-;; (def dbs (map build-db ["constraints-depth-1"
-;;                         "constraints-depth-2"
-;;                         "constraints-depth-3"
-;;                         "constraints-depth-4"
-;;                         "constraints-depth-5"
-;;                         "constraints-depth-6"
-;;                         "constraints-depth-7"]))
 
 (defn create-database
   [files]
@@ -111,11 +101,6 @@
                   (count (:path %2)))
         db))
 
-
-(defn feasible?
-  [path db]
-  (not (empty? (query path :exact db))))
-
 (defn follow-paths
   ""
   [path db]
@@ -128,7 +113,7 @@
   "Load n files with the given prefix into a database, and
   return that database."
   [prefix n]
-  (-> (map (partial str prefix) (range 1 n))
+  (-> (map (partial str prefix) (range 1 (inc n)))
       create-database
       sorted-paths))
 
@@ -136,5 +121,5 @@
   "Take a list of files and load them into a database."
   [files]
   (-> files
-      paths/create-database
-      paths/sorted-paths))
+      create-database
+      sorted-paths))

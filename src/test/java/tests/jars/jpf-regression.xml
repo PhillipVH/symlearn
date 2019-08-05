@@ -21,7 +21,7 @@
 		<divers threads="1"/>
 		<surfers threads="0"/>
 		<strategies>
-			<strategy threads="1">za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstFactory</strategy>
+			<strategy threads="1">za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstInteractiveFactory</strategy>
 		</strategies>
 		<observers>
 			<observer>za.ac.sun.cs.coastal.observers.AssertControllerFactory</observer>

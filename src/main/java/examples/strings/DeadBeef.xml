@@ -16,7 +16,7 @@
 		-->
 		<strategies>
 			<!-- 
-			<strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstFactory</strategy>
+			<strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstInteractiveFactorytiveFactory</strategy>
 			<strategy full="false">za.ac.sun.cs.coastal.strategy.pathbased.GenerationalFactory</strategy>
 			-->
 			<strategy>

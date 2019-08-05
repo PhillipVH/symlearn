@@ -2,6 +2,7 @@
   (:require [constraint-processing.core :as paths]
             [clojure.pprint :refer [pprint]]
             [clojure.set :as set]
+            [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.edn :as edn]
             [clojure.java.shell :refer [sh]]
@@ -67,6 +68,9 @@
           entries))
 
 (defn fill
+  "Return the table filled by doing membership queries on columns where
+  the concatenation of the entry's path and the evidence have not yet
+  been evaluated."
   [table]
   (-> table
       (assoc :S (fill-entries (:S table) (:E table)))
@@ -80,6 +84,7 @@
    :E [[]]})
 
 (defn add-r
+  "Add a single row into the R section of the observation table."
   [table r]
   (let [prefixes (paths/prefixes r)
         s-paths (into #{} (map :path (:S table)))
@@ -210,12 +215,7 @@
         transitions (pairs->transitions table prefix-pairs)]
     transitions))
 
-(defn get-states
-  [transitions]
-  (let [states (group-by :from transitions)]
-    states))
-
-(defn get-state-map
+#_(defn get-state-map
   [transitions]
   (as-> transitions $
     (group-by :from $)
@@ -223,18 +223,29 @@
     (map vector $ (iterate inc 0))
     (into {} $)))
 
+(defn get-state-map
+  "Returns a mapping from paths in S to monotonic natural numbers."
+  [table]
+  (as-> table $
+    (:S $)
+    (map first $)
+    (map second $)
+    (map vector $ (iterate inc 0))
+    (into {} $)))
+
 (defn get-final-states
+  "Returns a vector of final states, labeled as per `get-state-map`."
   [table state-map]
   (->> (:S table)
        (filter #(first (:row %)))
        (map :path)
        (map (partial get state-map))
-       (into [])))
+       vec))
 
 (defn build-sfa
   [table]
   (let [transitions (get-transitions table)
-        state-map (get-state-map transitions)
+        state-map (get-state-map table)
         final-states (into #{} (get-final-states table state-map))
         simple-transitions (reduce (fn [steps transition]
                                      (conj steps {:from (get state-map (:from transition))
@@ -270,7 +281,7 @@
                                  (get (:transitions sfa) state)))]
         (recur (:to trans) (rest input))))))
 
-(defn get-from-to-pairs
+#_(defn get-from-to-pairs
   [table]
   (let [transitions (-> (build-sfa table) :transitions vals)
         f-transitions (mapcat identity transitions)
@@ -361,24 +372,19 @@
         (str transitions)
         (str footer))))
 
-
-(defn safe-dot
-  [sfa name tag]
-  (let [dot-content (sfa->dot sfa)
-        filename (str name "." tag ".dot")]
-    (spit filename dot-content)))
-
-(defn make-image
+(defn sfa->img
+  "Take an SFA and generate an image from it, using `sfa->dot`."
   [sfa]
   (spit "tmp.dot" (sfa->dot sfa))
-  (sh "dot"
-      (str "-Gdpi=" 300)
-      (str "-T" "png")
-      "tmp.dot"
-      "-o"
-      (str "tmp.dot" "." "png"))
-  (if true
-    (sh "xdg-open" (str "tmp.dot" "." "png"))))
+  (sh/sh "dot"
+         (str "-Gdpi=" 300)
+         (str "-T" "png")
+         "tmp.dot"
+         "-o"
+         "tmp.png")
+  (sh/sh "xdg-open" "tmp.png")
+  (sh/sh "rm" "tmp.png")
+  (sh/sh "rm" "tmp.dot"))
 
 (defn make-evidences
   [path]
@@ -592,4 +598,5 @@
           (println "Number of rows in S: " (count (:S table)))
           (println "Number of columns in E: " (count (:E table)))
           (safe-dot (build-sfa table) "tacas" @counter)
-          (build-sfa table))))))
+          #_(build-sfa table)
+          table)))))

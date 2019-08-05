@@ -12,8 +12,8 @@
         <surfers threads="0"/>
 
         <strategies>
-<!--            <strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstInteractiveFactory</strategy>-->
-            <strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstBatchFactory</strategy>
+            <strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstInteractiveFactory</strategy>
+<!--            <strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstBatchFactory</strategy>-->
         </strategies>
 
         <observers>
