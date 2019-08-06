@@ -5,10 +5,10 @@
             [constraint-processing.learner :as learner]
             [constraint-processing.core :as paths]))
 
-(let [db (paths/load-db-from-prefix "tacas-parser-" 1)
-      table (learner/learn-with-coastal db)
-      sfa (learner/build-sfa table)]
-  (learner/sfa->img sfa))
+
+(vals {1 2, 3 4, 5 6})
+
+
 
 
 

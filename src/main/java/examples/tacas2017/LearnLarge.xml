@@ -9,6 +9,13 @@
 		</target>
 		<divers threads="1"/>
 		<surfers threads="0"/>
+
+
+		<strategies>
+			<strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstInteractiveFactory</strategy>
+			<!--            <strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstBatchFactory</strategy>-->
+		</strategies>
+
 		<observers>
 			<observer>za.ac.sun.cs.coastal.observers.PCReporterFactory</observer>
 		</observers>

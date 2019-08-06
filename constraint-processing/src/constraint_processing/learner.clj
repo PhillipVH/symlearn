@@ -48,7 +48,7 @@
 
 (defn member?
   [w]
-  (TacasParser/parse (int-arr w)))
+  (LearnLarge/parse (int-arr w)))
 
 (defn check-membership
   "Takes a path condition and a seq of evidence. Returns
@@ -255,7 +255,8 @@
                                    transitions)]
     {:transitions (group-by :from simple-transitions)
      :initial-state (get state-map [])
-     :final-states final-states}))
+     :final-states final-states
+     :states (set (vals state-map))}))
 
 (defn intersects?
   "Given two constraint pairs, determine if the first intersects the second."
@@ -348,43 +349,6 @@
             (recur (rest paths))
             path))))))
 
-(defn sfa->dot
-  "Given some SFA, generate the dot code that will draw
-  the automaton."
-  [sfa]
-  (let [header "digraph finite_state_machine { \nrankdir=LR; size=\"8.5\"\n "
-        final-state-style (str "node [ shape = doublecircle]; " (str/join "; " (:final-states sfa)) ";\n")
-        initial-state-style (str "node [ shape = point ]; qi;\n")
-        normal-state-style (str "node [ shape = circle ];\n")
-        first-transition (str "qi -> " (:initial-state sfa) ";\n")
-        transitions (reduce
-                     (fn [trans-string {:keys [from to input]}]
-                       (let [input (if (= (second input) Integer/MAX_VALUE) [(first input) "∞"] input)]
-                         (str trans-string "\n" from " -> " to " [ label = \"[" (first input) " " (second input) "]\"];")))
-                     ""
-                     (apply concat (map second (filter map-entry? (:transitions sfa)))))
-        footer "\n}"]
-    (-> header
-        (str final-state-style)
-        (str initial-state-style)
-        (str normal-state-style)
-        (str first-transition)
-        (str transitions)
-        (str footer))))
-
-(defn sfa->img
-  "Take an SFA and generate an image from it, using `sfa->dot`."
-  [sfa]
-  (spit "tmp.dot" (sfa->dot sfa))
-  (sh/sh "dot"
-         (str "-Gdpi=" 300)
-         (str "-T" "png")
-         "tmp.dot"
-         "-o"
-         "tmp.png")
-  (sh/sh "xdg-open" "tmp.png")
-  (sh/sh "rm" "tmp.png")
-  (sh/sh "rm" "tmp.dot"))
 
 (defn make-evidences
   [path]
@@ -425,7 +389,7 @@
             (println "----" @counter "----")
             (println "Added Counter Example & Evidence")
             (println counter-example)
-            (safe-dot (build-sfa table) "tacas" @counter)
+            #_(safe-dot (build-sfa table) "tacas" @counter)
             (pprint table-with-evidence)
             (recur table-with-evidence)))
 
@@ -439,8 +403,9 @@
           (println "Number of rows in R: " (count (:R table)))
           (println "Number of rows in S: " (count (:S table)))
           (println "Number of columns in E: " (count (:E table)))
-          (safe-dot (build-sfa table) "tacas" @counter)
-          (pprint (build-sfa table)))))))
+          #_(safe-dot (build-sfa table) "tacas" @counter)
+          #_(pprint (build-sfa table))
+          table)))))
 
 
 (defn longest-matching-prefix
@@ -564,7 +529,7 @@
             (println "----" @counter "----")
             (println "Added Counter Example & Evidence (Forward)")
             (pprint counter-example)
-            (safe-dot (build-sfa table-with-evidence) "tacas" @counter)
+            #_(safe-dot (build-sfa table-with-evidence) "tacas" @counter)
             ;; (pprint table-with-evidence)
             (recur table-with-evidence)))
 
@@ -583,7 +548,7 @@
               ;; (wcar* (car/del "refined"))
               (pprint refined-counter)
 
-              (safe-dot (build-sfa table-with-refined-ev) "tacas" @counter)
+              #_(safe-dot (build-sfa table-with-refined-ev) "tacas" @counter)
               (pprint table-with-refined-ev)
               (recur table-with-refined-ev))))
 
@@ -597,6 +562,6 @@
           (println "Number of rows in R: " (count (:R table)))
           (println "Number of rows in S: " (count (:S table)))
           (println "Number of columns in E: " (count (:E table)))
-          (safe-dot (build-sfa table) "tacas" @counter)
+          #_(safe-dot (build-sfa table) "tacas" @counter)
           #_(build-sfa table)
           table)))))
