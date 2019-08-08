@@ -28,6 +28,7 @@
         nil-states (sp/select [sp/MAP-VALS (sp/pred nil?)] total-range-per-state)]
     (empty? nil-states)))
 
+
 (defn sfa->dot
   "Given some SFA, generate the dot code that will draw
   the automaton."
@@ -40,7 +41,14 @@
         transitions (reduce
                      (fn [trans-string {:keys [from to input]}]
                        (let [input (if (= (second input) Integer/MAX_VALUE) [(first input) "∞"] input)]
-                         (str trans-string "\n" (if (nil? from) "nil" from) " -> " (if (nil? to) "nil" to) " [ label = \"[" (first input) " " (second input) "]\"];")))
+                         (str trans-string
+                              "\n"
+                              (if (nil? from) "nil" from)
+                              " -> "
+                              (if (nil? to) "nil" to)
+                              " [ label = \"["
+                              (first input) " "
+                              (second input) "]\"];")))
                      ""
                      (apply concat (map second (filter map-entry? (:transitions sfa)))))
         footer "\n}"]

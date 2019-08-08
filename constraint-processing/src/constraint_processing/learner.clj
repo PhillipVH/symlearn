@@ -1,15 +1,13 @@
 (ns constraint-processing.learner
-  (:require [constraint-processing.core :as paths]
-            [clojure.pprint :refer [pprint]]
+  (:require [clojure.pprint :refer [pprint]]
             [clojure.set :as set]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
-            [clojure.edn :as edn]
             [clojure.java.shell :refer [sh]]
-            [clojure.walk :as walk]
             [taoensso.carmine :as car :refer [wcar]]
+            [constraint-processing.core :as paths]
             [constraint-processing.sfa :as sfa]
-            [constraint-processing.learner :as learner])
+            [constraint-processing.ranges :as ranges])
   (:import Parser
            TacasParser
            SingleParser
@@ -50,7 +48,8 @@
 
 (defn member?
   [w]
-  (LearnLarge/parse (int-arr w)))
+  (TacasParser/parse (int-arr w))
+  #_(LearnLarge/parse (int-arr w)))
 
 (defn check-membership
   "Takes a path condition and a seq of evidence. Returns
@@ -260,17 +259,6 @@
      :final-states final-states
      :states (set (vals state-map))}))
 
-(defn intersects?
-  "Given two constraint pairs, determine if the first intersects the second."
-  [[x1 x2] [y1 y2]]
-  (and
-   (<= x1 y2)
-   (<= y1 x2)))
-
-(defn intersection
-  "Given two constraint pairs, determine the intersection."
-  [[[x1 x2] [y1 y2]]]
-  [(max x1 y1) (max x2 y2)])
 
 (defn execute-sfa
   "Takes an SFA and a vector of input, and returns the acceptance status of the
@@ -280,16 +268,9 @@
          input input]
     (if (empty? input)
       (contains? (:final-states sfa) state)
-      (let [trans (first (filter #(intersects? (:input %) [(first input) (first input)])
+      (let [trans (first (filter #(ranges/intersects? (:input %) [(first input) (first input)])
                                  (get (:transitions sfa) state)))]
         (recur (:to trans) (rest input))))))
-
-#_(defn get-from-to-pairs
-  [table]
-  (let [transitions (-> (build-sfa table) :transitions vals)
-        f-transitions (mapcat identity transitions)
-        from-to-pairs (->> f-transitions (group-by (juxt :from :to)))]
-    from-to-pairs))
 
 (defn get-intersecting-pairs
   [from-to-pairs]
@@ -300,7 +281,7 @@
                   (= transition other-transition)
                   intersections
 
-                  (intersects? (:input transition) (:input other-transition))
+                  (ranges/intersects? (:input transition) (:input other-transition))
                   (conj intersections #{transition other-transition})
 
                   :else
@@ -510,6 +491,7 @@
 (defn learn-with-coastal
   [db]
   (let [counter (atom 0)
+        rev-depth (atom 4)
         prev-table (atom nil)
         table->img #(sfa/sfa->img (build-sfa %))]
     (loop [db db
@@ -530,17 +512,16 @@
           (recur db table-with-evidence))
 
         ;; Do a backward equivalence check
-        (map? (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 4)))
-        (let [counter-example (:path (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 4)))
-              should-accept (not (:accepted (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) 5))))
+        (map? (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) @rev-depth)))
+        (let [counter-example (:path (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) @rev-depth)))
+              should-accept (not (:accepted (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) @rev-depth))))
               refined (refine-path (str/join " " (map first counter-example)))
-              #_refined-evidences #_(make-evidences (suffix-difference refined (longest-matching-prefix db refined)))
               lmp (:path (longest-matching-prefix db refined))
               feasible-refined (vec (take (inc (count lmp)) refined))
-              feasible-evidence (learner/make-evidences feasible-refined)
+              feasible-evidence (make-evidences feasible-refined)
               table-with-ce (process-ce table {:path feasible-refined})
               table-with-refined-evidence (apply-evidences table-with-ce feasible-evidence #_refined-evidences)]
-          (println "----- Reverse Eqv Query ---------")
+          (println (str "----- Reverse Eqv Query (counter: " @counter ")---------"))
           (pprint counter-example)
           (pprint refined)
           (pprint table-with-refined-evidence)
@@ -550,8 +531,11 @@
               table-with-refined-evidence)
             (do
               (reset! prev-table table-with-refined-evidence)
-              (recur db #_(conj db {:path feasible-refined, :accepted should-accept}) table-with-refined-evidence))))
+              (recur (paths/sorted-paths (conj db {:accepted should-accept, :path refined})) table-with-refined-evidence))))
 
         ;; The learnt table
         :default
-        table))))
+        (do
+          (pprint db)
+          (pprint table)
+          table)))))

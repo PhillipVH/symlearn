@@ -11,6 +11,18 @@
   [[x1 y1] [x2 y2]]
   [x1 y2])
 
+(defn intersection
+  "Given two constraint pairs, determine the intersection."
+  [[[x1 x2] [y1 y2]]]
+  [(max x1 y1) (max x2 y2)])
+
+(defn intersects?
+  "Given two constraint pairs, determine if the first intersects the second."
+  [[x1 x2] [y1 y2]]
+  (and
+   (<= x1 y2)
+   (<= y1 x2)))
+
 (defn get-largest-range
   "Returns the largest contiguous range constructed from a set of disjoint
   ranges, false if the range does not start with zero."
@@ -32,3 +44,4 @@
             (= (inc (second longest)) (first next))
             (recur (union longest next)))))
       nil)))
+
