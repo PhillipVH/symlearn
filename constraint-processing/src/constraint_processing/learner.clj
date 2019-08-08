@@ -97,6 +97,13 @@
                           prefixes)]
     (fill new-table)))
 
+(defn add-rs
+  [table rs]
+  (reduce (fn [new-table r]
+            (add-r new-table (:path r)))
+          table
+          rs))
+
 (defn init-table
   "Add an initial counter example from the database into the
   observation table."
@@ -117,7 +124,7 @@
 (defn promote
   [table path]
   (-> table
-      (update :R (fn [entries] (into [] (filter #(not= (:path %) path) entries))))
+      (update :R (fn [entries] (vec (filter #(not= (:path %) path) entries))))
       (update :S (fn [entries] (conj entries {:path path :row []})))
       (fill)))
 
@@ -137,13 +144,6 @@
       (let [candidate-rows (set/difference r-rows s-rows)
             candidate-row (first candidate-rows)]
         (into #{} (filter #(= candidate-row (:row %)) (:R table)))))))
-
-(defn add-rs
-  [table rs]
-  (reduce (fn [new-table r]
-            (add-r new-table (:path r)))
-          table
-          rs))
 
 (defn close
   [table db]
@@ -253,11 +253,14 @@
                                                   :input (:input transition)
                                                   :to (get state-map (:to transition))}))
                                    #{}
-                                   transitions)]
-    {:transitions (group-by :from simple-transitions)
-     :initial-state (get state-map [])
-     :final-states final-states
-     :states (set (vals state-map))}))
+                                   transitions)
+        sfa {:transitions (group-by :from simple-transitions)
+             :initial-state (get state-map [])
+             :final-states final-states
+             :states (set (vals state-map))}]
+    (if-not (sfa/complete? sfa)
+      (sfa/complete sfa)
+      sfa)))
 
 
 (defn execute-sfa
@@ -491,7 +494,7 @@
 (defn learn-with-coastal
   [db]
   (let [counter (atom 0)
-        rev-depth (atom 4)
+        rev-depth (atom 20)
         prev-table (atom nil)
         table->img #(sfa/sfa->img (build-sfa %))]
     (loop [db db
