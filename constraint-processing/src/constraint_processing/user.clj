@@ -1,20 +1,13 @@
 (ns constraint-processing.user
-  (:require [clojure.string :as str]
-            [clojure.pprint :refer [pprint]]
-            [clojure.java.shell :as sh]
+  (:require [clojure.pprint :refer [pprint]]
             [constraint-processing.learner :as learner]
-            [constraint-processing.core :as paths]))
+            [constraint-processing.core :as paths]
+            [constraint-processing.sfa :as sfa]
+            [clojure.java.shell :as sh]))
 
 
-(vals {1 2, 3 4, 5 6})
-
-
-
-
-
-
-
-
-
-
-
+(let [db (paths/load-db-from-prefix "learn-large-" 3)
+      obs-table (learner/learn-with-coastal db)
+      learnt (learner/build-sfa obs-table)]
+  (sfa/sfa->img learnt)
+  #_(sfa/complete? learnt))

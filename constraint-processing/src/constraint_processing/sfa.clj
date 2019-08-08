@@ -1,7 +1,6 @@
 (ns constraint-processing.sfa
   "Utilities to facilitate the creation, validation, and manipulation of SFAs."
-  (:require [constraint-processing.learner :as learner]
-            [constraint-processing.core :as paths]
+  (:require [constraint-processing.core :as paths]
             [constraint-processing.ranges :as ranges]
             [clojure.string :as str]
             [clojure.pprint :refer [pprint]]
@@ -41,7 +40,7 @@
         transitions (reduce
                      (fn [trans-string {:keys [from to input]}]
                        (let [input (if (= (second input) Integer/MAX_VALUE) [(first input) "∞"] input)]
-                         (str trans-string "\n" from " -> " to " [ label = \"[" (first input) " " (second input) "]\"];")))
+                         (str trans-string "\n" (if (nil? from) "nil" from) " -> " (if (nil? to) "nil" to) " [ label = \"[" (first input) " " (second input) "]\"];")))
                      ""
                      (apply concat (map second (filter map-entry? (:transitions sfa)))))
         footer "\n}"]
@@ -66,14 +65,4 @@
   (sh/sh "xdg-open" "tmp.png")
   (sh/sh "rm" "tmp.png")
   (sh/sh "rm" "tmp.dot"))
-
-(let [db (paths/load-db-from-prefix "learn-large-" 4)
-      table (learner/learn-without-coastal db)
-      sfa (learner/build-sfa table)]
-  #_(pprint sfa)
-  (sfa->img sfa)
-  (sfa->img sfa)
-
-  #_(complete? sfa))
-
 
