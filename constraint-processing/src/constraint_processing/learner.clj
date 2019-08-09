@@ -16,12 +16,13 @@
 (def redis-conn {:pool {} :spec {:host "127.0.0.1" :port 6379}}) ; See `wcar` docstring for opts
 (defmacro wcar* [& body] `(car/wcar redis-conn ~@body))
 
-(def inf Integer/MAX_VALUE)
+(def ^:dynamic parse-fn #(TacasParser/parse %))
 
 (defn make-concrete
   [path]
-  (for [constraint path]
-    (first constraint)))
+  (for [[min max] path]
+    min
+    #_(+ min (rand-int (- (inc (if (= max Integer/MAX_VALUE) (dec (Integer/MAX_VALUE)) max)) min)))))
 
 (defn mixed->concrete
   "Take a (potentially mixed) seq of constraints,
@@ -48,7 +49,7 @@
 
 (defn member?
   [w]
-  (TacasParser/parse (int-arr w))
+  (parse-fn (int-arr w))
   #_(LearnLarge/parse (int-arr w)))
 
 (defn check-membership
@@ -216,14 +217,6 @@
         transitions (pairs->transitions table prefix-pairs)]
     transitions))
 
-#_(defn get-state-map
-  [transitions]
-  (as-> transitions $
-    (group-by :from $)
-    (map first $)
-    (map vector $ (iterate inc 0))
-    (into {} $)))
-
 (defn get-state-map
   "Returns a mapping from paths in S to monotonic natural numbers."
   [table]
@@ -259,8 +252,8 @@
              :final-states final-states
              :states (set (vals state-map))}]
     (if-not (sfa/complete? sfa)
-      (sfa/complete sfa)
-      sfa)))
+      (with-meta (sfa/complete sfa) {:completed true})
+      (with-meta sfa {:completed false}))))
 
 
 (defn execute-sfa
@@ -339,8 +332,6 @@
 (defn make-evidences
   [path]
   (map #(concat [:c] %) (paths/suffixes (map first path))))
-
-(make-evidences [[0 20] [30 40]])
 
 (defn apply-evidences
   [table evidences]
@@ -481,64 +472,64 @@
             path))))))
 
 (defn refine-path
-  [input]
-  (wcar* (car/del "refined")
-         (car/set "refine" input))
+  [path]
+  (let [input (str/join " " (map first path))]
 
-  (while (not= 1 (wcar* (car/exists "refined"))))
+    (wcar* (car/del "refined")
+           (car/set "refine" input))
 
-  (let [refined-path (wcar* (car/get "refined"))]
-    (wcar* (car/del "refined"))
-    (read-string refined-path)))
+    (while (not= 1 (wcar* (car/exists "refined"))))
+
+    (let [refined-path (wcar* (car/get "refined"))]
+      (wcar* (car/del "refined"))
+      (read-string refined-path))))
 
 (defn learn-with-coastal
-  [db]
+  [db rev-depth-limit]
   (let [counter (atom 0)
-        rev-depth (atom 20)
+        rev-depth (atom rev-depth-limit)
+        timeout (atom 10000)
         prev-table (atom nil)
         table->img #(sfa/sfa->img (build-sfa %))]
     (loop [db db
            table (init-table (make-table) db)]
       (swap! counter inc)
-      (cond
-        ;; First handle the case in which the table is not closed
-        (not (closed? table))
-        (let [closed-table (close table db)]
-          (recur db (close table db)))
+      (let [ce-from-db (run-all-from-db (build-sfa table) db)
+            ce-from-sfa (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) @rev-depth))]
+        (cond
+         ;; First handle the case in which the table is not closed
+         (not (closed? table))
+         (let [closed-table (close table db)]
+           (recur db closed-table))
 
-        ;; Do a forward equivalence query and handle the evidence prefix addition
-        (map? (run-all-from-db (build-sfa table) db))
-        (let [counter-example (:path (run-all-from-db (build-sfa table) db))
-              table-with-ce (process-ce table {:path counter-example})
-              evidences (make-evidences (suffix-difference counter-example (longest-matching-prefix db counter-example)))
-              table-with-evidence (apply-evidences table-with-ce evidences)]
-          (recur db table-with-evidence))
+         ;; ;; Do a forward equivalence query and handle the evidence prefix addition
+         (map? ce-from-db)
+         (let [counter-example (:path ce-from-db)
+               table-with-ce (process-ce table {:path counter-example})
+               evidences (make-evidences (suffix-difference counter-example (longest-matching-prefix db counter-example)))
+               table-with-evidence (apply-evidences table-with-ce evidences)]
+           (recur db table-with-evidence))
 
-        ;; Do a backward equivalence check
-        (map? (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) @rev-depth)))
-        (let [counter-example (:path (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) @rev-depth)))
-              should-accept (not (:accepted (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) @rev-depth))))
-              refined (refine-path (str/join " " (map first counter-example)))
-              lmp (:path (longest-matching-prefix db refined))
-              feasible-refined (vec (take (inc (count lmp)) refined))
-              feasible-evidence (make-evidences feasible-refined)
-              table-with-ce (process-ce table {:path feasible-refined})
-              table-with-refined-evidence (apply-evidences table-with-ce feasible-evidence #_refined-evidences)]
-          (println (str "----- Reverse Eqv Query (counter: " @counter ")---------"))
-          (pprint counter-example)
-          (pprint refined)
-          (pprint table-with-refined-evidence)
-          (if (= table-with-refined-evidence @prev-table)
-            (do
-              (println "Fixed point table, terminating")
-              table-with-refined-evidence)
-            (do
-              (reset! prev-table table-with-refined-evidence)
-              (recur (paths/sorted-paths (conj db {:accepted should-accept, :path refined})) table-with-refined-evidence))))
+         ;; Do a backward equivalence check
+         (map? ce-from-sfa)
+         (let [ce ce-from-sfa
+               counter-example (:path ce)
+               current-sfa (build-sfa table)
+               should-accept (not (:accepted ce))
+               refined (refine-path counter-example)
+               lmp (:path (longest-matching-prefix db refined))
+               feasible-refined (vec (take (inc (count lmp)) refined))
+               feasible-evidence (make-evidences feasible-refined)
+               table-with-ce (process-ce table {:path feasible-refined})
+               table-with-refined-evidence (apply-evidences table-with-ce feasible-evidence)
+               new-entry {:accepted should-accept, :path refined}]
 
-        ;; The learnt table
-        :default
-        (do
-          (pprint db)
-          (pprint table)
-          table)))))
+           (if (= @prev-table table)
+             table
+             (do
+               (reset! prev-table table)
+               (recur (paths/sorted-paths (conj db new-entry)) table-with-refined-evidence))))
+
+         ;; The learnt table
+         :default
+         table)))))
