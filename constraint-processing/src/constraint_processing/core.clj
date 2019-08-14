@@ -42,7 +42,8 @@
   (->> (io/resource filename)
        slurp
        get-records
-       process-records))
+       process-records
+       sorted-paths))
 
 
 (defn merge-dbs

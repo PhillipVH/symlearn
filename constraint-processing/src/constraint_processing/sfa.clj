@@ -16,10 +16,10 @@
           {}
           (:states sfa)))
 
-(defn- pred->transition
+(defn- predicates->transitions
   [preds state]
   (map (fn [pred]
-         {:from state, :input pred, :to state}) preds))
+         {:from state, :input pred, :to state, :artificial true}) preds))
 
 (defn complete?
   "Returns true if sfa is complete (i.e. has transitions out of every state
@@ -38,7 +38,7 @@
   (let [state-predicates (state-predicates sfa)]
     (reduce (fn [sfa state]
               (update-in sfa [:transitions state]
-                         #(vec (concat % (flatten (pred->transition (ranges/get-completing-preds (sp/select [state sp/ALL] state-predicates)) state))))))
+                         #(vec (concat % (flatten (predicates->transitions (ranges/get-completing-preds (sp/select [state sp/ALL] state-predicates)) state))))))
             sfa
             (:states sfa))))
 

@@ -16,7 +16,7 @@
 (def redis-conn {:pool {} :spec {:host "127.0.0.1" :port 6379}}) ; See `wcar` docstring for opts
 (defmacro wcar* [& body] `(car/wcar redis-conn ~@body))
 
-(def ^:dynamic parse-fn #(TacasParser/parse %))
+(def ^:dynamic *parse-fn* #(TacasParser/parse %))
 
 (defn make-concrete
   [path]
@@ -49,7 +49,7 @@
 
 (defn member?
   [w]
-  (parse-fn (int-arr w))
+  (*parse-fn* (int-arr w))
   #_(LearnLarge/parse (int-arr w)))
 
 (defn check-membership
@@ -306,9 +306,17 @@
         r-rows (map :row (:R new-table))
         rows (set/union s-rows r-rows)
         old-rows (set/union old-s-rows old-r-rows)]
-    (=
-     (count (set old-rows))
-     (count (set rows)))))
+    (if (=
+         (count (set old-rows))
+         (count (set rows)))
+      (do
+        (println "Evidence makes no difference")
+        (pprint evidence)
+        true)
+      (do
+        (println "Evidence helps learner")
+        (pprint evidence)
+        false))))
 
 (defn consistent?
   [table]
@@ -343,48 +351,48 @@
    table
    evidences))
 
-(defn learn-without-coastal
-  [db]
-  (let [counter (atom 0)]
-    (loop [table (init-table (make-table) db)]
-      (swap! counter inc)
-      (cond
-        ;; First handle the case in which the table is not closed
-        (not (closed? table))
-        (do
-          (println "----" @counter "----")
-          (println "Closed Table")
-          (pprint (close table db))
-          (recur (close table db)))
+;; (defn learn-without-coastal
+;;   [db]
+;;   (let [counter (atom 0)]
+;;     (loop [table (init-table (make-table) db)]
+;;       (swap! counter inc)
+;;       (cond
+;;         ;; First handle the case in which the table is not closed
+;;         (not (closed? table))
+;;         (do
+;;           (println "----" @counter "----")
+;;           (println "Closed Table")
+;;           (pprint (close table db))
+;;           (recur (close table db)))
 
-        ;; Do an equivalence query and handle the evidence prefix addition
-        (map? (run-all-from-db (build-sfa table) db))
-        (let [counter-example (:path (run-all-from-db (build-sfa table) db))
-              path (vec (concat [:c] counter-example))
-              table-with-ce (process-ce table {:path counter-example})
-              evidences (make-evidences (drop 1 path))
-              table-with-evidence (apply-evidences table-with-ce evidences)]
-          (do
-            (println "----" @counter "----")
-            (println "Added Counter Example & Evidence")
-            (println counter-example)
-            #_(safe-dot (build-sfa table) "tacas" @counter)
-            (pprint table-with-evidence)
-            (recur table-with-evidence)))
+;;         ;; Do an equivalence query and handle the evidence prefix addition
+;;         (map? (run-all-from-db (build-sfa table) db))
+;;         (let [counter-example (:path (run-all-from-db (build-sfa table) db))
+;;               path (vec (concat [:c] counter-example))
+;;               table-with-ce (process-ce table {:path counter-example})
+;;               evidences (make-evidences (drop 1 path))
+;;               table-with-evidence (apply-evidences table-with-ce evidences)]
+;;           (do
+;;             (println "----" @counter "----")
+;;             (println "Added Counter Example & Evidence")
+;;             (println counter-example)
+;;             #_(safe-dot (build-sfa table) "tacas" @counter)
+;;             (pprint table-with-evidence)
+;;             (recur table-with-evidence)))
 
-        ;; Uh, are we done?
-        :default
-        (let [n-rows (count (set/union (:R table) (:S table)))
-              n-cols (count (:E table))]
-          (println "----" @counter "----")
-          (println "Done!")
-          (pprint table)
-          (println "Number of rows in R: " (count (:R table)))
-          (println "Number of rows in S: " (count (:S table)))
-          (println "Number of columns in E: " (count (:E table)))
-          #_(safe-dot (build-sfa table) "tacas" @counter)
-          #_(pprint (build-sfa table))
-          table)))))
+;;         ;; Uh, are we done?
+;;         :default
+;;         (let [n-rows (count (set/union (:R table) (:S table)))
+;;               n-cols (count (:E table))]
+;;           (println "----" @counter "----")
+;;           (println "Done!")
+;;           (pprint table)
+;;           (println "Number of rows in R: " (count (:R table)))
+;;           (println "Number of rows in S: " (count (:S table)))
+;;           (println "Number of columns in E: " (count (:E table)))
+;;           #_(safe-dot (build-sfa table) "tacas" @counter)
+;;           #_(pprint (build-sfa table))
+;;           table)))))
 
 
 (defn longest-matching-prefix
@@ -487,49 +495,56 @@
 (defn learn-with-coastal
   [db rev-depth-limit]
   (let [counter (atom 0)
-        rev-depth (atom rev-depth-limit)
-        timeout (atom 10000)
         prev-table (atom nil)
         table->img #(sfa/sfa->img (build-sfa %))]
     (loop [db db
            table (init-table (make-table) db)]
       (swap! counter inc)
-      (let [ce-from-db (run-all-from-db (build-sfa table) db)
-            ce-from-sfa (run-all-from-sfa (build-sfa table) (make-queries (build-sfa table) @rev-depth))]
+      (let [sfa (build-sfa table)
+            ce-from-db (run-all-from-db sfa db)
+            ce-from-sfa (run-all-from-sfa sfa (make-queries sfa rev-depth-limit))]
         (cond
-         ;; First handle the case in which the table is not closed
-         (not (closed? table))
-         (let [closed-table (close table db)]
-           (recur db closed-table))
+          ;; First handle the case in which the table is not closed
+          (not (closed? table))
+          (let [closed-table (close table db)]
+            (recur db closed-table))
 
-         ;; ;; Do a forward equivalence query and handle the evidence prefix addition
-         (map? ce-from-db)
-         (let [counter-example (:path ce-from-db)
-               table-with-ce (process-ce table {:path counter-example})
-               evidences (make-evidences (suffix-difference counter-example (longest-matching-prefix db counter-example)))
-               table-with-evidence (apply-evidences table-with-ce evidences)]
-           (recur db table-with-evidence))
+          ;; ;; Do a forward equivalence query and handle the evidence prefix addition
+          (map? ce-from-db)
+          (let [counter-example (:path ce-from-db)
+                table-with-ce (process-ce table {:path counter-example})
+                evidences (make-evidences counter-example #_(suffix-difference counter-example (longest-matching-prefix db counter-example)))
+                table-with-evidence (apply-evidences table-with-ce evidences)]
 
-         ;; Do a backward equivalence check
-         (map? ce-from-sfa)
-         (let [ce ce-from-sfa
-               counter-example (:path ce)
-               current-sfa (build-sfa table)
-               should-accept (not (:accepted ce))
-               refined (refine-path counter-example)
-               lmp (:path (longest-matching-prefix db refined))
-               feasible-refined (vec (take (inc (count lmp)) refined))
-               feasible-evidence (make-evidences feasible-refined)
-               table-with-ce (process-ce table {:path feasible-refined})
-               table-with-refined-evidence (apply-evidences table-with-ce feasible-evidence)
-               new-entry {:accepted should-accept, :path refined}]
+            (println "Forward: " ce-from-db)
+            (if (= @prev-table table)
+              (with-meta table ce-from-db)
+              (do
+                (reset! prev-table table)
+          (recur db table-with-evidence))))
 
-           (if (= @prev-table table)
-             table
-             (do
-               (reset! prev-table table)
-               (recur (paths/sorted-paths (conj db new-entry)) table-with-refined-evidence))))
+          ;; Do a backward equivalence check
+          (map? ce-from-sfa)
+          (let [ce ce-from-sfa
+                counter-example (:path ce)
+                current-sfa (build-sfa table)
+                should-accept (not (:accepted ce))
+                refined (refine-path counter-example)
+                lmp (:path (longest-matching-prefix db refined))
+                #_feasible-refined #_(vec (take (inc (count lmp)) refined))
+                feasible-evidence (make-evidences refined #_feasible-refined)
+                table-with-ce (process-ce table {:path refined #_feasible-refined})
+                table-with-refined-evidence (apply-evidences table-with-ce feasible-evidence)
+                new-entry {:accepted should-accept, :path refined}]
 
-         ;; The learnt table
-         :default
-         table)))))
+            (println "Reverse (Induced): " counter-example)
+            (println "Reverse (Refined): " refined)
+            (if (= @prev-table table)
+              (with-meta table ce-from-sfa)
+              (do
+                (reset! prev-table table)
+                (recur (paths/sorted-paths (conj db new-entry)) table-with-refined-evidence))))
+
+          ;; The learnt table
+          :default
+          table)))))

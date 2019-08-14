@@ -572,6 +572,9 @@ public class SymbolicState implements State {
 				setArrayLength(arrayId, length);
 			}
 
+//			length = Array.getLength(currentArray);
+//			setArrayLength(arrayId, length);
+
 			Object newArray = Array.newInstance(elementType, length);
 			for (int i = 0; i < length; i++) {
 				String entryName = name + INDEX_SEPARATOR + i;

@@ -10,10 +10,17 @@
            TacasParser))
 
 
-(binding [learner/parse-fn #(TacasParser/parse %)]
-    (let [db (paths/load-db-from-prefix "tacas-parser-" 2)
-          obs-table (learner/learn-with-coastal db 3)
-          learnt (learner/build-sfa obs-table)]
-      (sfa/sfa->img learnt)))
+(binding [learner/*parse-fn* #(LearnLarge/parse %)]
+  (println "-----")
+  (let [db (paths/load-db-from-prefix "learn-large-" 1)
+        table (learner/learn-with-coastal db 2)
+        learnt (learner/build-sfa table)]
+    (sfa/sfa->img learnt)
+    (pprint learnt)
+    (pprint (meta learnt))
+    (pprint (meta table))
+    (println "-----")
+    ))
 
 
+(learner/refine-path [[87] [16]])

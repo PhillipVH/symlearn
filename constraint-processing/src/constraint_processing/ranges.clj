@@ -30,10 +30,14 @@
 
 (defn range-between
   "Returns the range between r1 and r2 (excluding the last element of r1 and
-  the first element of r2), and nil if the ranges are adjacent."
+  the first element of r2), and nil if the ranges are adjacent.
+
+  TODO r1 and r2 intersect, the SFA has non-determinism"
   [r1 r2]
   (if-not (adjacent r1 r2)
-    [(inc (second r1)) (dec (first r2))]))
+    (do
+      #_(println (str r1 " " r2 " -> " [(inc (second r1)) (dec (first r2))]))
+      [(inc (second r1)) (dec (first r2))])))
 
 (defn get-largest-range
   "Returns the largest contiguous range constructed from a set of disjoint
