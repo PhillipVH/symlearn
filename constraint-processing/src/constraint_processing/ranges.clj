@@ -11,7 +11,7 @@
   [ranges start]
   (first (filter #(= (first %) start) ranges)))
 
-(defn merge
+(defn grow
   "Returns one range resulting from merging two adjacent, disjointed ranges."
   [[x1 y1] [x2 y2]]
   [x1 y2])
@@ -36,7 +36,6 @@
   [r1 r2]
   (if-not (adjacent r1 r2)
     (do
-      #_(println (str r1 " " r2 " -> " [(inc (second r1)) (dec (first r2))]))
       [(inc (second r1)) (dec (first r2))])))
 
 (defn get-largest-range
@@ -58,7 +57,7 @@
 
             ;; union two ranges
             (= (inc (second longest)) (first next))
-            (recur (merge longest next)))))
+            (recur (grow longest next)))))
       nil)))
 
 (defn get-completing-preds
