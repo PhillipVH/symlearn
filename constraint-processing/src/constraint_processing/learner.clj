@@ -5,6 +5,7 @@
             [clojure.string :as str]
             [clojure.java.shell :refer [sh]]
             [taoensso.carmine :as car :refer [wcar]]
+            [taoensso.tufte :as tufte]
             [constraint-processing.core :as paths]
             [constraint-processing.sfa :as sfa]
             [constraint-processing.ranges :as ranges])
@@ -20,9 +21,8 @@
 
 (defn make-concrete
   [path]
-  (for [[min max] path]
-    min
-    #_(+ min (rand-int (- (inc (if (= max Integer/MAX_VALUE) (dec (Integer/MAX_VALUE)) max)) min)))))
+  (for [[min _] path]
+    min))
 
 (defn mixed->concrete
   "Take a (potentially mixed) seq of constraints,
@@ -59,8 +59,14 @@
   (map #(member? (mixed->concrete (conj (vec path) %))) evidence))
 
 (defn fill-entry
+  "Returns an entry where a membership query has been issued for each piece of evidence."
   [entry evidence]
-  (assoc entry :row (into [] (check-membership (:path entry) evidence))))
+  (let [{:keys [row path]} entry
+        row-length (count row)
+        evidence-length (count evidence)]
+    (if-not (= row-length evidence-length)
+      (tufte/p ::fill-entry (assoc entry :row (into [] (check-membership path evidence))))
+      entry)))
 
 (defn fill-entries
   [entries evidence]
@@ -479,7 +485,7 @@
 
       (while (not= 1 (wcar* (car/exists "refined"))))
 
-      (let [refined-path (wcar* (car/get "refined"))]
+      (let [refined-path (tufte/p ::refine-path (wcar* (car/get "refined")))]
         (wcar* (car/del "refined"))
         (read-string refined-path)))))
 
@@ -521,7 +527,6 @@
             []
             paths)))
 
-
 (defn apply-ces-from-sfa
   [table db ces]
   (reduce (fn [[db table] ce]
@@ -549,7 +554,7 @@
 
         (let [sfa (build-sfa table)
               ce-from-db (run-all-from-db sfa db)
-              ces-from-sfa (check-sfa-paths sfa (make-queries sfa rev-depth-limit))]
+              ces-from-sfa (tufte/p ::check-sfa-paths (check-sfa-paths sfa (make-queries sfa rev-depth-limit)))]
           (cond
 
             ;; ;; Do a forward equivalence query and handle the evidence prefix addition
@@ -569,7 +574,7 @@
 
             ;; Do a backward equivalence check
             (not (empty? ces-from-sfa))
-            (let [[db' table'] (apply-ces-from-sfa table db ces-from-sfa)]
+            (let [[db' table'] (tufte/p ::apply-ces-from-sfa (apply-ces-from-sfa table db ces-from-sfa))]
               (if (= @prev-table table')
                 (with-meta table' {:reverse true})
                 (do
