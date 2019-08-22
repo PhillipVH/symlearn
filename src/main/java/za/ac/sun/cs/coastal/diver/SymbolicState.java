@@ -564,6 +564,7 @@ public class SymbolicState implements State {
 
 			int length;
 
+			// Interactive
 			if (concreteValues == null) {
 				length = Array.getLength(currentArray);
 				setArrayLength(arrayId, length);
@@ -572,6 +573,7 @@ public class SymbolicState implements State {
 				setArrayLength(arrayId, length);
 			}
 
+			// Batch
 //			length = Array.getLength(currentArray);
 //			setArrayLength(arrayId, length);
 
