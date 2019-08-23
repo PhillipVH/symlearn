@@ -30,7 +30,7 @@
                   (assoc acc state (ranges/get-largest-range predicates)))
                 {}
                 (state-predicates sfa))
-        nil-states (sp/select [sp/MAP-VALS (sp/pred nil?)] total-range-per-state)]
+        nil-states (sp/select [sp/MAP-VALS (sp/pred #(or (nil? %) (not= % [0 Integer/MAX_VALUE])))] total-range-per-state)]
     (empty? nil-states)))
 
 (defn complete

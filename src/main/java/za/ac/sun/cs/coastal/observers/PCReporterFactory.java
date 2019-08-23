@@ -74,7 +74,7 @@ public class PCReporterFactory implements ObserverFactory {
 		
 		private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
 		
-		private final String output_name = "learn-large-1";
+		private final String output_name = "paper-example-1";
 
 		
 		PCReporterManager(COASTAL coastal) {

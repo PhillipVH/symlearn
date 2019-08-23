@@ -37,6 +37,12 @@
        (map record->run)
        (into #{})))
 
+(defn sorted-paths
+  [db]
+  (sort #(compare (count (:path %1))
+                  (count (:path %2)))
+        db))
+
 (defn build-db
   [filename]
   (->> (io/resource filename)
@@ -96,11 +102,6 @@
   (for [n (range (count path))]
     (->> path (drop n) (into []))))
 
-(defn sorted-paths
-  [db]
-  (sort #(compare (count (:path %1))
-                  (count (:path %2)))
-        db))
 
 (defn follow-paths
   ""
