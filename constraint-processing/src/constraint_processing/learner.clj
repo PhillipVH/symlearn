@@ -484,7 +484,9 @@
                                 []
                                 words)]
         (recur (dec depth) (conj queries new-queries)))
-      (flatten queries))))
+      (->> queries
+           flatten
+           (filter :artificial))))) ;; we only care about paths that have been generated using artificial input
 
 (defn refine-path
   [path]
@@ -575,7 +577,7 @@
 
               (if (= @prev-table table)
                 (do
-                  (pprint db)
+                  ;; (pprint db)
                   (with-meta table ce-from-db))
                 (do
                   (reset! prev-table table)
@@ -593,7 +595,7 @@
             ;; The learnt table
             :default
             (do
-              (pprint db)
+              ;; (pprint db)
               table)))))))
 
 (defn learn-with-coastal
