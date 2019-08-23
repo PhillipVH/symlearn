@@ -14,16 +14,15 @@
 ;; TACAS
 (tufte/profile {} (binding [learner/*parse-fn* #(TacasParser/parse %)]
    (let [db (paths/load-db-from-prefix "tacas-parser-" 1)
-         table (learner/learn-with-coastal-dynamic db 3)
+         table (learner/learn-with-coastal-dynamic db 1)
          learnt (learner/build-sfa table)]
      (sfa/sfa->img learnt))))
 
 ;; Paper example
 (tufte/profile {} (binding [learner/*parse-fn* #(PaperExample/parse %)]
                     (let [db (paths/load-db-from-prefix "paper-example-" 1)
-                          table (learner/learn-with-coastal-dynamic db 4)
+                          table (learner/learn-with-coastal-dynamic db 1)
                           learnt (learner/build-sfa table)]
-                      #_(spit "paper-example-rev4.table" table)
                       (sfa/sfa->img learnt))))
 
 

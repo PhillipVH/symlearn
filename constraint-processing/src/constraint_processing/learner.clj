@@ -65,8 +65,8 @@
         row-length (count row)
         evidence-length (count evidence)]
     (if-not (= row-length evidence-length)
-      (tufte/p ::fill-entry (assoc entry :row (into [] (check-membership path evidence))))
-      entry)))
+      (tufte/p ::fill-entry (assoc entry :row (vec (check-membership path evidence))))
+      (tufte/p ::no-fill-entry entry))))
 
 (defn fill-entries
   [entries evidence]
@@ -348,13 +348,19 @@
 
 (defn make-evidences
   [path]
-  (map #(concat [:c] %) (paths/suffixes (map first path))))
+  (vec (map #(vec (concat [:c] %)) (paths/suffixes (map first path)))))
+
+
 
 (defn apply-evidences
   [table evidences]
   (reduce
    (fn [new-table evidence]
-     (if-not (row-equivalent? new-table evidence)
+     (let [old-evidence (set (:E table))]
+       (if (contains? old-evidence evidence)
+         new-table
+         (add-evidence new-table evidence)))
+     #_(if-not (row-equivalent? new-table evidence)
        (add-evidence new-table evidence)
        new-table))
    table
@@ -435,9 +441,12 @@
   (reduce (fn [children trans]
             (let [child-parent (conj (:parent node) (:input trans))
                   child-label (:to trans)
+                  ?artificial (:artificial trans)
                   child {:parent child-parent
                          :label child-label}]
-              (conj children child)))
+              (if ?artificial
+                (conj children (assoc child :artificial true))
+                (conj children child))))
           []
           (get trans-table (:label node))))
 
@@ -467,8 +476,11 @@
       (let [words (induce-words sfa depth)
             new-queries (reduce (fn [queries word]
                                   (let [accept (contains? (:final-states sfa) (:label word))
-                                        path (:parent word)]
-                                    (conj queries {:accepted accept :path path})))
+                                        path (:parent word)
+                                        ?artificial (:artificial word)]
+                                    (if ?artificial
+                                      (conj queries {:accepted accept, :path path, :artificial true})
+                                      (conj queries {:accepted accept, :path path}))))
                                 []
                                 words)]
         (recur (dec depth) (conj queries new-queries)))
@@ -506,9 +518,6 @@
             (recur (rest paths))
             path))))))
 
-
-
-
 (defn check-sfa-paths
   [sfa db]
   (let [paths (paths/sorted-paths db)]
@@ -534,7 +543,7 @@
                   new-entry {:accepted accepted, :path refined}
                   evidence (make-evidences refined)
                   table-with-ce (process-ce table new-entry)
-                  table-with-evidence (apply-evidences table-with-ce evidence)]
+                  table-with-evidence (tufte/p ::apply-evidences (apply-evidences table-with-ce evidence))]
               [(conj db new-entry) (close table-with-evidence (conj db new-entry)) #_(if-not (closed? table-with-evidence)
                                      (close table-with-evidence (conj db new-entry))
                                      table-with-evidence)]))
@@ -554,7 +563,7 @@
 
         (let [sfa (build-sfa table)
               ce-from-db (run-all-from-db sfa db)
-              ces-from-sfa (tufte/p ::check-sfa-paths (check-sfa-paths sfa (make-queries sfa rev-depth-limit)))]
+              ces-from-sfa (tufte/p ::check-sfa-paths (check-sfa-paths sfa (tufte/p ::make-queries (make-queries sfa rev-depth-limit))))]
           (cond
 
             ;; ;; Do a forward equivalence query and handle the evidence prefix addition
