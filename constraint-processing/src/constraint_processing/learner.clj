@@ -484,9 +484,13 @@
                                 []
                                 words)]
         (recur (dec depth) (conj queries new-queries)))
-      (->> queries
-           flatten
-           (filter :artificial))))) ;; we only care about paths that have been generated using artificial input
+      (let [artificial-queries (->> queries
+                                    flatten
+                                    (filter :artificial))] ;; we only care about paths that have been generated using artificial input
+        (if (= (count artificial-queries) 0) ;; if no artifical queries, run the full base set
+          (flatten queries)
+          artificial-queries)
+        ))))
 
 (defn refine-path
   [path]
@@ -503,22 +507,22 @@
         (wcar* (car/del "refined"))
         (read-string refined-path)))))
 
-(defn run-all-from-sfa
-  [sfa db]
-  (let [paths (paths/sorted-paths db)]
-    (loop [paths paths]
-      (if (empty? paths)
-        true
-        (let [path (first paths)
-              should-accept (:accepted path)
-              input (make-concrete (:path path))
-              accepted (member? input)]
-          (when (not= (:path path) (refine-path (:path path)))
-            (println "New path discovered")
-            (println (str "SFA path: " (:path path) "\nCoastal path: " (refine-path (:path path)))))
-          (if (= accepted should-accept)
-            (recur (rest paths))
-            path))))))
+;; (defn run-all-from-sfa
+;;   [sfa db]
+;;   (let [paths (paths/sorted-paths db)]
+;;     (loop [paths paths]
+;;       (if (empty? paths)
+;;         true
+;;         (let [path (first paths)
+;;               should-accept (:accepted path)
+;;               input (make-concrete (:path path))
+;;               accepted (member? input)]
+;;           (when (not= (:path path) (refine-path (:path path)))
+;;             (println "New path discovered")
+;;             (println (str "SFA path: " (:path path) "\nCoastal path: " (refine-path (:path path)))))
+;;           (if (= accepted should-accept)
+;;             (recur (rest paths))
+;;             path))))))
 
 (defn check-sfa-paths
   [sfa db]
@@ -532,7 +536,7 @@
                       accepted (member? (make-concrete refined))]
                   (if (not= path refined)
                     (do
-                      (println (str "New path discovered: " path " -> " refined))
+                      ;; (println (str "New path discovered: " path " -> " refined))
                       (conj critical-paths {:path path, :refined refined, :accepted accepted}))
                     critical-paths))))
             []
