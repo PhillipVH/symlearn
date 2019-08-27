@@ -14,15 +14,22 @@
            SingleParser
            LearnLarge))
 
-(def redis-conn {:pool {} :spec {:host "127.0.0.1" :port 6379}}) ; See `wcar` docstring for opts
-(defmacro wcar* [& body] `(car/wcar redis-conn ~@body))
+(def redis-conn
+  "The default connection details for Redis running on localhost."
+  {:pool {} :spec {:host "127.0.0.1" :port 6379}})
 
-(def ^:dynamic *parse-fn* #(TacasParser/parse %))
+(defmacro wcar*
+  "Wraps Redis commands in a `car/wcar`."
+  [& body] `(car/wcar redis-conn ~@body))
+
+(def ^:dynamic *parse-fn*
+  "A function wrapper for the underlying parser."
+  #(TacasParser/parse %))
 
 (defn make-concrete
+  "Return a seq of the first element of every constraint in `path`."
   [path]
-  (for [[min _] path]
-    min))
+  (map first path))
 
 (defn mixed->concrete
   "Take a (potentially mixed) seq of constraints,
@@ -43,14 +50,11 @@
                          path)]
     (into [] concrete)))
 
-(defn int-arr
-  [list]
-  (into-array Integer/TYPE list))
-
 (defn member?
-  [w]
-  (*parse-fn* (int-arr w))
-  #_(LearnLarge/parse (int-arr w)))
+  "Return the result of calling `*parse-fun*` with `input`, true if the parser accepts,
+  false if it rejects."
+  [input]
+  (*parse-fn* (into-array Integer/TYPE input)))
 
 (defn check-membership
   "Takes a path condition and a seq of evidence. Returns
@@ -92,7 +96,7 @@
    :E [[]]})
 
 (defn add-r
-  "Add a single row into the R section of the observation table."
+  "Add a single row into the R section of `table`. Calls `fill` after adding."
   [table r]
   (let [prefixes (paths/prefixes r)
         s-paths (into #{} (map :path (:S table)))
@@ -105,9 +109,10 @@
     (fill new-table)))
 
 (defn add-rs
+  "Returns `table` after every path in `rs` has been added to R."
   [table rs]
-  (reduce (fn [new-table r]
-            (add-r new-table (:path r)))
+  (reduce (fn [new-table {:keys [path]}]
+            (add-r new-table path))
           table
           rs))
 
@@ -123,12 +128,14 @@
     (fill new-table)))
 
 (defn process-ce
-  [table ce]
+  "Return `table` after adding `path` to R. Calls `fill` after promoting."
+  [table {:keys [path]}]
   (-> table
-      (add-r (:path ce))
+      (add-r path)
       (fill)))
 
 (defn promote
+  "Return `table` after moving `path` from R to S. Calls `fill` after promoting."
   [table path]
   (-> table
       (update :R (fn [entries] (vec (filter #(not= (:path %) path) entries))))
@@ -136,23 +143,25 @@
       (fill)))
 
 (defn closed?
+  "Returns true if all rows patterns in R appear in S."
   [table]
-  (let [r-rows (into #{} (map first (group-by :row (:R table))))
-        s-rows (into #{} (map first (group-by :row (:S table))))]
-    (if (set/subset? r-rows s-rows)
-      true
-      false)))
+  (let [r-rows (set (map first (group-by :row (:R table))))
+        s-rows (set (map first (group-by :row (:S table))))]
+    (set/subset? r-rows s-rows)))
 
 (defn get-close-candidates
+  "Return a rows from R in `table` that do not appear in S."
   [table]
   (let [r-rows (into #{} (map first (group-by :row (:R table))))
         s-rows (into #{} (map first (group-by :row (:S table))))]
     (if-not (set/subset? r-rows s-rows)
       (let [candidate-rows (set/difference r-rows s-rows)
             candidate-row (first candidate-rows)]
-        (into #{} (filter #(= candidate-row (:row %)) (:R table)))))))
+        (set (filter #(= candidate-row (:row %)) (:R table)))))))
 
 (defn close
+  "Return `table` after attempting a close operation. If successful, an entry
+  from R will be moved to S."
   [table db]
   (let [close-candidate (-> table get-close-candidates first :path)
         follow-candidates (paths/follow-paths close-candidate db)]
@@ -165,6 +174,7 @@
             (add-rs follow-candidates))))))
 
 (defn add-evidence
+  "Return `table` with `evidence` added to E. Calls `fill` after adding."
   [table evidence]
   (-> table
       (update :E #(conj % evidence))
@@ -180,8 +190,8 @@
        first))
 
 (defn get-prefix-pairs
-  "Given an observation table, produce the proper prefix pairs,
-  such that (len u1) == (dec (len u2))."
+  "Given an observation table, produce the proper prefix pairs, such that
+  (len u1) == (dec (len u2)). These pairs are used to synthesize transitions."
   [table]
   (let [states (:S table)
         entries (set/union (:R table) (:S table))
@@ -200,9 +210,9 @@
          (into []))))
 
 (defn pair->transition
+  "Return an SFA transition constructed from `prefix-pair`."
   [table prefix-pair]
-  (let [from (first prefix-pair)
-        to (second prefix-pair)
+  (let [[from to] prefix-pair
         from-row (:row from)
         to-row (:row to)]
     {:from (:path (row->entry table from-row))
@@ -210,15 +220,17 @@
      :to (:path (row->entry table to-row))}))
 
 (defn pairs->transitions
+  "Transform pairs of rows from `prefix-pairs` into SFA transitions."
   [table prefix-pairs]
-  (->> (for [pair prefix-pairs]
-         (if (= (first pair) (second pair))
+  (->> (for [[from to] prefix-pairs]
+         (if (= from to)
            []
-           (pair->transition table pair)))
+           (pair->transition table [from to])))
        (filter #(not= nil (:input %)))
-       (into [])))
+       vec))
 
 (defn get-transitions
+  "Return the transitions encoded in `table`."
   [table]
   (let [states (:S table)
         prefix-pairs (get-prefix-pairs table)
@@ -245,6 +257,9 @@
        vec))
 
 (defn build-sfa
+  "Returns an SFA constructed from `table`. If information in `table` is not
+  sufficient to construct a complete SFA, the incomplete SFA will be artificially
+  completed."
   [table]
   (let [transitions (get-transitions table)
         state-map (get-state-map table)
@@ -260,9 +275,8 @@
              :final-states final-states
              :states (set (vals state-map))}]
     (if-not (sfa/complete? sfa)
-      (with-meta (sfa/complete sfa) {:completed true})
-      (with-meta sfa {:completed false}))))
-
+      (sfa/complete sfa)
+      sfa)))
 
 (defn execute-sfa
   "Takes an SFA and a vector of input, and returns the acceptance status of the
@@ -276,32 +290,6 @@
                                  (get (:transitions sfa) state)))]
         (recur (:to trans) (rest input))))))
 
-(defn get-intersecting-pairs
-  [from-to-pairs]
-  (for [pair from-to-pairs]
-    (for [transition (first (drop 1 pair))]
-      (reduce (fn [intersections other-transition]
-                (cond
-                  (= transition other-transition)
-                  intersections
-
-                  (ranges/intersects? (:input transition) (:input other-transition))
-                  (conj intersections #{transition other-transition})
-
-                  :else
-                  intersections))
-              []
-              (first (drop 1 pair))))))
-
-(defn get-inconsistent-transitions
-  [table]
-  (let [transitions (-> (build-sfa table) :transitions vals)
-        f-transitions (mapcat identity transitions)
-        from-to-pairs (->> f-transitions (group-by (juxt :from)))]
-    (->> (get-intersecting-pairs from-to-pairs)
-         (flatten)
-         (apply set/union))))
-
 (defn row-equivalent?
   "Return true if `evidence` does not expose a new row in `table`, false otherwise."
   [table evidence]
@@ -314,11 +302,9 @@
         new-rows (set/union new-s-rows new-r-rows)]
     (= (count new-rows) (count old-rows))))
 
-(defn consistent?
-  [table]
-  (empty? (get-inconsistent-transitions table)))
-
 (defn run-all-from-db
+  "Run every input from `db` through `sfa` and compare to the expected result.
+  Returns true if all results match expected."
   [sfa db]
   (let [paths (paths/sorted-paths db)]
     (loop [paths paths]
@@ -334,17 +320,16 @@
 
 
 (defn make-evidences
+  "Convert `path` and its suffixes into a concrete inputs."
   [path]
   (vec (map #(vec (concat [:c] %)) (paths/suffixes (map first path)))))
 
 (defn apply-evidences
+  "Apply each piece of evidence in `evidences` to `table`. If the evidence does
+  results in a row equivalent table, discard the evidence."
   [table evidences]
   (reduce
    (fn [new-table evidence]
-     (let [old-evidence (set (:E table))]
-       #_(if (contains? old-evidence evidence)
-         new-table
-         (add-evidence new-table evidence)))
      (if-not (row-equivalent? new-table evidence)
        (add-evidence new-table evidence)
        new-table))
@@ -373,9 +358,9 @@
          reverse
          (take n)
          reverse
-         (into []))))
+         vec)))
 
-(defn expand-node
+(defn- expand-node
   "Takes a node and returns all the children of that node.
   Each child has the transition that generated them as a field."
   [trans-table node]
@@ -391,7 +376,7 @@
           []
           (get trans-table (:label node))))
 
-(defn depth-limited-search
+(defn- depth-limited-search
   "Takes an SFA and generates all the words of length N "
   [node n tt]
   (if-not (>= 0 n)
@@ -400,16 +385,18 @@
         (depth-limited-search child (dec n) tt)))
     node))
 
-(def dls depth-limited-search #_(memoize depth-limited-search))
-
-(defn induce-words
+(defn- induce-words
+  "Driver function for `depth-limited-search.`"
   [sfa n]
   (let [root {:parent []
               :label (:initial-state sfa)}
         tt (:transitions sfa)]
-    (flatten (dls root n tt))))
+    (flatten (depth-limited-search root n tt))))
 
 (defn make-queries
+  "Return a database of inputs and expected outputs of `sfa`, length limited by `depth`.
+  If the database contains inputs generated with artificial paths, return only those
+  inputs, otherwise return the full set of inputs."
   [sfa depth]
   (loop [depth depth
          queries []]
@@ -433,6 +420,7 @@
           artificial-queries)))))
 
 (defn refine-path
+  "Return the exact constraints along `path` by invoking a Coastal diver."
   [path]
   (if (= path [])
     []
@@ -447,48 +435,21 @@
         (wcar* (car/del "refined"))
         (read-string refined-path)))))
 
-;; (defn run-all-from-sfa
-;;   [sfa db]
-;;   (let [paths (paths/sorted-paths db)]
-;;     (loop [paths paths]
-;;       (if (empty? paths)
-;;         true
-;;         (let [path (first paths)
-;;               should-accept (:accepted path)
-;;               input (make-concrete (:path path))
-;;               accepted (member? input)]
-;;           (when (not= (:path path) (refine-path (:path path)))
-;;             (println "New path discovered")
-;;             (println (str "SFA path: " (:path path) "\nCoastal path: " (refine-path (:path path)))))
-;;           (if (= accepted should-accept)
-;;             (recur (rest paths))
-;;             path))))))
-
-
 (defn check-sfa-paths
-  [sfa db]
-  (let [paths (paths/sorted-paths db)]
-    (reduce (fn [critical-paths {:keys [path]}]
-              (if (or
-                   (contains? (set (map first path)) 2147483648)
-                   (contains? (set (map second path)) -1)
-                   (contains? (set (map first path)) -1))
-                critical-paths
-                (let [refined (refine-path path)
-                      accepted (member? (make-concrete refined))]
-                  (if (not= path refined)
-                    (do
-                      ;; (println (str "New path discovered: " path " -> " refined))
-                      (conj critical-paths {:path path, :refined refined, :accepted accepted}))
-                    critical-paths))))
-            []
-            paths)))
-
-(defn exposes-state?
-  "Return the evidence from the `evidences` that exposes a new state in the SFA."
-  [table evidences]
-  (let [lol (map #(row-equivalent? table %) evidences)]
-    #_(println lol)))
+  [sfa paths]
+  (reduce (fn [critical-paths {:keys [path]}]
+            (if (or
+                 (contains? (set (map first path)) 2147483648) ;; FIXME nasty hack to deal with cases where the SFA is incomplete
+                 (contains? (set (map second path)) -1)
+                 (contains? (set (map first path)) -1))
+              critical-paths
+              (let [refined (refine-path path)
+                    accepted (member? (make-concrete refined))]
+                (if (not= path refined)
+                  (conj critical-paths {:path path, :refined refined, :accepted accepted})
+                  critical-paths))))
+          []
+          paths))
 
 (defn apply-ces-from-sfa
   [table db ces]
@@ -497,19 +458,19 @@
                   new-entry {:accepted accepted, :path refined}
                   evidence (make-evidences refined)
                   table-with-ce (process-ce table new-entry)
-                  table-with-evidence (tufte/p ::apply-evidences (apply-evidences table-with-ce evidence))
-                  ]
-              [(conj db new-entry) (close table-with-evidence (conj db new-entry)) #_(if-not (closed? table-with-evidence)
-                                     (close table-with-evidence (conj db new-entry))
-                                     table-with-evidence)]))
-          [(set db) table]
+                  table-with-evidence (tufte/p ::apply-evidences (apply-evidences table-with-ce evidence))]
+              [(conj db new-entry) (close table-with-evidence (conj db new-entry))]))
+          [db table]
           ces))
 
 (defn learn-with-coastal-dynamic
-  [db rev-depth-limit]
+  "Return an table learnt with seed database `db` and a reverse equivalence
+  check up to `depth`. The learnt table has metadata attached describing why
+  the learning halted."
+  [db depth & opts]
+  (pprint opts)
   (let [counter (atom 0)
-        prev-table (atom nil)
-        table->img #(sfa/sfa->img (build-sfa %))]
+        prev-table (atom nil)]
     (loop [db db
            table (init-table (make-table) db)]
       (swap! counter inc)
@@ -518,92 +479,30 @@
 
         (let [sfa (build-sfa table)
               ce-from-db (run-all-from-db sfa db)
-              ces-from-sfa (tufte/p ::check-sfa-paths (check-sfa-paths sfa (tufte/p ::make-queries (make-queries sfa rev-depth-limit))))]
+              ces-from-sfa (tufte/p ::check-sfa-paths (check-sfa-paths sfa (tufte/p ::make-queries (make-queries sfa depth))))]
           (cond
-
-            ;; ;; Do a forward equivalence query and handle the evidence prefix addition
+            ;; Forward equivalence check
             (map? ce-from-db)
             (let [counter-example (:path ce-from-db)
                   table-with-ce (process-ce table {:path counter-example})
                   evidences (make-evidences #_counter-example (suffix-difference counter-example (longest-matching-prefix db counter-example)))
                   table-with-evidence (apply-evidences table-with-ce evidences)]
 
-              (if (= @prev-table table)
-                (do
-                  ;; (pprint db)
-                  (with-meta table ce-from-db))
+              (if (= @prev-table table-with-evidence)
+                (with-meta table {:reason :fixed-point, :stage :forward-equivalence, :input ce-from-db})
                 (do
                   (reset! prev-table table)
                   (recur db table-with-evidence))))
 
-            ;; Do a backward equivalence check
+            ;; Reverse equivalence check
             (not (empty? ces-from-sfa))
             (let [[db' table'] (tufte/p ::apply-ces-from-sfa (apply-ces-from-sfa table db ces-from-sfa))]
               (if (= @prev-table table')
-                (with-meta table' {:reverse true})
+                (with-meta table' {:reason :fixed-point, :stage :backward-equivalence, :inputs ces-from-sfa})
                 (do
                   (reset! prev-table table')
                   (recur db' table'))))
 
-            ;; The learnt table
+            ;; Return the learnt table
             :default
-            (do
-              ;; (pprint db)
-              table)))))))
-
-;; (defn learn-with-coastal
-;;   [db rev-depth-limit]
-;;   (let [counter (atom 0)
-;;         prev-table (atom nil)
-;;         table->img #(sfa/sfa->img (build-sfa %))]
-;;     (loop [db db
-;;            table (init-table (make-table) db)]
-;;       (swap! counter inc)
-;;       (let [sfa (build-sfa table)
-;;             ce-from-db (run-all-from-db sfa db)
-;;             ce-from-sfa (run-all-from-sfa sfa (make-queries sfa rev-depth-limit))]
-;;         (cond
-;;           ;; First handle the case in which the table is not closed
-;;           (not (closed? table))
-;;           (let [closed-table (close table db)]
-;;             (recur db closed-table))
-
-;;           ;; ;; Do a forward equivalence query and handle the evidence prefix addition
-;;           (map? ce-from-db)
-;;           (let [counter-example (:path ce-from-db)
-;;                 table-with-ce (process-ce table {:path counter-example})
-;;                 evidences (make-evidences counter-example #_(suffix-difference counter-example (longest-matching-prefix db counter-example)))
-;;                 table-with-evidence (apply-evidences table-with-ce evidences)]
-
-;;             ;; (println "Forward: " ce-from-db)
-;;             (if (= @prev-table table)
-;;               (with-meta table ce-from-db)
-;;               (do
-;;                 (reset! prev-table table)
-;;           (recur db table-with-evidence))))
-
-;;           ;; Do a backward equivalence check
-;;           (map? ce-from-sfa)
-;;           (let [ce ce-from-sfa
-;;                 counter-example (:path ce)
-;;                 current-sfa (build-sfa table)
-;;                 should-accept (not (:accepted ce))
-;;                 refined (refine-path counter-example)
-;;                 lmp (:path (longest-matching-prefix db refined))
-;;                 #_feasible-refined #_(vec (take (inc (count lmp)) refined))
-;;                 feasible-evidence (make-evidences refined #_feasible-refined)
-;;                 table-with-ce (process-ce table {:path refined #_feasible-refined})
-;;                 table-with-refined-evidence (apply-evidences table-with-ce feasible-evidence)
-;;                 new-entry {:accepted should-accept, :path refined}]
-
-;;             ;; (println "Reverse (Induced): " counter-example)
-;;             ;; (println "Reverse (Refined): " refined)
-;;             (if (= @prev-table table)
-;;               (with-meta table ce-from-sfa)
-;;               (do
-;;                 (reset! prev-table table)
-;;                 (recur (paths/sorted-paths (conj db new-entry)) table-with-refined-evidence))))
-
-;;           ;; The learnt table
-;;           :default
-;;           table)))))
+            (with-meta table {:reason :complete})))))))
