@@ -33,7 +33,7 @@
 
 ;; Learn Large -- gets very slow
 (with-profiling
-  (let [table (learner/learn 5 #(LearnLarge/parse %))
+  (let [table (learner/learn 2 #(LearnLarge/parse %))
         learnt (table/table->sfa table)]
     (pprint table)
     (sfa/sfa->img learnt)))
