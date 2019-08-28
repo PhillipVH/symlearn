@@ -118,7 +118,7 @@
         (if-not (table/closed? table)
           (recur db (table/close table db))
 
-          (let [sfa (sfa/table->sfa table)
+          (let [sfa (table/table->sfa table)
                 ce-from-db (sfa/run-all-from-db sfa db)
                 ces-from-sfa (check-sfa-paths sfa (tufte/p ::make-queries (make-queries sfa depth)))]
             (cond

@@ -6,8 +6,7 @@
             [clojure.set :as set]
             [clojure.pprint :refer [pprint]]
             [clojure.java.shell :as sh]
-            [com.rpl.specter :as sp]
-            [constraint-processing.table :as table]))
+            [com.rpl.specter :as sp]))
 
 (defn state-predicates
   "Returns a mapping from state number to predicates on transitions in `sfa`
@@ -122,96 +121,3 @@
   (sh/sh "xdg-open" "tmp.png")
   (sh/sh "rm" "tmp.png")
   (sh/sh "rm" "tmp.dot"))
-
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Table to SFA conversion functions
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn get-prefix-pairs
-  "Given an observation table, produce the proper prefix pairs, such that
-  (len u1) == (dec (len u2)). These pairs are used to synthesize transitions."
-  [table]
-  (let [states (:S table)
-        entries (set/union (:R table) (:S table))
-        prefixes (reduce (fn [transitions entry]
-                           (->> entries
-                                (map (juxt identity
-                                           (constantly entry)
-                                           #(paths/prefix? (:path %) (:path entry))))
-                                (filter last)
-                                (into [])
-                                (conj transitions)))
-                         []
-                         entries)]
-    (->> prefixes
-         (mapcat identity)
-         (into []))))
-
-(defn pair->transition
-  "Return an SFA transition constructed from `prefix-pair`."
-  [table prefix-pair]
-  (let [[from to] prefix-pair
-        from-row (:row from)
-        to-row (:row to)]
-    {:from (:path (table/row->entry table from-row))
-     :input (last (:path to))
-     :to (:path (table/row->entry table to-row))}))
-
-(defn pairs->transitions
-  "Transform pairs of rows from `prefix-pairs` into SFA transitions."
-  [table prefix-pairs]
-  (->> (for [[from to] prefix-pairs]
-         (if (= from to)
-           []
-           (pair->transition table [from to])))
-       (filter #(not= nil (:input %)))
-       vec))
-
-(defn get-transitions
-  "Return the transitions encoded in `table`."
-  [table]
-  (let [states (:S table)
-        prefix-pairs (get-prefix-pairs table)
-        transitions (pairs->transitions table prefix-pairs)]
-    transitions))
-
-(defn get-state-map
-  "Returns a mapping from paths in S to monotonic natural numbers."
-  [table]
-  (as-> table $
-    (:S $)
-    (map first $)
-    (map second $)
-    (map vector $ (iterate inc 0))
-    (into {} $)))
-
-(defn get-final-states
-  "Returns a vector of final states, labeled as per `get-state-map`."
-  [table state-map]
-  (->> (:S table)
-       (filter #(first (:row %)))
-       (map :path)
-       (map (partial get state-map))
-       vec))
-
-(defn table->sfa
-  "Returns an SFA constructed from `table`. If information in `table` is not
-  sufficient to construct a complete SFA, the incomplete SFA will be artificially
-  completed."
-  [table]
-  (let [transitions (get-transitions table)
-        state-map (get-state-map table)
-        final-states (set (get-final-states table state-map))
-        simple-transitions (reduce (fn [steps transition]
-                                     (conj steps {:from (get state-map (:from transition))
-                                                  :input (:input transition)
-                                                  :to (get state-map (:to transition))}))
-                                   #{}
-                                   transitions)
-        sfa {:transitions (group-by :from simple-transitions)
-             :initial-state (get state-map [])
-             :final-states final-states
-             :states (set (vals state-map))}]
-    (if-not (complete? sfa)
-      (complete sfa)
-      sfa)))
