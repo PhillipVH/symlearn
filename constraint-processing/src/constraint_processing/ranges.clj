@@ -60,7 +60,7 @@
             (recur (grow longest next)))))
       nil)))
 
-(defn get-completing-preds
+(defn get-completing-predicates
   [ranges]
   (let [preds (sort-by first ranges)
         completing-preds

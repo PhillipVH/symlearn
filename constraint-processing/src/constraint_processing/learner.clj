@@ -104,14 +104,14 @@
           [db table]
           ces))
 
-(defn learn-with-coastal-dynamic
+(defn learn
   "Return an table learnt with seed database `db` and a reverse equivalence
   check up to `depth`. The learnt table has metadata attached describing why
   the learning halted."
-  [db depth]
+  [depth]
   (let [counter (atom 0)
         prev-table (atom nil)]
-    (loop [db db
+    (loop [db (coastal/get-seed-inputs)
            table (table/init-table (table/make-table) db)]
       (swap! counter inc)
       (if-not (table/closed? table)

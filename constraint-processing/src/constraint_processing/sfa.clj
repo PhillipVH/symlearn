@@ -43,7 +43,7 @@
   (let [state-predicates (state-predicates sfa)]
     (reduce (fn [sfa state]
               (update-in sfa [:transitions state]
-                         #(vec (concat % (flatten (predicates->transitions (ranges/get-completing-preds (sp/select [state sp/ALL] state-predicates)) state))))))
+                         #(vec (concat % (flatten (predicates->transitions (ranges/get-completing-predicates (sp/select [state sp/ALL] state-predicates)) state))))))
             sfa
             (:states sfa))))
 
