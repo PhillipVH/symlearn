@@ -13,30 +13,27 @@
            TacasParser
            PaperExample))
 
-(defmacro with-parse-fn
-  "Rebind `constraint-processing.table/*parse-fn*` to `parse-fn`, and
-  then evaluate `body` inside of the binding. Also wraps the form in
-  a Tufte profile form."
-  [parse-fn & body]
-  `(tufte/profile {} (binding [table/*parse-fn* ~parse-fn]
-      ~@body)))
+(defmacro with-profiling
+  "Wrap `body` in a profiling form."
+  [& body]
+  `(tufte/profile {} ~@body))
 
 ;; TACAS -- works well! learning stalls at depth 3, finds evidence at depth 4
-(with-parse-fn #(TacasParser/parse %)
-  (let [table (learner/learn 3)
+(with-profiling
+  (let [table (learner/learn 3 #(TacasPaper/parse %))
         learnt (sfa/table->sfa table)]
     (sfa/sfa->img learnt)))
 
 ;; Paper example -- works well!
-(with-parse-fn #(PaperExample/parse %)
-  (let [table (learner/learn 4)
+(with-profiling
+  (let [table (learner/learn 4 #(PaperExample/parse %))
         learnt (sfa/table->sfa table)]
     (pprint table)
     (sfa/sfa->img learnt)))
 
 ;; Learn Large -- gets very slow
-(with-parse-fn #(LearnLarge/parse %)
-  (let [table (learner/learn 1)
+(with-profiling
+  (let [table (learner/learn 5 #(LearnLarge/parse %))
         learnt (sfa/table->sfa table)]
     (pprint table)
     (sfa/sfa->img learnt)))

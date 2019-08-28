@@ -108,41 +108,42 @@
   "Return an table learnt with seed database `db` and a reverse equivalence
   check up to `depth`. The learnt table has metadata attached describing why
   the learning halted."
-  [depth]
-  (let [counter (atom 0)
-        prev-table (atom nil)]
-    (loop [db (coastal/get-seed-inputs)
-           table (table/init-table (table/make-table) db)]
-      (swap! counter inc)
-      (if-not (table/closed? table)
-        (recur db (table/close table db))
+  [depth parse-fn]
+  (binding [table/*parse-fn* parse-fn]
+    (let [counter (atom 0)
+          prev-table (atom nil)]
+      (loop [db (coastal/get-seed-inputs)
+             table (table/init-table (table/make-table) db)]
+        (swap! counter inc)
+        (if-not (table/closed? table)
+          (recur db (table/close table db))
 
-        (let [sfa (sfa/table->sfa table)
-              ce-from-db (sfa/run-all-from-db sfa db)
-              ces-from-sfa (check-sfa-paths sfa (tufte/p ::make-queries (make-queries sfa depth)))]
-          (cond
-            ;; Forward equivalence check
-            (map? ce-from-db)
-            (let [counter-example (:path ce-from-db)
-                  table-with-ce (table/process-ce table ce-from-db)
-                  evidences (paths/make-evidences counter-example)
-                  table-with-evidence (table/apply-evidences table-with-ce evidences)]
+          (let [sfa (sfa/table->sfa table)
+                ce-from-db (sfa/run-all-from-db sfa db)
+                ces-from-sfa (check-sfa-paths sfa (tufte/p ::make-queries (make-queries sfa depth)))]
+            (cond
+              ;; Forward equivalence check
+              (map? ce-from-db)
+              (let [counter-example (:path ce-from-db)
+                    table-with-ce (table/process-ce table ce-from-db)
+                    evidences (paths/make-evidences counter-example)
+                    table-with-evidence (table/apply-evidences table-with-ce evidences)]
 
-              (if (= @prev-table table-with-evidence)
-                (with-meta table {:reason :fixed-point, :stage :forward-equivalence, :input ce-from-db})
-                (do
-                  (reset! prev-table table)
-                  (recur db table-with-evidence))))
+                (if (= @prev-table table-with-evidence)
+                  (with-meta table {:reason :fixed-point, :stage :forward-equivalence, :input ce-from-db})
+                  (do
+                    (reset! prev-table table)
+                    (recur db table-with-evidence))))
 
-            ;; Reverse equivalence check
-            (not (empty? ces-from-sfa))
-            (let [[db' table'] (tufte/p ::apply-ces-from-sfa (apply-ces-from-sfa table db ces-from-sfa))]
-              (if (= @prev-table table')
-                (with-meta table' {:reason :fixed-point, :stage :backward-equivalence, :inputs ces-from-sfa})
-                (do
-                  (reset! prev-table table')
-                  (recur db' table'))))
+              ;; Reverse equivalence check
+              (not (empty? ces-from-sfa))
+              (let [[db' table'] (tufte/p ::apply-ces-from-sfa (apply-ces-from-sfa table db ces-from-sfa))]
+                (if (= @prev-table table')
+                  (with-meta table' {:reason :fixed-point, :stage :backward-equivalence, :inputs ces-from-sfa})
+                  (do
+                    (reset! prev-table table')
+                    (recur db' table'))))
 
-            ;; Return the learnt table
-            :default
-            (with-meta table {:reason :equivalent})))))))
+              ;; Return the learnt table
+              :default
+              (with-meta table {:reason :equivalent}))))))))

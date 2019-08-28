@@ -61,6 +61,8 @@
       nil)))
 
 (defn get-completing-predicates
+  "Return a set of ranges that will complement `ranges` and cover the
+  entire domain."
   [ranges]
   (let [preds (sort-by first ranges)
         completing-preds
