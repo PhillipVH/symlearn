@@ -1,30 +1,30 @@
 (ns constraint-processing.user
-  (:require [clojure.pprint :refer [pprint]]
+  (:require [com.rpl.specter :as sp]
             [constraint-processing.learner :as learner]
-            [constraint-processing.core :as paths]
+            [constraint-processing.paths :as paths]
             [constraint-processing.sfa :as sfa]
-            [clojure.java.shell :as sh]
-            [taoensso.tufte :as tufte]
             [constraint-processing.ranges :as ranges]
-            [com.rpl.specter :as sp]
-            [clojure.set :as set])
+            [constraint-processing.table :as table]
+            [clojure.pprint :refer [pprint]]
+            [clojure.set :as set]
+            [taoensso.tufte :as tufte])
   (:import LearnLarge
            TacasParser
            PaperExample))
 
-;; TACAS -- errors at depth three
-(tufte/profile {} (binding [learner/*parse-fn* #(TacasParser/parse %)]
+;; TACAS -- works well! learning stalls at depth 3, finds evidence at depth 4
+(tufte/profile {} (binding [table/*parse-fn* #(TacasParser/parse %)]
    (let [db (paths/load-db-from-prefix "tacas-parser-" 1)
          table (learner/learn-with-coastal-dynamic db 3)
-         learnt (learner/build-sfa table)]
+         learnt (sfa/table->sfa table)]
      (pprint (meta table))
      (sfa/sfa->img learnt))))
 
 ;; Paper example -- works well!
-(tufte/profile {} (binding [learner/*parse-fn* #(PaperExample/parse %)]
+(tufte/profile {} (binding [table/*parse-fn* #(PaperExample/parse %)]
                     (let [db (paths/load-db-from-prefix "paper-example-" 1)
-                          table (learner/learn-with-coastal-dynamic db 4)
-                          learnt (learner/build-sfa table)]
+                          table (learner/learn-with-coastal-dynamic db 3)
+                          learnt (sfa/table->sfa table)]
                       (pprint table)
                       (sfa/sfa->img learnt))))
 
