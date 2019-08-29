@@ -20,20 +20,20 @@
 
 ;; TACAS -- works well! learning stalls at depth 3, finds evidence at depth 4
 (with-profiling
-  (let [table (learner/learn 4 #(TacasParser/parse %))
+  (let [table (learner/learn {:depth 4, :parse-fn #(TacasParser/parse %)})
         learnt (table/table->sfa table)]
     (sfa/sfa->img learnt)))
 
 ;; Paper example -- works well!
 (with-profiling
-  (let [table (learner/learn 4 #(PaperExample/parse %))
+  (let [table (learner/learn {:depth 4, :parse-fn #(PaperExample/parse %)})
         learnt (table/table->sfa table)]
     (pprint table)
     (sfa/sfa->img learnt)))
 
 ;; Learn Large -- gets very slow
 (with-profiling
-  (let [table (learner/learn 2 #(LearnLarge/parse %))
+  (let [table (learner/learn {:depth 2, :parse-fn #(LearnLarge/parse %)})
         learnt (table/table->sfa table)]
     (pprint table)
     (sfa/sfa->img learnt)))

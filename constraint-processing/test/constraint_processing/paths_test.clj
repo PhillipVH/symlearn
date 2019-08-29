@@ -6,7 +6,8 @@
    (let [path [[50 60]]]
      (testing "has one prefix, itself"
        (is (= 1 (count (paths/prefixes path))))
-       (is (= path (first (paths/prefixes path)))))
+       (is (= path (first (paths/prefixes path))))
+       (is (= true (paths/prefix? [] path)))) ;; the empty string is not returned by prefixes
      (testing "has one suffix, itself"
        (is (= 1 (count (paths/suffixes path))))
        (is (= path (first (paths/suffixes path)))))

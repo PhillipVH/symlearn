@@ -108,7 +108,7 @@
   "Return an table learnt with seed database `db` and a reverse equivalence
   check up to `depth`. The learnt table has metadata attached describing why
   the learning halted."
-  [depth parse-fn]
+  [{:keys [depth parse-fn]}]
   (binding [table/*parse-fn* parse-fn]
     (let [counter (atom 0)
           prev-table (atom nil)]
