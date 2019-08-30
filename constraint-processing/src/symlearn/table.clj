@@ -59,6 +59,10 @@
 
 (defn add-r
   "Add a single row into the R section of `table`. Calls `fill` after adding."
+  ; FIXME The learning algorithm calls `add-r` frequently, due to R being effectively all the
+  ; path conditions up to a certain depth. Instead of calling `fill`, just create the new
+  ; entries here, fill them manually with `fill-entry`, and see if that does anything for
+  ; performance.
   [table r]
   (let [prefixes (paths/prefixes r)
         s-paths (set (map :path (:S table)))
