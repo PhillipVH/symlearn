@@ -1,10 +1,10 @@
-(ns constraint-processing.coastal
+(ns symlearn.coastal
   (:require [clojure.string :as str]
             [taoensso.carmine :as car]
             [taoensso.tufte :as tufte]
-            [constraint-processing.paths :as paths]
-            [constraint-processing.ranges :as ranges]
-            [constraint-processing.table :as table]))
+            [symlearn.paths :as paths]
+            [symlearn.ranges :as ranges]
+            [symlearn.table :as table]))
 
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."

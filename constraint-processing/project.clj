@@ -1,4 +1,4 @@
-(defproject constraint-processing "0.1.0-SNAPSHOT"
+(defproject symlearn "0.1.0-SNAPSHOT"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
@@ -8,7 +8,7 @@
                  [com.taoensso/carmine "2.19.1"]
                  [com.taoensso/tufte "2.0.1"]
                  [com.rpl/specter "1.1.2"]]
-  :main ^:skip-aot constraint-processing.core
+  :main ^:skip-aot symlearn.user
   :java-source-paths ["src/main/java"]
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})

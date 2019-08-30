@@ -1,4 +1,4 @@
-(ns constraint-processing.learner
+(ns symlearn.learner
   (:require [clojure.pprint :refer [pprint]]
             [clojure.set :as set]
             [clojure.java.shell :as sh]
@@ -6,11 +6,11 @@
             [clojure.java.shell :refer [sh]]
             [taoensso.carmine :as car :refer [wcar]]
             [taoensso.tufte :as tufte]
-            [constraint-processing.paths :as paths]
-            [constraint-processing.sfa :as sfa]
-            [constraint-processing.coastal :as coastal]
-            [constraint-processing.ranges :as ranges]
-            [constraint-processing.table :as table])
+            [symlearn.paths :as paths]
+            [symlearn.sfa :as sfa]
+            [symlearn.coastal :as coastal]
+            [symlearn.ranges :as ranges]
+            [symlearn.table :as table])
   (:import Parser
            TacasParser
            SingleParser

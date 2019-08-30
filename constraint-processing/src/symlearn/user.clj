@@ -1,14 +1,14 @@
-(ns constraint-processing.user
+(ns symlearn.user
   (:require [com.rpl.specter :as sp]
-            [constraint-processing.learner :as learner]
-            [constraint-processing.paths :as paths]
-            [constraint-processing.sfa :as sfa]
-            [constraint-processing.ranges :as ranges]
-            [constraint-processing.table :as table]
+            [symlearn.learner :as learner]
+            [symlearn.paths :as paths]
+            [symlearn.sfa :as sfa]
+            [symlearn.ranges :as ranges]
+            [symlearn.table :as table]
             [clojure.pprint :refer [pprint]]
             [clojure.set :as set]
             [taoensso.tufte :as tufte]
-            [constraint-processing.coastal :as coastal])
+            [symlearn.coastal :as coastal])
   (:import LearnLarge
            TacasParser
            PaperExample))
@@ -28,7 +28,7 @@
          depth 1]
     (let [new-table (learner/learn {:depth depth, :parse-fn parse-fn})
           new-sfa (table/table->sfa new-table)]
-      (when display
+      (when display?
         (sfa/sfa->img new-sfa))
       (if (= previous-sfa new-sfa)
         {:sfa new-sfa, :table new-table, :depth depth}

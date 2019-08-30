@@ -1,4 +1,4 @@
-(ns constraint-processing.ranges
+(ns symlearn.ranges
   "Utilities to facilitate reasoning over ranges (of non-negative integers).")
 
 (defn adjacent

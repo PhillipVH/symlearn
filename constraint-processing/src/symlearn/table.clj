@@ -1,8 +1,8 @@
-(ns constraint-processing.table
+(ns symlearn.table
   (:require [taoensso.tufte :as tufte]
-            [constraint-processing.paths :as paths]
+            [symlearn.paths :as paths]
             [clojure.set :as set]
-            [constraint-processing.sfa :as sfa]))
+            [symlearn.sfa :as sfa]))
 
 (def ^:dynamic *parse-fn*
   "A function wrapper for the underlying parser. Rebound to the correct parser

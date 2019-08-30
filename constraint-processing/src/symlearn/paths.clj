@@ -1,4 +1,4 @@
-(ns constraint-processing.paths
+(ns symlearn.paths
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
             [clojure.set :as set]))

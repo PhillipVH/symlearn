@@ -1,7 +1,7 @@
-(ns constraint-processing.sfa
+(ns symlearn.sfa
   "Utilities to facilitate the creation, validation, and manipulation of SFAs."
-  (:require [constraint-processing.paths :as paths]
-            [constraint-processing.ranges :as ranges]
+  (:require [symlearn.paths :as paths]
+            [symlearn.ranges :as ranges]
             [clojure.string :as str]
             [clojure.set :as set]
             [clojure.pprint :refer [pprint]]

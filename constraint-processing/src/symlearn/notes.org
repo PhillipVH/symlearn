@@ -1,0 +1,4 @@
+* Tasks
+** TODO 
+   [2019-04-11 Thu]
+   [[file:~/Projects/grammarlearning/constraint-processing/src/constraint_processing/core.clj::lower%20(if%20(=%20(nth%20matches%201)%20"null")%20-1%20(Integer/parseInt%20(nth%20matches%201)))%20;;%20TODO%20This%20component%20is%20purpose%20built%20for%20the]]
