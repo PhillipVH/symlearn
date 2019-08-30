@@ -110,12 +110,12 @@
   "Return an table learnt with seed database `db` and a reverse equivalence
   check up to `depth`. The learnt table has metadata attached describing why
   the learning halted."
-  [{:keys [depth parse-fn]}]
+  [{:keys [depth parse-fn table db]}]
   (binding [table/*parse-fn* parse-fn]
     (let [counter (atom 0)
           prev-table (atom nil)]
-      (loop [db (coastal/get-seed-inputs)
-             table (table/init-table (table/make-table) db)]
+      (loop [db (or db (coastal/get-seed-inputs))
+             table (or table (table/init-table (table/make-table) db))]
         (swap! counter inc)
         (if-not (table/closed? table)
           (recur db (table/close table db))
@@ -134,6 +134,7 @@
                 (if (= @prev-table table-with-evidence)
                   {:table table
                    :db db
+                   :depth depth
                    :reason {:stage :forward-eqv, :input ce-from-db}}
                   (do
                     (reset! prev-table table)
@@ -145,6 +146,7 @@
                 (if (= @prev-table table')
                   {:table table
                    :db db'
+                   :depth depth
                    :reason {:stage :backward-eqv, :inputs ces-from-sfa}}
                   (do
                     (reset! prev-table table')
@@ -154,4 +156,5 @@
               :default
               {:table table
                :db db
+               :depth depth
                :reason :equivalent})))))))
