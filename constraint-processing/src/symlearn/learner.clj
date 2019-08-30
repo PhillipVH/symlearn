@@ -132,7 +132,9 @@
                     table-with-evidence (table/apply-evidences table-with-ce evidences)]
 
                 (if (= @prev-table table-with-evidence)
-                  (with-meta table {:reason :fixed-point, :stage :forward-equivalence, :input ce-from-db})
+                  {:table table
+                   :db db
+                   :reason {:stage :forward-eqv, :input ce-from-db}}
                   (do
                     (reset! prev-table table)
                     (recur db table-with-evidence))))
@@ -141,11 +143,15 @@
               (not (empty? ces-from-sfa))
               (let [[db' table'] (tufte/p ::apply-ces-from-sfa (apply-ces-from-sfa table db ces-from-sfa))]
                 (if (= @prev-table table')
-                  (with-meta table' {:reason :fixed-point, :stage :backward-equivalence, :inputs ces-from-sfa})
+                  {:table table
+                   :db db'
+                   :reason {:stage :backward-eqv, :inputs ces-from-sfa}}
                   (do
                     (reset! prev-table table')
                     (recur db' table'))))
 
               ;; Return the learnt table
               :default
-              (with-meta table {:reason :equivalent}))))))))
+              {:table table
+               :db db
+               :reason :equivalent})))))))
