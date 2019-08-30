@@ -210,14 +210,7 @@ public abstract class PathBasedInteractiveFactory implements StrategyFactory {
                     // Remove refinement request from redis
                     jedis.del("refine");
 
-                    log.info(request);
-
-
-
                     Model mdl = createModelFromInput(request);
-
-
-                    log.info("Adding model" + mdl);
 
                     int m = coastal.addDiverModels(Collections.singletonList(mdl));
                     int d = -1;

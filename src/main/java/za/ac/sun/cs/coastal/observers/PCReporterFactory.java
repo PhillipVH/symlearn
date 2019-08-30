@@ -29,250 +29,205 @@ import za.ac.sun.cs.coastal.solver.VisitorException;
 
 public class PCReporterFactory implements ObserverFactory {
 
-	public PCReporterFactory(COASTAL coastal, ImmutableConfiguration options) {
-	}
+    public PCReporterFactory(COASTAL coastal, ImmutableConfiguration options) {
+    }
 
-	@Override
-	public int getFrequencyflags() {
-		return ObserverFactory.ONCE_PER_TASK;
-	}
+    @Override
+    public int getFrequencyflags() {
+        return ObserverFactory.ONCE_PER_TASK;
+    }
 
-	@Override
-	public ObserverManager createManager(COASTAL coastal) {
-		return new PCReporterManager(coastal);
-	}
+    @Override
+    public ObserverManager createManager(COASTAL coastal) {
+        return new PCReporterManager(coastal);
+    }
 
-	@Override
-	public Observer createObserver(COASTAL coastal, ObserverManager manager) {
-		return new PCReporterObserver(coastal, manager);
-	}
+    @Override
+    public Observer createObserver(COASTAL coastal, ObserverManager manager) {
+        return new PCReporterObserver(coastal, manager);
+    }
 
-	// ======================================================================
-	//
-	// MANAGER FOR PATH CONDITION REPORTING
-	//
-	// ======================================================================
-	
-	private static class ConstraintCollectorVisitor extends Visitor {
-		public HashSet<Operation>  constraints = new HashSet<>();
-		public void postVisit(Operation op) {
-			if (op.getOperand(0) instanceof IntegerVariable) {
-				if (op.getOperand(0).toString().contains("A")) {
-					constraints.add(op);
-				}
-			}
-		}
-		
-		
-	}
+    // ======================================================================
+    //
+    // MANAGER FOR PATH CONDITION REPORTING
+    //
+    // ======================================================================
 
-	private static class PCReporterManager implements ObserverManager {
+    private static class ConstraintCollectorVisitor extends Visitor {
+        public HashSet<Operation> constraints = new HashSet<>();
 
-		private final Broker broker;
-		
-		private final Logger log;
-		
-		private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
-		
-		private final String output_name = "paper-example-1";
+        public void postVisit(Operation op) {
+            if (op.getOperand(0) instanceof IntegerVariable) {
+                if (op.getOperand(0).toString().contains("A")) {
+                    constraints.add(op);
+                }
+            }
+        }
 
-		
-		PCReporterManager(COASTAL coastal) {
-			broker = coastal.getBroker();
-			log = coastal.getLog();
-			broker.subscribe("coastal-stop", this::report);
-		}
-		
-		/**
-		 * Filter out the constraints in a given path condition relevant to the input array "A"
-		 * @param pathCondition
-		 * @return
-		 */
-		private HashSet<Operation> extractConstraints(Expression pathCondition) {
-			try {
-//				log.info(pathCondition.toString());
-				ConstraintCollectorVisitor collector = new ConstraintCollectorVisitor();
-				pathCondition.accept(collector);
-				return collector.constraints;
-			} catch (VisitorException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			return null;
-		}
-		
-		/**
-		 * Transform a set of constraint expressions to a map of character position to upper and lower bounds.
-		 * @param constraints
-		 * @return [lower bound, upper bound)
-		 */
-		private HashMap<Integer, Integer[]> processConstraints(HashSet<Operation> constraints) {
-			HashMap<Integer, Integer[]> bounds = new HashMap<>();
-			
-			constraints.forEach(expr -> {
-				Integer charPosition = Integer.parseInt(expr.getOperand(0).toString().substring(2));
-				Integer bound = Integer.parseInt(expr.getOperand(1).toString());
-				
-				Integer[] currentBounds = bounds.get(charPosition);
-				
-				if (currentBounds == null) {
-					currentBounds = new Integer[2];
-				}
-				
-				Operator op = expr.getOperator();
-				
-				if (op == Operator.GE || op == Operator.GT) {
-//					log.info(charPosition + " is greater than or equal to " + bound);
-					if (currentBounds[0] == null || currentBounds[0] < bound) {
-						currentBounds[0] = bound;
-					}
-				} else if (op == Operator.LT || op == Operator.LE) {
-					if (currentBounds[1] == null || currentBounds[1] > bound) {
-						currentBounds[1] = bound;
-					} 
-				} 				
-				bounds.put(charPosition, currentBounds);
-				
-			});
-		
-			return bounds;
-		}
 
-		public synchronized void update(Boolean accepted, Expression pathCondition) {
-			
-			HashSet<Expression> pathConditions = conditions.get(accepted);
-			
-			// Extract constraints on the input array
-			HashSet<Operation> constraints = extractConstraints(pathCondition);
-			
-			// Transform these constraints in a format symbolic automata can understand
-			HashMap<Integer, Integer[]> processedConstraints = processConstraints(constraints);
-			log.info(accepted ? "Accepted: " : "Rejected");
-			log.info(pathCondition);
-			
-			// Write the acceptance result to file
-			File output_file = new File(output_name);
-			try {
-				BufferedWriter writer = new BufferedWriter(new FileWriter(output_file, true));
+    }
 
-				// Construct the redis formatted output
-				StringBuilder redisResponse = new StringBuilder();
-				redisResponse.append("[");
+    private static class PCReporterManager implements ObserverManager {
 
-				writer.write(accepted ? "Accepted" : "Rejected");
-				writer.newLine();
-				
-				writer.write(pathCondition.toString());
-				writer.newLine();
-				
-				processedConstraints.forEach((pos, bounds)-> {
-					try {
-						writer.write("A[" + pos + "]" + "[" + bounds[0] + "," + bounds[1] + "]");
-						redisResponse.append("[" + bounds[0] + " " + bounds[1] + "]");
-						writer.newLine();
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-					log.info("A[" + pos + "] "+ "[" + bounds[0] + ", " + bounds[1] + ")");
-				});
+        private final Broker broker;
 
-				redisResponse.append("]");
+        private final Logger log;
 
-				// Write the respone to Redis
-				Jedis jedis = new Jedis();
-				jedis.set("refined", redisResponse.toString());
+        private final Map<Boolean, HashSet<Expression>> conditions = new HashMap<>();
 
-				
-				writer.newLine();
-				writer.flush();
-				writer.close();
-				
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-					
-			log.info("\n");
-//			log.info("---------------------");
-			Expression simplified = pathCondition;
-			
-//			if (pathConditions == null) {
-//				pathConditions = new HashSet<>();
-//				pathConditions.add(simplified);
-//				conditions.put(accepted, pathConditions);
-//			} else {
-//				pathConditions.add(simplified);
-//				conditions.put(accepted, pathConditions);
-//			}
-		}
-		
-		public void report(Object object) {
-			broker.publish("path-condition-report", null);
-			
-			if (conditions.size() > 0) {
-				for (Entry<Boolean, HashSet<Expression>> entry : conditions.entrySet()) {
+        PCReporterManager(COASTAL coastal) {
+            broker = coastal.getBroker();
+            log = coastal.getLog();
+            broker.subscribe("coastal-stop", this::report);
+        }
+
+        /**
+         * Filter out the constraints in a given path condition relevant to the input array "A"
+         *
+         * @param pathCondition
+         * @return
+         */
+        private HashSet<Operation> extractConstraints(Expression pathCondition) {
+            try {
+                ConstraintCollectorVisitor collector = new ConstraintCollectorVisitor();
+                pathCondition.accept(collector);
+                return collector.constraints;
+            } catch (VisitorException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        /**
+         * Transform a set of constraint expressions to a map of character position to upper and lower bounds.
+         *
+         * @param constraints
+         * @return [lower bound, upper bound)
+         */
+        private HashMap<Integer, Integer[]> processConstraints(HashSet<Operation> constraints) {
+            HashMap<Integer, Integer[]> bounds = new HashMap<>();
+
+            constraints.forEach(expr -> {
+                Integer charPosition = Integer.parseInt(expr.getOperand(0).toString().substring(2));
+                Integer bound = Integer.parseInt(expr.getOperand(1).toString());
+
+                Integer[] currentBounds = bounds.get(charPosition);
+
+                if (currentBounds == null) {
+                    currentBounds = new Integer[2];
+                }
+
+                Operator op = expr.getOperator();
+
+                if (op == Operator.GE || op == Operator.GT) {
+                    if (currentBounds[0] == null || currentBounds[0] < bound) {
+                        currentBounds[0] = bound;
+                    }
+                } else if (op == Operator.LT || op == Operator.LE) {
+                    if (currentBounds[1] == null || currentBounds[1] > bound) {
+                        currentBounds[1] = bound;
+                    }
+                }
+                bounds.put(charPosition, currentBounds);
+
+            });
+
+            return bounds;
+        }
+
+        public synchronized void update(Boolean accepted, Expression pathCondition) {
+
+            HashSet<Expression> pathConditions = conditions.get(accepted);
+
+            // Extract constraints on the input array
+            HashSet<Operation> constraints = extractConstraints(pathCondition);
+
+            // Transform these constraints in a format symbolic automata can understand
+            HashMap<Integer, Integer[]> processedConstraints = processConstraints(constraints);
+
+            // Construct the redis formatted output
+            StringBuilder redisResponse = new StringBuilder();
+            redisResponse.append("[");
+
+            processedConstraints.forEach((pos, bounds) -> {
+                redisResponse.append("[").append(bounds[0]).append(" ").append(bounds[1]).append("]");
+            });
+
+            redisResponse.append("]");
+
+            // Write the respone to Redis
+            Jedis jedis = new Jedis();
+            jedis.set("refined", redisResponse.toString());
+        }
+
+        public void report(Object object) {
+            broker.publish("path-condition-report", null);
+
+            if (conditions.size() > 0) {
+                for (Entry<Boolean, HashSet<Expression>> entry : conditions.entrySet()) {
 //					entry.getValue().forEach(cond -> broker.publish("report", new Tuple("PCReporter.pc[" + entry.getKey() + "]" + cond.toString())));
-				}
-			}
-			
-		}
+                }
+            }
 
-		@Override
-		public String getName() {
-			return null;
-		}
+        }
 
-		@Override
-		public String[] getPropertyNames() {
-			return null;
-		}
+        @Override
+        public String getName() {
+            return null;
+        }
 
-		@Override
-		public Object[] getPropertyValues() {
-			return null;
-		}
+        @Override
+        public String[] getPropertyNames() {
+            return null;
+        }
 
-	}
+        @Override
+        public Object[] getPropertyValues() {
+            return null;
+        }
 
-	// ======================================================================
-	//
-	// OBSERVER FOR MARKER COVERAGE
-	//
-	// ======================================================================
+    }
 
-	private static class PCReporterObserver implements Observer {
+    // ======================================================================
+    //
+    // OBSERVER FOR MARKER COVERAGE
+    //
+    // ======================================================================
 
-		private final Logger log;
+    private static class PCReporterObserver implements Observer {
 
-		private final PCReporterManager manager;
-		
-		private final Broker broker;
-		
-		private boolean accepted = false;
+        private final Logger log;
 
-		private final Jedis jedis;
+        private final PCReporterManager manager;
 
-		PCReporterObserver(COASTAL coastal, ObserverManager manager) {
-			log = coastal.getLog();
-			this.manager = (PCReporterManager) manager;
-			this.broker = coastal.getBroker();
-			broker.subscribeThread("mark", this::mark);
-			broker.subscribeThread("dive-end", this::diveEnd);
-			this.jedis = new Jedis();
-		}
-		
-		public void diveEnd(Object object) {
-			Tuple result = (Tuple) object;
-			SymbolicState state = (SymbolicState) result.get(1);
-			
-			manager.update(accepted, state.getSegmentedPathCondition().getPathCondition());
-		}
+        private final Broker broker;
 
-		public void mark(Object object) {
-			/* 1 represents acceptance, 0 represents failure */
-			accepted = (((Integer) object) == 1) ? true : false;
-		}
+        private boolean accepted = false;
 
-	}
+        private final Jedis jedis;
+
+        PCReporterObserver(COASTAL coastal, ObserverManager manager) {
+            log = coastal.getLog();
+            this.manager = (PCReporterManager) manager;
+            this.broker = coastal.getBroker();
+            broker.subscribeThread("mark", this::mark);
+            broker.subscribeThread("dive-end", this::diveEnd);
+            this.jedis = new Jedis();
+        }
+
+        public void diveEnd(Object object) {
+            Tuple result = (Tuple) object;
+            SymbolicState state = (SymbolicState) result.get(1);
+
+            manager.update(accepted, state.getSegmentedPathCondition().getPathCondition());
+        }
+
+        public void mark(Object object) {
+            /* 1 represents acceptance, 0 represents failure */
+            accepted = (((Integer) object) == 1) ? true : false;
+        }
+
+    }
 
 }

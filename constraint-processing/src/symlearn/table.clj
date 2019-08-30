@@ -18,10 +18,11 @@
   (tufte/p ::member? (*parse-fn* (into-array Integer/TYPE input))))
 
 (defn- check-membership
-  "Takes a path condition and a seq of evidence. Returns
+  "Return an ordered seq of membership query results for `path` and each
+  piece of evidence in `evidences`.
   an ordered seq of membership query results."
-  [path evidence]
-  (map #(member? (paths/mixed->concrete (conj path %))) evidence))
+  [path evidences]
+  (map #(member? (paths/mixed->concrete (conj path %))) evidences))
 
 (defn- filled?
   "Return true is `entry` is filled to the same lenght as `evidences`, false otherwise."
@@ -32,7 +33,9 @@
   "Returns `entry` where a membership query has been issued for each piece of
   evidence in `evidences`."
   [entry evidences]
-  (tufte/p ::fill-entry (assoc entry :row (vec (check-membership (:path entry) evidences)))))
+  (tufte/p
+   ::fill-entry
+   (assoc entry :row (vec (check-membership (:path entry) evidences)))))
 
 (defn- fill-entries
   "Returns `entries` where each entry has been filled with `fill-entry`."
@@ -45,7 +48,7 @@
           entries))
 
 (defn- fill
-  "Return the table filled by doing membership queries on columns where
+  "Return `table` filled by doing membership queries on columns where
   the concatenation of the entry's path and the evidence have not yet
   been evaluated."
   [table]
@@ -112,7 +115,7 @@
         s-rows (set (map first (group-by :row (:S table))))]
     (set/subset? r-rows s-rows)))
 
-(defn get-close-candidates
+(defn close-candidates
   "Return a rows from R in `table` that do not appear in S."
   [table]
   (let [r-rows (set (map first (group-by :row (:R table))))
@@ -126,7 +129,7 @@
   "Return `table` after attempting a close operation. If successful, an entry
   from R will be moved to S."
   [table db]
-  (let [close-candidate (-> table get-close-candidates first :path)
+  (let [close-candidate (-> table close-candidates first :path)
         follow-candidates (paths/follow-paths close-candidate db)]
     (if (nil? close-candidate)
       table
@@ -156,23 +159,26 @@
 
 (defn apply-evidences
   "Apply each piece of evidence in `evidences` to `table`. If the evidence does
-  results in a row equivalent table, discard the evidence."
+  results in a row equivalent table, discard the evidence. This function roughly
+  correlates to make-consistent in Lambda*."
   [table evidences]
-  (reduce
-   (fn [new-table evidence]
-     (let [table-with-evidence (add-evidence new-table evidence)]
-       (if-not (row-equivalent? new-table table-with-evidence)
-         table-with-evidence
-         new-table)))
-   table
-   evidences))
+  (tufte/p
+   ::make-consistent
+   (reduce
+    (fn [new-table evidence]
+      (let [table-with-evidence (add-evidence new-table evidence)]
+        (if-not (row-equivalent? new-table table-with-evidence)
+          table-with-evidence
+          new-table)))
+    table
+    evidences)))
 
 ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Table to SFA conversion functions
 ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn get-prefix-pairs
-  "Given an observation table, produce the proper prefix pairs, such that
+  "Return the prefix pairs for rows in `table`, such that
   (len u1) == (dec (len u2)). These pairs are used to synthesize transitions."
   [table]
   (let [states (:S table)
