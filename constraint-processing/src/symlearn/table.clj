@@ -17,32 +17,34 @@
   [input]
   (tufte/p ::member? (*parse-fn* (into-array Integer/TYPE input))))
 
-(defn check-membership
+(defn- check-membership
   "Takes a path condition and a seq of evidence. Returns
   an ordered seq of membership query results."
   [path evidence]
   (map #(member? (paths/mixed->concrete (conj path %))) evidence))
 
+(defn- filled?
+  "Return true is `entry` is filled to the same lenght as `evidences`, false otherwise."
+  [entry evidences]
+  (= (count evidences) (count (:row entry))))
+
 (defn- fill-entry
   "Returns `entry` where a membership query has been issued for each piece of
   evidence in `evidences`."
   [entry evidences]
-  (let [{:keys [row path]} entry
-        row-length (count row)
-        evidence-length (count evidences)]
-    (if-not (= row-length evidence-length)
-      (tufte/p ::fill-entry (assoc entry :row (vec (check-membership path evidences))))
-      (tufte/p ::no-fill-entry entry))))
+  (tufte/p ::fill-entry (assoc entry :row (vec (check-membership (:path entry) evidences)))))
 
 (defn- fill-entries
   "Returns `entries` where each entry has been filled with `fill-entry`."
-  [entries evidence]
+  [entries evidences]
   (reduce (fn [filled entry]
-            (conj filled (fill-entry entry evidence)))
+            (conj filled (if-not (filled? entry evidences)
+                           (fill-entry entry evidences)
+                           entry)))
           #{}
           entries))
 
-(defn fill
+(defn- fill
   "Return the table filled by doing membership queries on columns where
   the concatenation of the entry's path and the evidence have not yet
   been evaluated."
@@ -68,7 +70,7 @@
                             (if (contains? s-paths prefix)
                               new-table
                               (let [entry {:path prefix, :row []}]
-                                (update new-table :R #(conj % (tufte/p ::fill-entry (fill-entry entry evidences)))))))
+                                (update new-table :R #(conj % (fill-entry entry evidences))))))
                           table
                           prefixes)]
     new-table))
@@ -93,8 +95,7 @@
   "Return `table` after adding `path` to R. Calls `fill` after promoting."
   [table {:keys [path]}]
   (-> table
-      (add-r path)
-      (fill)))
+      (add-r path)))
 
 (defn promote
   "Return `table` after moving `path` from R to S. Calls `fill` after promoting."
@@ -144,9 +145,8 @@
 
 (defn row-equivalent?
   "Return true if `evidence` does not expose a new row in `table`, false otherwise."
-  [table evidence]
-  (let [table-with-evidence (add-evidence table evidence)
-        old-s-rows (set (map :row (:S table)))
+  [table table-with-evidence]
+  (let [old-s-rows (set (map :row (:S table)))
         old-r-rows (set (map :row (:R table)))
         old-rows (set/union old-s-rows old-r-rows)
         new-s-rows (set (map :row (:S table-with-evidence)))
@@ -160,9 +160,10 @@
   [table evidences]
   (reduce
    (fn [new-table evidence]
-     (if-not (row-equivalent? new-table evidence)
-       (add-evidence new-table evidence)
-       new-table))
+     (let [table-with-evidence (add-evidence new-table evidence)]
+       (if-not (row-equivalent? new-table table-with-evidence)
+         table-with-evidence
+         new-table)))
    table
    evidences))
 

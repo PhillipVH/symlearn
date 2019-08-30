@@ -17,7 +17,7 @@
 (defn refine-path
   "Return the exact constraints along `path` by invoking a Coastal diver."
   [path]
-  (if (= path [])
+  (if (= path []) ;; the empty path will always be the empty path
     []
     (let [input (str/join " " (paths/make-concrete path))]
 
