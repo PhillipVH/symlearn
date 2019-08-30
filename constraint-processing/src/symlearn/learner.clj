@@ -16,6 +16,8 @@
            SingleParser
            LearnLarge))
 
+(set! *warn-on-reflection* true)
+
 (defn- expand-node
   "Takes a node and returns all the children of that node.
   Each child has the transition that generated them as a field."
@@ -49,7 +51,7 @@
         tt (:transitions sfa)]
     (flatten (depth-limited-search root n tt))))
 
-(defn make-queries
+(defn- make-queries
   "Return a database of inputs and expected outputs of `sfa`, length limited by `depth`.
   If the database contains inputs generated with artificial paths, return only those
   inputs, otherwise return the full set of inputs."
@@ -76,7 +78,7 @@
           artificial-queries)))))
 
 
-(defn check-sfa-paths
+(defn- check-sfa-paths
   [sfa paths]
   (reduce (fn [critical-paths {:keys [path]}]
             (if (or
@@ -92,7 +94,7 @@
           []
           paths))
 
-(defn apply-ces-from-sfa
+(defn- apply-ces-from-sfa
   [table db ces]
   (reduce (fn [[db table] ce]
             (let [{:keys [refined accepted]} ce

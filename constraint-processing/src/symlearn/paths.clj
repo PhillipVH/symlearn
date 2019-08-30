@@ -3,6 +3,8 @@
             [clojure.string :as string]
             [clojure.set :as set]))
 
+(set! *warn-on-reflection* true)
+
 (defn make-concrete
   "Return a seq of the first element of every constraint in `path`."
   [path]

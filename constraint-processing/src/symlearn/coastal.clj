@@ -6,6 +6,8 @@
             [symlearn.ranges :as ranges]
             [symlearn.table :as table]))
 
+(set! *warn-on-reflection* true)
+
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
   [& body]

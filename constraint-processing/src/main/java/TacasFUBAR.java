@@ -1,8 +1,4 @@
-package examples.tacasfubar;
-
-import za.ac.sun.cs.coastal.Symbolic;
-
-public class TACASFUBAR {
+public class TacasFUBAR {
 
     public static boolean parse(int[] A) {
         int state = 0;
@@ -59,15 +55,13 @@ public class TACASFUBAR {
             }
         }
         if ((state == 0) || false) {
-            Symbolic.mark(1);
             return true;
         } else {
-            Symbolic.mark(0);
             return false;
         }
 
     }
-
+    
     public static void main(String[] args) {
 
         boolean res = parse(new int[]{0, 0, 0, 0, 0, 0});

@@ -8,6 +8,8 @@
             [clojure.java.shell :as sh]
             [com.rpl.specter :as sp]))
 
+(set! *warn-on-reflection* true)
+
 (defn state-predicates
   "Returns a mapping from state number to predicates on transitions in `sfa`
   leading out of that state."
@@ -39,12 +41,11 @@
 (defn complete
   "Return `sfa` where all incomplete transitions have been filled in."
   [sfa]
-  (let [state-predicates (state-predicates sfa)]
-    (reduce (fn [sfa state]
-              (update-in sfa [:transitions state]
-                         #(vec (concat % (flatten (predicates->transitions (ranges/get-completing-predicates (sp/select [state sp/ALL] state-predicates)) state))))))
-            sfa
-            (:states sfa))))
+  (reduce (fn [sfa state]
+            (update-in sfa [:transitions state]
+                       #(vec (concat % (flatten (predicates->transitions (ranges/get-completing-predicates (sp/select [state sp/ALL] (state-predicates sfa))) state))))))
+          sfa
+          (:states sfa)))
 
 (defn execute-sfa
   "Returns the acceptance state of `sfa` after running `input` on it.

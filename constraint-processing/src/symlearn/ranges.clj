@@ -1,6 +1,8 @@
 (ns symlearn.ranges
   "Utilities to facilitate reasoning over ranges (of non-negative integers).")
 
+(set! *warn-on-reflection* true)
+
 (defn adjacent
   "Returns true if two ranges are adjacent."
   [r1 r2]

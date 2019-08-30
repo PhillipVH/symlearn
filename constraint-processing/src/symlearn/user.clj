@@ -13,6 +13,8 @@
            TacasParser
            PaperExample))
 
+(set! *warn-on-reflection* true)
+
 (defmacro with-profiling
   "Wrap `body` in a profiling form."
   [& body]
@@ -35,10 +37,6 @@
             (sfa/sfa->img new-sfa))
           (recur new-sfa (inc depth)))))))
 
-(def ll (learn #(LearnLarge/parse %) {:display? false}))
-
-(pprint ll)
-
 (comment
 
   ;; TACAS parser incremental learning
@@ -49,10 +47,10 @@
 
   ;; Learning Symbolic Automata parser, incremental learning
   (learn #(PaperExample/parse %))
+  (learn #(PaperExample/parse %) {:display? false})
 
   ;; Large Automata parser, incremental learning
   (learn #(LearnLarge/parse %))
-
 
   ;; TACAS -- works well! learning stalls at depth 3, finds evidence at depth 4
   (with-profiling
@@ -64,12 +62,12 @@
   (with-profiling
     (let [table (learner/learn {:depth 4, :parse-fn #(PaperExample/parse %)})
           learnt (table/table->sfa table)]
-      (sfa/sfa->img learnt)))
+      #_(sfa/sfa->img learnt)))
 
   ;; Learn Large -- gets very slow
   (with-profiling
-    (let [table (learner/learn {:depth 4, :parse-fn #(LearnLarge/parse %)})
+    (let [table (learner/learn {:depth 5, :parse-fn #(LearnLarge/parse %)})
           learnt (table/table->sfa table)]
-      (sfa/sfa->img learnt)))
+      #_(sfa/sfa->img learnt)))
 
- )
+  )

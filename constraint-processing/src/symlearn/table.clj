@@ -4,23 +4,24 @@
             [clojure.set :as set]
             [symlearn.sfa :as sfa]))
 
+(set! *warn-on-reflection* true)
+
 (def ^:dynamic *parse-fn*
   "A function wrapper for the underlying parser. Rebound to the correct parser
   before the learning procedure is called."
-  #(TacasParser/parse %))
+  nil)
 
 (defn member?
   "Return the result of calling `*parse-fun*` with `input`, true if the parser accepts,
   false if it rejects."
   [input]
-  (*parse-fn* (into-array Integer/TYPE input)))
+  (tufte/p ::member? (*parse-fn* (into-array Integer/TYPE input))))
 
 (defn check-membership
   "Takes a path condition and a seq of evidence. Returns
   an ordered seq of membership query results."
   [path evidence]
   (map #(member? (paths/mixed->concrete (conj (vec path) %))) evidence))
-
 
 (defn- fill-entry
   "Returns `entry` where a membership query has been issued for each piece of `evidence.`"
@@ -149,7 +150,6 @@
         new-r-rows (set (map :row (:R table-with-evidence)))
         new-rows (set/union new-s-rows new-r-rows)]
     (= (count new-rows) (count old-rows))))
-
 
 (defn apply-evidences
   "Apply each piece of evidence in `evidences` to `table`. If the evidence does
