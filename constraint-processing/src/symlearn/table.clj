@@ -21,7 +21,7 @@
   "Takes a path condition and a seq of evidence. Returns
   an ordered seq of membership query results."
   [path evidence]
-  (map #(member? (paths/mixed->concrete (conj (vec path) %))) evidence))
+  (map #(member? (paths/mixed->concrete (conj path %))) evidence))
 
 (defn- fill-entry
   "Returns `entry` where a membership query has been issued for each piece of `evidence.`"

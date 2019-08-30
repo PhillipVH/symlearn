@@ -62,12 +62,12 @@
   (with-profiling
     (let [table (learner/learn {:depth 4, :parse-fn #(PaperExample/parse %)})
           learnt (table/table->sfa table)]
-      #_(sfa/sfa->img learnt)))
+      (sfa/sfa->img learnt)))
 
   ;; Learn Large -- gets very slow
   (with-profiling
     (let [table (learner/learn {:depth 5, :parse-fn #(LearnLarge/parse %)})
           learnt (table/table->sfa table)]
-      #_(sfa/sfa->img learnt)))
+      (sfa/sfa->img learnt)))
 
   )
