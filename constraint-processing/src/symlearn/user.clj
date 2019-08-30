@@ -1,14 +1,14 @@
 (ns symlearn.user
   (:require [com.rpl.specter :as sp]
-            [symlearn.learner :as learner]
-            [symlearn.paths :as paths]
-            [symlearn.sfa :as sfa]
-            [symlearn.ranges :as ranges]
-            [symlearn.table :as table]
             [clojure.pprint :refer [pprint]]
             [clojure.set :as set]
-            [taoensso.tufte :as tufte]
-            [symlearn.coastal :as coastal])
+            [symlearn.coastal :as coastal]
+            [symlearn.learner :as learner]
+            [symlearn.paths :as paths]
+            [symlearn.ranges :as ranges]
+            [symlearn.sfa :as sfa]
+            [symlearn.table :as table]
+            [taoensso.tufte :as tufte])
   (:import LearnLarge
            TacasParser
            PaperExample))
@@ -28,17 +28,31 @@
          depth 1]
     (let [new-table (learner/learn {:depth depth, :parse-fn parse-fn})
           new-sfa (table/table->sfa new-table)]
-      (when display?
-        (sfa/sfa->img new-sfa))
       (if (= previous-sfa new-sfa)
         {:sfa new-sfa, :table new-table, :depth depth}
-        (recur new-sfa (inc depth))))))
+        (do
+          (when display?
+            (sfa/sfa->img new-sfa))
+          (recur new-sfa (inc depth)))))))
+
+(def ll (learn #(LearnLarge/parse %) {:display? false}))
+
+(pprint ll)
 
 (comment
 
+  ;; TACAS parser incremental learning
   (learn #(TacasParser/parse %))
 
+  ;; Don't display images as the learning proceeds
   (learn #(TacasParser/parse %) {:display? false})
+
+  ;; Learning Symbolic Automata parser, incremental learning
+  (learn #(PaperExample/parse %))
+
+  ;; Large Automata parser, incremental learning
+  (learn #(LearnLarge/parse %))
+
 
   ;; TACAS -- works well! learning stalls at depth 3, finds evidence at depth 4
   (with-profiling

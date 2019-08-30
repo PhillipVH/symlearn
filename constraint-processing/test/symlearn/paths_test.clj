@@ -1,5 +1,5 @@
-(ns constraint-processing.paths-test
-  (:require [constraint-processing.paths :as paths]
+(ns symlearn.paths-test
+  (:require [symlearn.paths :as paths]
             [clojure.test :refer :all]))
 
 (deftest single-constraint-path-test
