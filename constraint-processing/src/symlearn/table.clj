@@ -24,13 +24,14 @@
   (map #(member? (paths/mixed->concrete (conj path %))) evidence))
 
 (defn- fill-entry
-  "Returns `entry` where a membership query has been issued for each piece of `evidence.`"
-  [entry evidence]
+  "Returns `entry` where a membership query has been issued for each piece of
+  evidence in `evidences`."
+  [entry evidences]
   (let [{:keys [row path]} entry
         row-length (count row)
-        evidence-length (count evidence)]
+        evidence-length (count evidences)]
     (if-not (= row-length evidence-length)
-      (tufte/p ::fill-entry (assoc entry :row (vec (check-membership path evidence))))
+      (tufte/p ::fill-entry (assoc entry :row (vec (check-membership path evidences))))
       (tufte/p ::no-fill-entry entry))))
 
 (defn- fill-entries
@@ -58,21 +59,19 @@
    :E [[]]})
 
 (defn add-r
-  "Add a single row into the R section of `table`. Calls `fill` after adding."
-  ; FIXME The learning algorithm calls `add-r` frequently, due to R being effectively all the
-  ; path conditions up to a certain depth. Instead of calling `fill`, just create the new
-  ; entries here, fill them manually with `fill-entry`, and see if that does anything for
-  ; performance.
+  "Add a single row into the R section of `table`. Calls `fill-entry` before adding."
   [table r]
   (let [prefixes (paths/prefixes r)
+        evidences (:E table)
         s-paths (set (map :path (:S table)))
         new-table (reduce (fn [new-table prefix]
                             (if (contains? s-paths prefix)
                               new-table
-                              (update new-table :R #(conj % {:path prefix :row []}))))
+                              (let [entry {:path prefix, :row []}]
+                                (update new-table :R #(conj % (tufte/p ::fill-entry (fill-entry entry evidences)))))))
                           table
                           prefixes)]
-    (fill new-table)))
+    new-table))
 
 (defn add-rs
   "Returns `table` after every path in `rs` has been added to R. Indirectly calls `fill`."

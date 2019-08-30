@@ -66,8 +66,8 @@
 
   ;; Learn Large -- gets very slow
   (with-profiling
-    (let [{:keys [table db]} (learner/learn {:depth 3, :parse-fn #(LearnLarge/parse %)})
+    (let [{:keys [table db]} (learner/learn {:depth 5, :parse-fn #(LearnLarge/parse %)})
           learnt (table/table->sfa table)]
-      (sfa/sfa->img learnt)))
+      #_(sfa/sfa->img learnt)))
 
   )
