@@ -63,7 +63,7 @@
   ;; Paper example -- works well!
   (with-profiling
     (let [coastal (coastal/start-coastal! "PaperExample.xml")
-          {:keys [table db]} (learner/learn {:depth 3, :parse-fn #(PaperExample/parse %)})
+          {:keys [table db]} (learner/learn {:depth 4, :parse-fn #(PaperExample/parse %)})
           learnt (table/table->sfa table)]
       (println "Database Size: " (count db))
       (coastal/stop-coastal! coastal)

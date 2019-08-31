@@ -20,18 +20,20 @@
 (defn refine-path
   "Return the exact constraints along `path` by invoking a Coastal diver."
   [path]
-  (if (= path []) ;; the empty path will always be the empty path
-    []
-    (let [input (str/join " " (paths/make-concrete path))]
+  (tufte/p
+   ::refine-path
+   (if (= path []) ;; the empty path will always be the empty path
+     []
+     (let [input (str/join " " (paths/make-concrete path))]
 
-      (wcar* (car/del :refined)
-             (car/set :refine input))
+       (wcar* (car/del :refined)
+              (car/set :refine input))
 
-      (while (not= 1 (wcar* (car/exists :refined))))
+       (while (not= 1 (wcar* (car/exists :refined))))
 
-      (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))]
-        (wcar* (car/del :refined))
-        (read-string refined-path)))))
+       (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))]
+         (wcar* (car/del :refined))
+         (read-string refined-path))))))
 
 (defn- get-seed-constraints
   "Return all constraints of unit length for the parser currently running
