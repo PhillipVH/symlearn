@@ -1,6 +1,29 @@
+# Java
+
 /.gradle/
 /build/
 /bin/
 /.classpath
 /.project
 /.settings/
+coastal/.gradle/
+coastal/.idea/
+coastal/build/
+coastal/out/
+out/
+.idea/
+.attach_pid*
+
+# Clojure
+/target
+/classes
+/checkouts
+profiles.clj
+pom.xml
+pom.xml.asc
+*.jar
+*.class
+/.lein-*
+/.nrepl-port
+.hgignore
+.hg/

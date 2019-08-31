@@ -73,5 +73,9 @@
          coastal-dir (File. "coastal")
          builder (ProcessBuilder. ^"[Ljava.lang.String;" (into-array ["./gradlew" "run" (str "--args=" (.getPath config))]))]
      (.directory builder coastal-dir)
-     {:coastal (.start builder)
-      :stop-fn #(.destroyForcibly ^Process %)})))
+     (.start builder))))
+
+(defn stop-coastal!
+  "Stop a Coastal process running in `coastal`."
+  [^Process coastal]
+  (.destroyForcibly coastal))
