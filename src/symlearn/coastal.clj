@@ -60,7 +60,8 @@
   "Compile the parsers installed in the Coastal system."
   []
   (let [coastal-dir (File. "coastal")
-        builder (ProcessBuilder. ^"[Ljava.lang.String;" (into-array ["./gradlew" "compileJava"]))]
+        args (into-array ["./gradlew" "compileJava"])
+        builder (ProcessBuilder. ^"[Ljava.lang.String;" args)]
     (.directory builder coastal-dir)
     (.start builder)))
 
@@ -70,8 +71,9 @@
   (tufte/p
    ::start-coastal
    (let [config (io/resource filename)
-         coastal-dir (File. "coastal")
-         builder (ProcessBuilder. ^"[Ljava.lang.String;" (into-array ["./gradlew" "run" (str "--args=" (.getPath config))]))]
+         args (into-array ["./gradlew" "run" (str "--args=" (.getPath config))])
+         builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
+         coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
      (.start builder))))
 

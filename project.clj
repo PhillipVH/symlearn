@@ -11,4 +11,8 @@
   :main ^:skip-aot symlearn.user
   :java-source-paths ["src/main/java"]
   :target-path "target/%s"
+  :resource-paths ["symbolicautomata/commons-lang3-3.4.jar"
+                   "symbolicautomata/guava-18.0.jar"
+                   "symbolicautomata/org.ow2.sat4j.core-2.3.4.jar"
+                   "symbolicautomata/SVPAlib-1.0.jar"]
   :profiles {:uberjar {:aot :all}})
