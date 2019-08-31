@@ -106,7 +106,7 @@
                   new-db (conj db new-entry)
                   table-with-ce (table/process-ce table new-entry)
                   table-with-evidence (table/apply-evidences table-with-ce evidence)]
-              [new-db table-with-ce (table/close table-with-evidence new-db)]))
+              [new-db (table/close table-with-evidence new-db)]))
           [db table]
           ces))
 
