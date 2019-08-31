@@ -37,9 +37,9 @@ dependencies {
 sourceSets.test.resources.srcDirs += [ 'src/test/java' ]
 
 // Enforce gradle version for Travis CI
-task wrapper(type: Wrapper) {
-	gradleVersion = '4.3'
-}
+//task wrapper(type: Wrapper) {
+//	gradleVersion = '4.3'
+//}
 	 
 //checkstyle {
 //	toolVersion '8.1'

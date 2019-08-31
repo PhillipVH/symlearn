@@ -17,32 +17,38 @@
   [input]
   (tufte/p ::member? (*parse-fn* (into-array Integer/TYPE input))))
 
-(defn check-membership
-  "Takes a path condition and a seq of evidence. Returns
+(defn- check-membership
+  "Return an ordered seq of membership query results for `path` and each
+  piece of evidence in `evidences`.
   an ordered seq of membership query results."
-  [path evidence]
-  (map #(member? (paths/mixed->concrete (conj path %))) evidence))
+  [path evidences]
+  (map #(member? (paths/mixed->concrete (conj path %))) evidences))
+
+(defn- filled?
+  "Return true is `entry` is filled to the same lenght as `evidences`, false otherwise."
+  [entry evidences]
+  (= (count evidences) (count (:row entry))))
 
 (defn- fill-entry
-  "Returns `entry` where a membership query has been issued for each piece of `evidence.`"
-  [entry evidence]
-  (let [{:keys [row path]} entry
-        row-length (count row)
-        evidence-length (count evidence)]
-    (if-not (= row-length evidence-length)
-      (tufte/p ::fill-entry (assoc entry :row (vec (check-membership path evidence))))
-      (tufte/p ::no-fill-entry entry))))
+  "Returns `entry` where a membership query has been issued for each piece of
+  evidence in `evidences`."
+  [entry evidences]
+  (tufte/p
+   ::fill-entry
+   (assoc entry :row (vec (check-membership (:path entry) evidences)))))
 
 (defn- fill-entries
   "Returns `entries` where each entry has been filled with `fill-entry`."
-  [entries evidence]
+  [entries evidences]
   (reduce (fn [filled entry]
-            (conj filled (fill-entry entry evidence)))
+            (conj filled (if-not (filled? entry evidences)
+                           (fill-entry entry evidences)
+                           entry)))
           #{}
           entries))
 
-(defn fill
-  "Return the table filled by doing membership queries on columns where
+(defn- fill
+  "Return `table` filled by doing membership queries on columns where
   the concatenation of the entry's path and the evidence have not yet
   been evaluated."
   [table]
@@ -58,21 +64,19 @@
    :E [[]]})
 
 (defn add-r
-  "Add a single row into the R section of `table`. Calls `fill` after adding."
-  ; FIXME The learning algorithm calls `add-r` frequently, due to R being effectively all the
-  ; path conditions up to a certain depth. Instead of calling `fill`, just create the new
-  ; entries here, fill them manually with `fill-entry`, and see if that does anything for
-  ; performance.
+  "Add a single row into the R section of `table`. Calls `fill-entry` before adding."
   [table r]
   (let [prefixes (paths/prefixes r)
+        evidences (:E table)
         s-paths (set (map :path (:S table)))
         new-table (reduce (fn [new-table prefix]
                             (if (contains? s-paths prefix)
                               new-table
-                              (update new-table :R #(conj % {:path prefix :row []}))))
+                              (let [entry {:path prefix, :row []}]
+                                (update new-table :R #(conj % (fill-entry entry evidences))))))
                           table
                           prefixes)]
-    (fill new-table)))
+    new-table))
 
 (defn add-rs
   "Returns `table` after every path in `rs` has been added to R. Indirectly calls `fill`."
@@ -94,8 +98,7 @@
   "Return `table` after adding `path` to R. Calls `fill` after promoting."
   [table {:keys [path]}]
   (-> table
-      (add-r path)
-      (fill)))
+      (add-r path)))
 
 (defn promote
   "Return `table` after moving `path` from R to S. Calls `fill` after promoting."
@@ -112,7 +115,7 @@
         s-rows (set (map first (group-by :row (:S table))))]
     (set/subset? r-rows s-rows)))
 
-(defn get-close-candidates
+(defn close-candidates
   "Return a rows from R in `table` that do not appear in S."
   [table]
   (let [r-rows (set (map first (group-by :row (:R table))))
@@ -126,7 +129,7 @@
   "Return `table` after attempting a close operation. If successful, an entry
   from R will be moved to S."
   [table db]
-  (let [close-candidate (-> table get-close-candidates first :path)
+  (let [close-candidate (-> table close-candidates first :path)
         follow-candidates (paths/follow-paths close-candidate db)]
     (if (nil? close-candidate)
       table
@@ -145,9 +148,8 @@
 
 (defn row-equivalent?
   "Return true if `evidence` does not expose a new row in `table`, false otherwise."
-  [table evidence]
-  (let [table-with-evidence (add-evidence table evidence)
-        old-s-rows (set (map :row (:S table)))
+  [table table-with-evidence]
+  (let [old-s-rows (set (map :row (:S table)))
         old-r-rows (set (map :row (:R table)))
         old-rows (set/union old-s-rows old-r-rows)
         new-s-rows (set (map :row (:S table-with-evidence)))
@@ -157,22 +159,26 @@
 
 (defn apply-evidences
   "Apply each piece of evidence in `evidences` to `table`. If the evidence does
-  results in a row equivalent table, discard the evidence."
+  results in a row equivalent table, discard the evidence. This function roughly
+  correlates to make-consistent in Lambda*."
   [table evidences]
-  (reduce
-   (fn [new-table evidence]
-     (if-not (row-equivalent? new-table evidence)
-       (add-evidence new-table evidence)
-       new-table))
-   table
-   evidences))
+  (tufte/p
+   ::make-consistent
+   (reduce
+    (fn [new-table evidence]
+      (let [table-with-evidence (add-evidence new-table evidence)]
+        (if-not (row-equivalent? new-table table-with-evidence)
+          table-with-evidence
+          new-table)))
+    table
+    evidences)))
 
 ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Table to SFA conversion functions
 ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn get-prefix-pairs
-  "Given an observation table, produce the proper prefix pairs, such that
+  "Return the prefix pairs for rows in `table`, such that
   (len u1) == (dec (len u2)). These pairs are used to synthesize transitions."
   [table]
   (let [states (:S table)

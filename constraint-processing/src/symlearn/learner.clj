@@ -56,26 +56,28 @@
   If the database contains inputs generated with artificial paths, return only those
   inputs, otherwise return the full set of inputs."
   [sfa depth]
-  (loop [depth depth
-         queries []]
-    (if (>= depth 0)
-      (let [words (induce-words sfa depth)
-            new-queries (reduce (fn [queries word]
-                                  (let [accept (contains? (:final-states sfa) (:label word))
-                                        path (:parent word)
-                                        ?artificial (:artificial word)]
-                                    (if ?artificial
-                                      (conj queries {:accepted accept, :path path, :artificial true})
-                                      (conj queries {:accepted accept, :path path}))))
-                                []
-                                words)]
-        (recur (dec depth) (conj queries new-queries)))
-      (let [artificial-queries (->> queries
-                                    flatten
-                                    (filter :artificial))] ;; we only care about paths that have been generated using artificial input
-        (if (= (count artificial-queries) 0) ;; if no artifical queries, run the full base set
-          (flatten queries)
-          artificial-queries)))))
+  (tufte/p
+   ::make-queries
+   (loop [depth depth
+          queries []]
+     (if (>= depth 0)
+       (let [words (induce-words sfa depth)
+             new-queries (reduce (fn [queries word]
+                                   (let [accept (contains? (:final-states sfa) (:label word))
+                                         path (:parent word)
+                                         ?artificial (:artificial word)]
+                                     (if ?artificial
+                                       (conj queries {:accepted accept, :path path, :artificial true})
+                                       (conj queries {:accepted accept, :path path}))))
+                                 []
+                                 words)]
+         (recur (dec depth) (conj queries new-queries)))
+       (let [artificial-queries (->> queries
+                                     flatten
+                                     (filter :artificial))] ;; we only care about paths that have been generated using artificial input
+         (if (= (count artificial-queries) 0) ;; if no artifical queries, run the full base set
+           (flatten queries)
+           artificial-queries))))))
 
 
 (defn- check-sfa-paths
@@ -95,16 +97,30 @@
           paths))
 
 (defn- apply-ces-from-sfa
+  "FIXME Why does the algorithm explode if we don't `symlearn.table/close` here?"
   [table db ces]
   (reduce (fn [[db table] ce]
             (let [{:keys [refined accepted]} ce
                   new-entry {:accepted accepted, :path refined}
                   evidence (paths/make-evidences refined)
+                  new-db (conj db new-entry)
                   table-with-ce (table/process-ce table new-entry)
-                  table-with-evidence (tufte/p ::apply-evidences (table/apply-evidences table-with-ce evidence))]
-              [(conj db new-entry) (table/close table-with-evidence (conj db new-entry))]))
+                  table-with-evidence (table/apply-evidences table-with-ce evidence)]
+              [new-db table-with-ce (table/close table-with-evidence new-db)]))
           [db table]
           ces))
+
+(defn check-equivalence
+  "Checks the conjectured SFA for equivalence, checking equivalence for inputs
+  up to a length of `depth`. Returns any counter examples discovered if the
+  equivalence check fails."
+  [sfa depth]
+  (tufte/p
+   ::check-equivalence
+   (let [queries (make-queries sfa depth)
+         counter-examples (check-sfa-paths sfa queries)]
+     (when (seq counter-examples)
+       counter-examples))))
 
 (defn learn
   "Return an table learnt with seed database `db` and a reverse equivalence
@@ -122,7 +138,7 @@
 
           (let [sfa (table/table->sfa table)
                 ce-from-db (sfa/run-all-from-db sfa db)
-                ces-from-sfa (check-sfa-paths sfa (tufte/p ::make-queries (make-queries sfa depth)))]
+                ces-from-sfa (check-equivalence sfa depth)]
             (cond
               ;; Forward equivalence check
               (map? ce-from-db)

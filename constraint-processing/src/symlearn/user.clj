@@ -60,14 +60,16 @@
 
   ;; Paper example -- works well!
   (with-profiling
-    (let [{:keys [table db]} (learner/learn {:depth 4, :parse-fn #(PaperExample/parse %)})
+    (let [{:keys [table db]} (learner/learn {:depth 3, :parse-fn #(PaperExample/parse %)})
           learnt (table/table->sfa table)]
+      (println "Database Size: " (count db))
       (sfa/sfa->img learnt)))
 
   ;; Learn Large -- gets very slow
   (with-profiling
-    (let [{:keys [table db]} (learner/learn {:depth 3, :parse-fn #(LearnLarge/parse %)})
+    (let [{:keys [table db]} (learner/learn {:depth 5, :parse-fn #(LearnLarge/parse %)})
           learnt (table/table->sfa table)]
+      (println "Database Size: " (count db))
       (sfa/sfa->img learnt)))
 
   )
