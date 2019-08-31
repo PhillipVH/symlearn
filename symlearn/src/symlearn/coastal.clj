@@ -4,7 +4,10 @@
             [taoensso.tufte :as tufte]
             [symlearn.paths :as paths]
             [symlearn.ranges :as ranges]
-            [symlearn.table :as table]))
+            [symlearn.table :as table]
+            [clojure.java.shell :as shell]
+            [clojure.java.io :as io])
+  (:import [java.io File]))
 
 (set! *warn-on-reflection* true)
 
@@ -52,3 +55,16 @@
   (map (fn [[min max]]
          {:path [[min max]] :accepted (table/member? [min])})
        (get-seed-constraints)))
+
+(defn ^Process start-coastal
+  "Launch a Coastal process with a config file called `name` as an argument."
+  [filename]
+  (tufte/p
+   ::start-coastal
+   (let [config (io/resource filename)
+         coastal-dir (File. "coastal")
+         builder (ProcessBuilder. ^"[Ljava.lang.String;" (into-array ["./gradlew" "run" (str "--args=" (.getPath config))]))]
+     (doto builder
+       (.directory coastal-dir))
+     {:coastal (.start builder)
+      :stop-fn #(.destroyForcibly ^Process %)})))

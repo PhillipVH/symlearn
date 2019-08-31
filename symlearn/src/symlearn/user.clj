@@ -54,22 +54,28 @@
 
   ;; TACAS -- works well! learning stalls at depth 3, finds evidence at depth 4
   (with-profiling
-    (let [{:keys [table db]} (learner/learn {:depth 3, :parse-fn #(TacasParser/parse %)})
+    (let [{:keys [coastal stop-fn]} (coastal/start-coastal "TACAS.xml")
+          {:keys [table db]} (learner/learn {:depth 3, :parse-fn #(TacasParser/parse %)})
           learnt (table/table->sfa table)]
-      (sfa/sfa->img learnt)))
+      (sfa/sfa->img learnt)
+      (stop-fn coastal)))
 
   ;; Paper example -- works well!
   (with-profiling
-    (let [{:keys [table db]} (learner/learn {:depth 3, :parse-fn #(PaperExample/parse %)})
+    (let [{:keys [coastal stop-fn]} (coastal/start-coastal "PaperExample.xml")
+          {:keys [table db]} (learner/learn {:depth 3, :parse-fn #(PaperExample/parse %)})
           learnt (table/table->sfa table)]
       (println "Database Size: " (count db))
+      (stop-fn coastal)
       (sfa/sfa->img learnt)))
 
   ;; Learn Large -- gets very slow
   (with-profiling
-    (let [{:keys [table db]} (learner/learn {:depth 5, :parse-fn #(LearnLarge/parse %)})
+    (let [{:keys [coastal stop-fn]} (coastal/start-coastal "LearnLarge.xml")
+          {:keys [table db]} (learner/learn {:depth 4, :parse-fn #(LearnLarge/parse %)})
           learnt (table/table->sfa table)]
       (println "Database Size: " (count db))
+      (stop-fn coastal)
       (sfa/sfa->img learnt)))
 
   )
