@@ -1,19 +1,44 @@
-# COASTAL
+# constraint-processing
 
-This is a program analysis tool for Java that uses Concolic Execution.
-This is a combination of symbolic and concrete execution:
-As a program is executed concretely, COASTAL collects information to describe the execution trace symbolically.
-At the end of the execution, a modified path is passed to the [Green](http://www.green.green) library is used to find new program inputs,
-and the process is repeated.
+FIXME: description
 
-For more information, including installation and usage guides, visit [https://deepseaplatform.github.io/coastal/](https://deepseaplatform.github.io/coastal/).
+## Installation
 
-## Authors
+Download from http://example.com/FIXME.
 
-  * [Jaco Geldenhuys](mailto://geld@sun.ac.za)
-  * [Willem Visser](mailto://wvisser@sun.ac.za)
+## Usage
 
-### Contributors
+FIXME: explanation
 
-  * Someone
-  * Someone else
+    $ java -jar constraint-processing-0.1.0-standalone.jar [args]
+
+## Options
+
+FIXME: listing of options this app accepts.
+
+## Examples
+
+...
+
+### Bugs
+
+...
+
+### Any Other Sections
+### That You Think
+### Might be Useful
+
+## License
+
+Copyright © 2019 FIXME
+
+This program and the accompanying materials are made available under the
+terms of the Eclipse Public License 2.0 which is available at
+http://www.eclipse.org/legal/epl-2.0.
+
+This Source Code may also be made available under the following Secondary
+Licenses when the conditions for such availability set forth in the Eclipse
+Public License, v. 2.0 are satisfied: GNU General Public License as published by
+the Free Software Foundation, either version 2 of the License, or (at your
+option) any later version, with the GNU Classpath Exception which is available
+at https://www.gnu.org/software/classpath/license.html.

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE configuration PUBLIC "-//DEEPSEA//COASTAL configuration//EN" "https://deepseaplatform.github.io/coastal/coastal.dtd">
+<configuration>
+	<coastal>
+		<target>
+			<main>examples.tacas2017.LearnLarge</main>
+			<instrument>examples.tacas2017</instrument>
+			<trigger>examples.tacas2017.LearnLarge.parse(A:int[])</trigger>
+		</target>
+		<divers threads="1"/>
+		<surfers threads="0"/>
+
+
+		<strategies>
+			<strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstInteractiveFactory</strategy>
+			<!--            <strategy>za.ac.sun.cs.coastal.strategy.pathbased.DepthFirstBatchFactory</strategy>-->
+		</strategies>
+
+		<observers>
+			<observer>za.ac.sun.cs.coastal.observers.PCReporterFactory</observer>
+		</observers>
+	</coastal>
+</configuration>

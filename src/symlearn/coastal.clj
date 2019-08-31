@@ -4,7 +4,10 @@
             [taoensso.tufte :as tufte]
             [symlearn.paths :as paths]
             [symlearn.ranges :as ranges]
-            [symlearn.table :as table]))
+            [symlearn.table :as table]
+            [clojure.java.shell :as shell]
+            [clojure.java.io :as io])
+  (:import [java.io File]))
 
 (set! *warn-on-reflection* true)
 
@@ -52,3 +55,27 @@
   (map (fn [[min max]]
          {:path [[min max]] :accepted (table/member? [min])})
        (get-seed-constraints)))
+
+(defn compile-parsers!
+  "Compile the parsers installed in the Coastal system."
+  []
+  (let [coastal-dir (File. "coastal")
+        builder (ProcessBuilder. ^"[Ljava.lang.String;" (into-array ["./gradlew" "compileJava"]))]
+    (.directory builder coastal-dir)
+    (.start builder)))
+
+(defn ^Process start-coastal!
+  "Launch a Coastal process with a config file called `filename` as an argument."
+  [filename]
+  (tufte/p
+   ::start-coastal
+   (let [config (io/resource filename)
+         coastal-dir (File. "coastal")
+         builder (ProcessBuilder. ^"[Ljava.lang.String;" (into-array ["./gradlew" "run" (str "--args=" (.getPath config))]))]
+     (.directory builder coastal-dir)
+     (.start builder))))
+
+(defn stop-coastal!
+  "Stop a Coastal process running in `coastal`."
+  [^Process coastal]
+  (.destroyForcibly coastal))
