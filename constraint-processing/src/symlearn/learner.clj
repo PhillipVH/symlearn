@@ -102,7 +102,7 @@
                   evidence (paths/make-evidences refined)
                   table-with-ce (table/process-ce table new-entry)
                   table-with-evidence (table/apply-evidences table-with-ce evidence)]
-              [(conj db new-entry) table-with-ce (table/close table-with-evidence (conj db new-entry))]))
+              [(conj db new-entry) (table/close table-with-evidence (conj db new-entry))]))
           [db table]
           ces))
 
