@@ -56,15 +56,22 @@
          {:path [[min max]] :accepted (table/member? [min])})
        (get-seed-constraints)))
 
-(defn ^Process start-coastal
-  "Launch a Coastal process with a config file called `name` as an argument."
+(defn compile-parsers!
+  "Compile the parsers installed in the Coastal system."
+  []
+  (let [coastal-dir (File. "coastal")
+        builder (ProcessBuilder. ^"[Ljava.lang.String;" (into-array ["./gradlew" "compileJava"]))]
+    (.directory builder coastal-dir)
+    (.start builder)))
+
+(defn ^Process start-coastal!
+  "Launch a Coastal process with a config file called `filename` as an argument."
   [filename]
   (tufte/p
    ::start-coastal
    (let [config (io/resource filename)
          coastal-dir (File. "coastal")
          builder (ProcessBuilder. ^"[Ljava.lang.String;" (into-array ["./gradlew" "run" (str "--args=" (.getPath config))]))]
-     (doto builder
-       (.directory coastal-dir))
+     (.directory builder coastal-dir)
      {:coastal (.start builder)
       :stop-fn #(.destroyForcibly ^Process %)})))

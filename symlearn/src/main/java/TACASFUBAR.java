@@ -1,4 +1,4 @@
-public class TacasFUBAR {
+public class TACASFUBAR {
 
     public static boolean parse(int[] A) {
         int state = 0;
