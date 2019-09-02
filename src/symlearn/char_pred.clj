@@ -17,12 +17,17 @@
   (negate [this] "Return the negation of this `this`.")
   (equivalent? [this that] "Return true if `this` and `that` are equivalent."))
 
-(defrecord Pred [^CharPred pred]
+(extend-type CharPred
   Solvable
-  (union [this that] (->Pred (.MkOr solver (:pred this) (:pred that))))
-  (intersection [this that] (->Pred (.MkAnd solver (:pred this) (:pred that))))
-  (negate [this] (->Pred (.MkNot solver (:pred this))))
-  (equivalent? [this that] (.AreEquivalent solver (:pred this) (:pred that))))
+  (union [this that] (.MkOr solver this that))
+  (intersection [this that] (.MkAnd solver this that))
+  (negate [this] (.MkNot solver this))
+  (equivalent? [this that] (.AreEquivalent solver this that)))
+
+(defn make-pred
+  "Return a CharPred over `bottom` to `top`."
+  [^Character bottom ^Character top]
+  (CharPred. bottom top))
 
 (defn intervals
   "Returns a set of [left right] pairs constructed from `interval`."
@@ -35,11 +40,6 @@
               right (.getRight next)]
           (recur (conj intervals [left right])))
         intervals))))
-
-(defn ^Pred make-pred
-  "Return a CharPred over `bottom` to `top`."
-  [^Character bottom ^Character top]
-  (->Pred (CharPred. bottom top)))
 
 (comment
 
