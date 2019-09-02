@@ -24,10 +24,22 @@
   (negate [this] (->Pred (.MkNot solver (:pred this))))
   (equivalent? [this that] (.AreEquivalent solver (:pred this) (:pred that))))
 
+(defn intervals
+  "Returns a set of [left right] pairs constructed from `interval`."
+  [interval]
+  (let [iter (.iterator (.intervals ^CharPred (:pred interval)))]
+    (loop [intervals #{}]
+      (if-let [has-next? (.hasNext iter)]
+        (let [next ^ImmutablePair (.next iter)
+              left (.getLeft next)
+              right (.getRight next)]
+          (recur (conj intervals [left right])))
+        intervals))))
+
 (defn ^Pred make-pred
   "Return a CharPred over `bottom` to `top`."
-  [^String bottom ^String top]
-  (->Pred (CharPred. ^Character (.charAt bottom 0) ^Character (.charAt top 0))))
+  [^Character bottom ^Character top]
+  (->Pred (CharPred. bottom top)))
 
 (comment
 
@@ -35,15 +47,18 @@
                   (accept [this t]
                     (println t))))
 
-  (let [p1 (make-pred "a" "g")
-        p2 (make-pred "z" "z")
-        p1' (make-pred "a" "g")]
-    (let [constraints #{}]
-      )
+  (let [p1 (make-pred \a \b)
+        p2 (make-pred \z \z)
+        p1' (make-pred \a \a)
+        un (union p1 p2)
+        thelst (.copyOf (.intervals (:pred un)))
+        ]
     (println (equivalent? p1 p1'))
     (.forEach (.intervals ^CharPred (:pred (union p1 p2))) consumer))
 
-  )
 
+  (intervals (union (make-pred \a \g) (make-pred \z \z)))
+
+  )
 
 
