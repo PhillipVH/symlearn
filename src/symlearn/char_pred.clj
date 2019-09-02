@@ -33,8 +33,8 @@
 
 (defn intervals
   "Returns a set of [left right] pairs constructed from `interval`."
-  [interval]
-  (let [iter (.iterator (.intervals ^CharPred (:pred interval)))]
+  [^CharPred interval]
+  (let [iter (.iterator (.intervals interval))]
     (loop [intervals #{}]
       (if-let [has-next? (.hasNext iter)]
         (let [next ^ImmutablePair (.next iter)
