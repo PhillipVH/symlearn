@@ -15,14 +15,16 @@
   (union [this pred] "Return the union of `this` and `pred`.")
   (intersection [this pred] "Return the intersection of `this` and `pred`.")
   (negate [this] "Return the negation of this `this`.")
-  (equivalent? [this that] "Return true if `this` and `that` are equivalent."))
+  (equivalent? [this that] "Return true if `this` and `that` are equivalent.")
+  (generate-witness [this] "Return a character that satisfies the constraint in `this`."))
 
 (extend-type CharPred
   Solvable
   (union [this that] (.MkOr solver this that))
   (intersection [this that] (.MkAnd solver this that))
   (negate [this] (.MkNot solver this))
-  (equivalent? [this that] (.AreEquivalent solver this that)))
+  (equivalent? [this that] (.AreEquivalent solver this that))
+  (generate-witness [this] (.generateWitness solver this)))
 
 (defn make-pred
   "Return a CharPred over `bottom` to `top`."
