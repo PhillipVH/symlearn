@@ -59,16 +59,20 @@
 (defn regex->sfa
   "Returns an SFA that accepts the language described by `regex`."
   [regex]
-  (let [nodes (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array regex))
+  (let [nodes (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array [regex]))
         root (.get nodes 0)
         sfa (RegexConverter/toSFA root solver)]
     sfa))
 
 (comment
 
+  (print (regex->sfa "a|(b|c)?"))
+
   (intervals (union (make-interval \a \g) (make-interval \z \z)))
   pred
   (left (make-interval \a \g))
+
+  (intervals (negate (make-interval \a \g)))
 
   )
 
