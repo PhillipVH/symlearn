@@ -15,5 +15,8 @@
                    "symbolicautomata/commons-lang3-3.4.jar"
                    "symbolicautomata/guava-18.0.jar"
                    "symbolicautomata/org.ow2.sat4j.core-2.3.4.jar"
-                   "symbolicautomata/SVPAlib-1.0.jar"]
+                   "symbolicautomata/SVPAlib-1.0.jar"
+                   "symbolicautomata/SVPABenchmark-0.0.1-SNAPSHOT.jar"
+                   "symbolicautomata/Parsers-1.0.jar"
+                   "symbolicautomata/javacup-11c.jar"]
   :profiles {:uberjar {:aot :all}})
