@@ -58,7 +58,6 @@
   [^Character bottom ^Character top]
   (CharPred. bottom top))
 
-(defn regex->sfa
 (defn ^SFA regex->sfa
   "Returns an SFA that accepts the language described by `regex`."
   [regex]
