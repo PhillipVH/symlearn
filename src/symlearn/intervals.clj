@@ -63,14 +63,112 @@
   [regex]
   (let [nodes (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array [regex]))
         root (.get nodes 0)
-        sfa (RegexConverter/toSFA root solver)]
-    (.determinize sfa solver)))
+        sfa (RegexConverter/toSFA root solver)
+        determinized (.determinize sfa solver)
+        completed (SFA/mkTotal sfa solver 1000)]
+    completed))
+
+(defn sfa->java
+  "Return the Java source code that represents a parser accepting the language
+  described by `sfa`."
+  [^SFA sfa, package-name, class-name]
+  (let [java-src (StringBuilder.)]
+    (doto java-src
+      (.append "package ")
+      (.append package-name)
+      (.append ";\n")
+      (.append "import za.ac.sun.cs.coastal.Symbolic;\n")
+      (.append "public final class ")
+      (.append class-name)
+      (.append " {\n")
+      (.append "\tpublic static void main(String[] args) {\n")
+      (.append "\t\tboolean result = parse(new char[]{'a'});\n")
+      (.append "\t}\n"))
+
+    (doto java-src
+      (.append "\tpublic static boolean parse(char[] A) {\n")
+      (.append "\t\tint state = ")
+      (.append (.getInitialState sfa))
+      (.append ";\n")
+      (.append "\t\tfor (int idx = 0; idx < A.length; idx++) {\n")
+      (.append "\t\t\tchar current = A[idx];\n"))
+
+    (let [states-iter (.iterator (.getStates sfa))]
+      (while (.hasNext states-iter)
+        (let [state (.next states-iter)]
+          (doto java-src
+            (.append "\t\t\tif (state == ")
+            (.append state)
+            (.append ") {\n"))
+
+          (let [transitions-iter (.iterator (.getTransitionsFrom sfa state))]
+            (while (.hasNext transitions-iter)
+              (let [transition (.next transitions-iter)
+                    interval-size (.. transition guard intervals size)]
+                (.append java-src "\t\t\t\tif (")
+                (doseq [id (range 0 interval-size)]
+                  (let [bound (.. transition guard intervals (get 0))
+                        left (.getLeft bound)
+                        right (.getRight bound)]
+                    (when (> id 0)
+                      (.append java-src " || "))
+
+                    (if (not (.equals left right))
+                      (doto java-src
+                        (.append "(current >= ")
+                        (.append (if (nil? left)
+                                   "Character.MIN_VALUE"
+                                   (str "(char)" (int (.charValue left)))))
+                        (.append " && current <= ")
+                        (.append (if (nil? right)
+                                   "Character.MAX_VALUE"
+                                   (str "(char)" (int (.charValue right)))))
+                        (.append ")"))
+
+                      (doto java-src
+                        (.append "(current == ")
+                        (.append (if (nil? left)
+                                   "Character.MIN_VALUE"
+                                   (str "(char)" (int (.charValue left)))))
+                        (.append ")")))))
+                (doto java-src
+                  (.append ") {\n")
+                  (.append "\t\t\t\t\tstate = ")
+                  (.append (.to transition))
+                  (.append ";\n")
+                  (.append "\t\t\t\t\tcontinue;\n")
+                  (.append "\t\t\t\t}\n"))))))
+        (.append java-src "\t\t\t}\n"))
+      (doto java-src
+        (.append "\t\t}\n")
+        (.append "\t\tif ("))
+
+      (let [states-iter (.iterator (.getFinalStates sfa))]
+        (while (.hasNext states-iter)
+          (let [final-state (.next states-iter)]
+            (doto java-src
+              (.append "(state == ")
+              (.append final-state)
+              (.append ") || ")))))
+      (doto java-src
+        (.append "false) { \n")
+        (.append "\t\t\tSymbolic.mark(1);\n")
+        (.append "\t\t\treturn true;\n")
+        (.append "\t\t} else {\n")
+        (.append "\t\t\tSymbolic.mark(0);\n")
+        (.append "\t\t\treturn false;\n\t\t}\n")
+        (.append "\t}")
+        (.append "\n}\n")))
+
+    (.toString java-src)))
 
 (comment
 
-  (print (regex->sfa "a|(b|c)?"))
-  (let [our-sfa (regex->sfa "a|(b|c)?")]
-    (println our-sfa))
+  (println (sfa->java (regex->sfa "ab|b") "regex" "regex"))
+  (println (regex->sfa "a+"))
+
+    (let [our-sfa (regex->sfa "a|(b|c)?")]
+      (println (SFA/mkTotal our-sfa solver 1000 )))
 
   (intervals (union (make-interval \a \g) (make-interval \z \z)))
   pred
