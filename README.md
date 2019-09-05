@@ -1,5 +1,7 @@
 # constraint-processing
 
+[![Build Status](https://travis-ci.com/PhillipVH/symlearn.svg?token=v9TxturJsxPzarfynxN2&branch=master)](https://travis-ci.com/PhillipVH/symlearn)
+
 FIXME: description
 
 ## Installation
