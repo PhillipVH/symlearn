@@ -5,6 +5,8 @@
            theory.intervals.UnaryCharIntervalSolver
            theory.characters.CharPred
            benchmark.regexconverter.RegexConverter
+           (automata.sfa SFA
+                         SFAInputMove)
            (RegexParser RegexNode
                         RegexParserProvider)))
 
@@ -57,16 +59,19 @@
   (CharPred. bottom top))
 
 (defn regex->sfa
+(defn ^SFA regex->sfa
   "Returns an SFA that accepts the language described by `regex`."
   [regex]
   (let [nodes (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array [regex]))
         root (.get nodes 0)
         sfa (RegexConverter/toSFA root solver)]
-    sfa))
+    (.determinize sfa solver)))
 
 (comment
 
   (print (regex->sfa "a|(b|c)?"))
+  (let [our-sfa (regex->sfa "a|(b|c)?")]
+    (println our-sfa))
 
   (intervals (union (make-interval \a \g) (make-interval \z \z)))
   pred

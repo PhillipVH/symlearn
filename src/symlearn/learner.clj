@@ -119,14 +119,12 @@
    ::check-equivalence
    (let [queries (make-queries sfa depth)
          counter-examples (check-sfa-paths sfa queries)]
-     counter-examples
-     #_(when (seq counter-examples)
-       counter-examples))))
+     counter-examples)))
 
 (defn learn
   "Return an table learnt with seed database `db` and a reverse equivalence
-  check up to `depth`. The learnt table has metadata attached describing why
-  the learning halted."
+  check up to `depth` with the parser represented by `parse-fn`. The learnt
+  table has metadata attached describing why the learning halted."
   [{:keys [depth parse-fn table db]}]
   (binding [table/*parse-fn* parse-fn]
     (let [counter (atom 0)
