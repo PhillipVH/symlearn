@@ -164,7 +164,7 @@
 
 (comment
 
-  (println (sfa->java (regex->sfa "ab|b") "regex" "regex"))
+  (spit "Regex.java" (sfa->java (regex->sfa "(ab|b)+") "regex" "Regex"))
   (println (regex->sfa "a+"))
 
     (let [our-sfa (regex->sfa "a|(b|c)?")]
