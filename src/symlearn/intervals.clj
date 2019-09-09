@@ -86,6 +86,11 @@
   (to [this] (.to this))
   (guard [this] (.guard this)))
 
+(defn make-transition
+  "Return a transition that goes from `from` to `to` over the predicate `guard`."
+  [from to ^CharPred guard]
+  (SFAInputMove. (int from) (int to) guard))
+
 (defn ^SFA regex->sfa
   "Returns an SFA that accepts the language described by `regex`."
   [regex]
