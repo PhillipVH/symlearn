@@ -59,18 +59,23 @@
   (CharPred. bottom top))
 
 (defprotocol ISFA
-  "A protocol for SFAs over a the domain of characters."
+  "A protocol for SFAs over the domain of characters."
   (initial-state [this] "Return the initial state of `this`.")
   (final-states [this] "Return the set of final states of `this`.")
-  (get-transitions-from [this state] "Return all the transitions from `this` to `state`."))
+  (state-count [this] "Return the number of states in `this`.")
+  (transitions-from [this state] "Return all the transitions in `this` from `state`.")
+  (transitions-to [this state] "Return all the transitions in `this` to `state`."))
 
 (extend-type SFA
   ISFA
   (initial-state [this] (.getInitialState this))
   (final-states [this] (.getFinalStates this))
-  (get-transitions-from [this state] (.getTransitionsFrom this (int state))))
+  (state-count [this] (.stateCount this))
+  (transitions-from [this state] (.getTransitionsFrom this (int state)))
+  (transitions-to [this state] (.getTransitionsTo this (int state))))
 
 (defprotocol ITransition
+  "A protocol for transitions over the domain of characters."
   (from [this] "Return the state from which `this` transition originates.")
   (to [this] "Return the state to which `this` transition goes.")
   (guard [this] "Return the guard used by `this` to check if a transition should occur."))
@@ -187,13 +192,15 @@
 
 (comment
 
-  (.getTransitionsFrom (regex->sfa "a|b") (int 0))
+  (map (comp right guard) (transitions-from (regex->sfa "a|b") 0))
+
   (.getMovesFrom (regex->sfa "a|b") (int 0))
 
   (right (guard (first (get-transitions-from (regex->sfa "a|b") 0))))
 
 
 
+  (regex->sfa "bbbbbbbbbbbb")
 
   (spit "Regex.java" (sfa->java (regex->sfa "(ab|b)+") "regex" "Regex"))
 
