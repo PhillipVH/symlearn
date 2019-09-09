@@ -62,7 +62,7 @@
   "A protocol for SFAs over a the domain of characters."
   (initial-state [this] "Return the initial state of `this`.")
   (final-states [this] "Return the set of final states of `this`.")
-  (get-transitions-from [this state]) "Return all the transitions from `this` to `state`.")
+  (get-transitions-from [this state] "Return all the transitions from `this` to `state`."))
 
 (extend-type SFA
   ISFA
@@ -80,13 +80,6 @@
   (from [this] (.from this))
   (to [this] (.to this))
   (guard [this] (.guard this)))
-
-(.getTransitionsFrom (regex->sfa "a|b") (int 0))
-(.getMovesFrom (regex->sfa "a|b") (int 0))
-
-(right (guard (first (get-transitions-from (regex->sfa "a|b") 0))))
-
-
 
 (defn ^SFA regex->sfa
   "Returns an SFA that accepts the language described by `regex`."
@@ -193,6 +186,14 @@
     (.toString java-src)))
 
 (comment
+
+  (.getTransitionsFrom (regex->sfa "a|b") (int 0))
+  (.getMovesFrom (regex->sfa "a|b") (int 0))
+
+  (right (guard (first (get-transitions-from (regex->sfa "a|b") 0))))
+
+
+
 
   (spit "Regex.java" (sfa->java (regex->sfa "(ab|b)+") "regex" "Regex"))
 
