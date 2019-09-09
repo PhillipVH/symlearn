@@ -1,7 +1,7 @@
 (ns symlearn.intervals
   (:import org.apache.commons.lang3.tuple.ImmutablePair
-           com.google.common.collect.ImmutableList
-           com.google.common.collect.Iterators
+           (com.google.common.collect ImmutableList
+                                      Iterators)
            theory.intervals.UnaryCharIntervalSolver
            theory.characters.CharPred
            benchmark.regexconverter.RegexConverter
@@ -57,6 +57,36 @@
   "Return a CharPred over `bottom` to `top`."
   [^Character bottom ^Character top]
   (CharPred. bottom top))
+
+(defprotocol ISFA
+  "A protocol for SFAs over a the domain of characters."
+  (initial-state [this] "Return the initial state of `this`.")
+  (final-states [this] "Return the set of final states of `this`.")
+  (get-transitions-from [this state]) "Return all the transitions from `this` to `state`.")
+
+(extend-type SFA
+  ISFA
+  (initial-state [this] (.getInitialState this))
+  (final-states [this] (.getFinalStates this))
+  (get-transitions-from [this state] (.getTransitionsFrom this (int state))))
+
+(defprotocol ITransition
+  (from [this] "Return the state from which `this` transition originates.")
+  (to [this] "Return the state to which `this` transition goes.")
+  (guard [this] "Return the guard used by `this` to check if a transition should occur."))
+
+(extend-type SFAInputMove
+  ITransition
+  (from [this] (.from this))
+  (to [this] (.to this))
+  (guard [this] (.guard this)))
+
+(.getTransitionsFrom (regex->sfa "a|b") (int 0))
+(.getMovesFrom (regex->sfa "a|b") (int 0))
+
+(right (guard (first (get-transitions-from (regex->sfa "a|b") 0))))
+
+
 
 (defn ^SFA regex->sfa
   "Returns an SFA that accepts the language described by `regex`."
@@ -165,10 +195,14 @@
 (comment
 
   (spit "Regex.java" (sfa->java (regex->sfa "(ab|b)+") "regex" "Regex"))
-  (println (regex->sfa "a+"))
+
+  (println (sfa->java (regex->sfa "a") "examples.tacas2017" "Regex"))
+
+
+  (println (sfa->java (regex->sfa "a|b") "regex" "regex"))
 
     (let [our-sfa (regex->sfa "a|(b|c)?")]
-      (println (SFA/mkTotal our-sfa solver 1000 )))
+      (println (sfa->java our-sfa "examples.tacas2017" "Regex") ))
 
   (intervals (union (make-interval \a \g) (make-interval \z \z)))
   pred
