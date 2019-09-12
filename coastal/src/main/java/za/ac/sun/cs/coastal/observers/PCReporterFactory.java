@@ -220,6 +220,8 @@ public class PCReporterFactory implements ObserverFactory {
             Tuple result = (Tuple) object;
             SymbolicState state = (SymbolicState) result.get(1);
 
+            log.info(state.getSegmentedPathCondition().getPathCondition());
+
             manager.update(accepted, state.getSegmentedPathCondition().getPathCondition());
         }
 

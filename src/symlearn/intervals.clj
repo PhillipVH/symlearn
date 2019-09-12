@@ -140,7 +140,7 @@
                     interval-size (.. transition guard intervals size)]
                 (.append java-src "\t\t\t\tif (")
                 (doseq [id (range 0 interval-size)]
-                  (let [bound (.. transition guard intervals (get 0))
+                  (let [bound (.. transition guard intervals (get id))
                         left (.getLeft bound)
                         right (.getRight bound)]
                     (when (> id 0)
