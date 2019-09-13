@@ -7,7 +7,8 @@
                  [org.clojure/core.async "0.4.500"]
                  [com.taoensso/carmine "2.19.1"]
                  [com.taoensso/tufte "2.0.1"]
-                 [com.rpl/specter "1.1.2"]]
+                 [com.rpl/specter "1.1.2"]
+                 [instaparse "1.4.10"]]
   :main ^:skip-aot symlearn.user
   :java-source-paths ["src/main/java"]
   :target-path "target/%s"

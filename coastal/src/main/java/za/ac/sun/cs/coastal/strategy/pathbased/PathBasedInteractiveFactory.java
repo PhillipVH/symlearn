@@ -181,10 +181,15 @@ public abstract class PathBasedInteractiveFactory implements StrategyFactory {
 
         private Model createModelFromInput(String input) {
             Map<String, Object> values = new HashMap<>();
-            String[] parts = input.split(" ");
+//            String[] parts = input.split(" ");
+            char[] parts = input.toCharArray();
+            System.out.println(input);
             for (int i = 0; i < parts.length; i++) {
-                values.put("A$" + i, Long.parseLong(parts[i]));
+                log.info("Adding to model " + (int) parts[i]);
+                values.put("A$" + i, new Long((int) parts[i]));
             }
+
+            log.info("Running " + input);
 
             return new Model(0, values);
         }

@@ -138,27 +138,28 @@ public class PCReporterFactory implements ObserverFactory {
 
         public synchronized void update(Boolean accepted, Expression pathCondition) {
 
-            HashSet<Expression> pathConditions = conditions.get(accepted);
+//            HashSet<Expression> pathConditions = conditions.get(accepted);
 
             // Extract constraints on the input array
-            HashSet<Operation> constraints = extractConstraints(pathCondition);
+//            HashSet<Operation> constraints = extractConstraints(pathCondition);
 
             // Transform these constraints in a format symbolic automata can understand
-            HashMap<Integer, Integer[]> processedConstraints = processConstraints(constraints);
+//            HashMap<Integer, Integer[]> processedConstraints = processConstraints(constraints);
 
             // Construct the redis formatted output
             StringBuilder redisResponse = new StringBuilder();
             redisResponse.append("[");
 
-            processedConstraints.forEach((pos, bounds) -> {
-                redisResponse.append("[").append(bounds[0]).append(" ").append(bounds[1]).append("]");
-            });
-
-            redisResponse.append("]");
+//            processedConstraints.forEach((pos, bounds) -> {
+//                redisResponse.append("[").append(bounds[0]).append(" ").append(bounds[1]).append("]");
+//            });
+//
+//            redisResponse.append("]");
 
             // Write the respone to Redis
             Jedis jedis = new Jedis();
-            jedis.set("refined", redisResponse.toString());
+//            jedis.set("refined", redisResponse.toString());
+            jedis.set("refined", accepted + "\n" + pathCondition.toString());
         }
 
         public void report(Object object) {
