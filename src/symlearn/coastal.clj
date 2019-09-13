@@ -2,11 +2,13 @@
   (:require [clojure.string :as str]
             [taoensso.carmine :as car]
             [taoensso.tufte :as tufte]
+            [clojure.walk :as walk]
             [symlearn.paths :as paths]
             [symlearn.ranges :as ranges]
             [symlearn.table :as table]
             [clojure.java.shell :as shell]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [instaparse.core :as insta])
   (:import [java.io File]))
 
 (set! *warn-on-reflection* true)
@@ -45,6 +47,26 @@
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
     [(read-string accepted) path-condition]))
+
+(defn constraint-node?
+  "Return true if `node` is a constraint node over an array index."
+  [node]
+  (when (and (vector? node) (= 4 (count node)))
+    (let [[type lhs guard rhs] node
+          [_ [_ _ idx]] lhs
+          [_ op] guard
+          [_ bound] rhs]
+      (and (= type :expr) (not (nil? idx))))))
+
+(def path-condition-parser
+  "A parser that eats Coastal path conditions"
+  (insta/parser
+   "S = expr?
+    expr = lhs comp rhs | <'('> expr <')'> | expr ('&&' expr)
+    lhs = #'\\d+' | idx
+    idx = 'A$' (#'\\d')
+    rhs = #'\\d+'
+    comp = '==' | '!=' | '>' | '>=' | '<' | '<='"))
 
 (defn- get-seed-constraints
   "Return all constraints of unit length for the parser currently running
