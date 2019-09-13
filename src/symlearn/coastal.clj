@@ -35,6 +35,17 @@
          (wcar* (car/del :refined))
          (read-string refined-path))))))
 
+(defn refine-string
+  [string]
+  (wcar* (car/del :refined)
+         (car/set :refine string))
+
+  (while (not= 1 (wcar* (car/exists :refined))))
+  (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
+        [accepted path-condition] (str/split refined-path #"\n")]
+    (wcar* (car/del :refined))
+    [(read-string accepted) path-condition]))
+
 (defn- get-seed-constraints
   "Return all constraints of unit length for the parser currently running
   in the Coastal system."
