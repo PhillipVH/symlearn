@@ -55,7 +55,7 @@
   ;; TACAS -- works well! learning stalls at depth 3, finds evidence at depth 4
   (with-profiling
     (let [coastal (coastal/start-coastal! "TACAS.xml")
-          {:keys [table db]} (learner/learn {:depth 4, :parse-fn #(TacasParser/parse %)})
+          {:keys [table db]} (learner/learn {:depth 2, :parse-fn #(TacasParser/parse %)})
           learnt (table/table->sfa table)]
       (sfa/sfa->img learnt)
       (coastal/stop-coastal! coastal)))
