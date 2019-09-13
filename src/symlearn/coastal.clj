@@ -4,11 +4,12 @@
             [taoensso.tufte :as tufte]
             [clojure.walk :as walk]
             [symlearn.paths :as paths]
+            [symlearn.intervals :as intervals]
             [symlearn.ranges :as ranges]
             [symlearn.table :as table]
+            [symlearn.z3 :as z3]
             [clojure.java.shell :as shell]
             [clojure.java.io :as io]
-            [symlearn.intervals :as intervals]
             [clojure.java.shell :as sh])
   (:import [java.io File]))
 
@@ -61,29 +62,50 @@
          (sort-by first)
          (set))))
 
-(defn constraints
+(defprotocol IPathCondition
+  (accepted? [this] "Return true if `this` represents a successful parse.")
+  (length [this] "Return the number of indices bounded by `this`.")
+  (constraints [this] "Returns the bounds on each index bounded by `this`.")
+  (witness [this] "Return a string that satisfies the constraints in `this`."))
+
+(defrecord PathCondition [accepted constraints]
+  IPathCondition
+  (accepted? [_] accepted)
+  (constraints [_] constraints)
+  (length [_] (->> constraints
+                   keys
+                   (reduce max)
+                   inc))
+  (witness [this] (z3/model this)))
+
+(defn query
   "Return a map with a set of assertions against `string`, and the parser's
   acceptance status."
   [string]
-  (let [[accepted path] (refine-string string)]
-    {:accepted accepted
-     :constraints (path->constraints path)}))
+  (let [[accepted path] (refine-string string)
+        constraints (->> path
+                         path->constraints
+                         (map (fn [[idx op guard]]
+                                [(Integer/parseInt idx) op (Integer/parseInt guard)]))
+                         (group-by #(first %))
+                         (into (sorted-map-by <)))]
+    (->PathCondition accepted constraints)))
 
-(defn- get-seed-constraints
-  "Return all constraints of unit length for the parser currently running
+((defn- get-seed-constraints
+   "Return all constraints of unit length for the parser currently running
   in the Coastal system."
-  []
-  (let [[seed] (refine-path [[0 0]])
-        complement (first (ranges/get-completing-predicates #{seed}))]
-    (loop [known #{seed}
-           unknown #{complement}]
-      (if (empty? unknown)
-        known
-        (let [guess (first unknown)
-              [constraint] (refine-path [guess])
-              known' (conj known constraint)
-              unknown' (ranges/get-completing-predicates known')]
-          (recur (conj known constraint) unknown'))))))
+   []
+   (let [[seed] (refine-path [[0 0]])
+         complement (first (ranges/get-completing-predicates #{seed}))]
+     (loop [known #{seed}
+            unknown #{complement}]
+       (if (empty? unknown)
+         known
+         (let [guess (first unknown)
+               [constraint] (refine-path [guess])
+               known' (conj known constraint)
+               unknown' (ranges/get-completing-predicates known')]
+           (recur (conj known constraint) unknown')))))))
 
 (defn get-seed-inputs
   "Return a database of constraints and acceptance information for input of unit length."
