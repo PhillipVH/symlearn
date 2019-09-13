@@ -8,7 +8,8 @@
             [symlearn.table :as table]
             [clojure.java.shell :as shell]
             [clojure.java.io :as io]
-            [instaparse.core :as insta])
+            [instaparse.core :as insta]
+            [symlearn.intervals :as intervals])
   (:import [java.io File]))
 
 (set! *warn-on-reflection* true)
@@ -48,6 +49,16 @@
     (wcar* (car/del :refined))
     [(read-string accepted) path-condition]))
 
+(defn path->constraints
+  "Return a seq of constraints extracted from `path-condition`, each of
+  the form [idx op bound], where idx is the index into the array, op is
+  the operation of the assertion (EQ, NEQ, GE, etc.), and bound is the
+  argument given to the assertion."
+  [path-condition]
+  (let [constraints (re-seq #"A\$(\d+)(<=|==|>=|!=|>|<)(\d+)" path-condition)]
+    (->> constraints
+         (map #(drop 1 %)) ;; drop the full match
+         (sort-by first))))
 (defn constraint-node?
   "Return true if `node` is a constraint node over an array index."
   [node]
