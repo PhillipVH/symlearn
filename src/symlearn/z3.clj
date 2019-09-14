@@ -25,6 +25,31 @@
         trimmed (map #(subs % 0 (dec (.length %))) char-section)]
     (map #(char (Integer/parseInt %)) trimmed)))
 
+(defn make-context
+  []
+  "(declare-const a Int)\n")
+
+(defn assert
+  [ctx op bound]
+  (let [negation (= "!=" op)
+        op (if (or (= "!=" op)
+                   (= "==" op)) "=" op)]
+    (if negation
+      (str ctx (format "(assert (not (%s a %s)))\n" op bound))
+      (str ctx (format "(assert (%s a %s))\n" op bound)))))
+
+(defn solve
+  [ctx]
+  (let [prog (str ctx "(check-sat)\n(get-model)\n")]
+    (:out (sh/sh "z3" "-in" :in prog))))
+
+;; (-> (make-context)
+;;      (assert ">=" 2)
+;;      (assert "!=" 3)
+;;      (assert ">=" 500)
+;;      (assert ">=" 500)
+;;      (solve))
+
 (defn model
   "Return a (String) model for the given `path-condition`."
   [path-condition]

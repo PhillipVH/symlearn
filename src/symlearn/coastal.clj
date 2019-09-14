@@ -88,7 +88,7 @@
                          (map (fn [[idx op guard]]
                                 [(Integer/parseInt idx) op (Integer/parseInt guard)]))
                          (group-by #(first %))
-                         (into (sorted-map-by <)))]
+                         (into (sorted-map)))]
     (->PathCondition accepted constraints)))
 
 ((defn- get-seed-constraints
