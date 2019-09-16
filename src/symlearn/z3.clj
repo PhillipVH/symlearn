@@ -1,7 +1,46 @@
 (ns symlearn.z3
+  (:refer-clojure :exclude [assert])
   (:require [clojure.string :as str]
             [clojure.java.shell :as sh]
-            [symlearn.coastal :as coastal]))
+            [taoensso.tufte :as tufte]))
+
+(defn make-context
+  ""
+  []
+  "(declare-const a Int)\n")
+
+(defn assert
+  [ctx op bound]
+  (let [negation (= "!=" op)
+        op (if (or (= "!=" op)
+                   (= "==" op)) "=" op)]
+    (if negation
+      (str ctx (format "(assert (not (%s a %s)))\n" op bound))
+      (str ctx (format "(assert (%s a %s))\n" op bound)))))
+
+(defn solve
+  "Runs the z3 solver with the constraints specified in `ctx`. Returns
+  a witness if one exists, and `nil` if the constraints are unsat."
+  [ctx]
+  (tufte/p
+   ::solve
+   (let [prog (str ctx "(check-sat)\n(get-model)\n")
+         z3-output (:out (sh/sh "z3" "-in" :in prog))]
+     (when (str/starts-with? z3-output "sat")
+       z3-output))))
+
+;; (tufte/add-basic-println-handler! {})
+
+;; (tufte/profile {}
+;;                (doseq [i (range 10000)]
+;;                  (-> (make-context)
+;;                      (assert "<=" 2)
+;;                      (assert "!=" 3)
+;;                      (assert "!=" 0)
+;;                      (assert "!=" 500)
+;;                      (solve))))
+
+;; generate witness when a pc is first loaded
 
 (defn- char-witness
   [constraints]

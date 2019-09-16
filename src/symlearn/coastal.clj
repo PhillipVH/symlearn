@@ -91,21 +91,21 @@
                          (into (sorted-map)))]
     (->PathCondition accepted constraints)))
 
-((defn- get-seed-constraints
-   "Return all constraints of unit length for the parser currently running
+(defn- get-seed-constraints
+  "Return all constraints of unit length for the parser currently running
   in the Coastal system."
-   []
-   (let [[seed] (refine-path [[0 0]])
-         complement (first (ranges/get-completing-predicates #{seed}))]
-     (loop [known #{seed}
-            unknown #{complement}]
-       (if (empty? unknown)
-         known
-         (let [guess (first unknown)
-               [constraint] (refine-path [guess])
-               known' (conj known constraint)
-               unknown' (ranges/get-completing-predicates known')]
-           (recur (conj known constraint) unknown')))))))
+  []
+  (let [[seed] (refine-path [[0 0]])
+        complement (first (ranges/get-completing-predicates #{seed}))]
+    (loop [known #{seed}
+           unknown #{complement}]
+      (if (empty? unknown)
+        known
+        (let [guess (first unknown)
+              [constraint] (refine-path [guess])
+              known' (conj known constraint)
+              unknown' (ranges/get-completing-predicates known')]
+          (recur (conj known constraint) unknown'))))))
 
 (defn get-seed-inputs
   "Return a database of constraints and acceptance information for input of unit length."
