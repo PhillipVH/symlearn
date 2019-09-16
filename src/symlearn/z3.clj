@@ -25,20 +25,17 @@
   (tufte/p
    ::solve
    (let [prog (str ctx "(check-sat)\n(get-model)\n")
-         z3-output (:out (sh/sh "z3" "-in" :in prog))]
+         z3-output (:out (sh/sh "z3" "-in" :in prog))
+         negative (re-find #"-" z3-output)
+         witness (read-string (re-find #"\d+" z3-output))]
      (when (str/starts-with? z3-output "sat")
-       z3-output))))
+       (println z3-output)
+       (if negative (- witness) witness)))))
 
-;; (tufte/add-basic-println-handler! {})
-
-;; (tufte/profile {}
-;;                (doseq [i (range 10000)]
-;;                  (-> (make-context)
-;;                      (assert "<=" 2)
-;;                      (assert "!=" 3)
-;;                      (assert "!=" 0)
-;;                      (assert "!=" 500)
-;;                      (solve))))
+(-> (make-context)
+    (assert "<=" -130)
+    (assert "!=" -120)
+    (solve))
 
 ;; generate witness when a pc is first loaded
 
@@ -63,31 +60,6 @@
                           (map str/trim))
         trimmed (map #(subs % 0 (dec (.length %))) char-section)]
     (map #(char (Integer/parseInt %)) trimmed)))
-
-(defn make-context
-  []
-  "(declare-const a Int)\n")
-
-(defn assert
-  [ctx op bound]
-  (let [negation (= "!=" op)
-        op (if (or (= "!=" op)
-                   (= "==" op)) "=" op)]
-    (if negation
-      (str ctx (format "(assert (not (%s a %s)))\n" op bound))
-      (str ctx (format "(assert (%s a %s))\n" op bound)))))
-
-(defn solve
-  [ctx]
-  (let [prog (str ctx "(check-sat)\n(get-model)\n")]
-    (:out (sh/sh "z3" "-in" :in prog))))
-
-;; (-> (make-context)
-;;      (assert ">=" 2)
-;;      (assert "!=" 3)
-;;      (assert ">=" 500)
-;;      (assert ">=" 500)
-;;      (solve))
 
 (defn model
   "Return a (String) model for the given `path-condition`."
