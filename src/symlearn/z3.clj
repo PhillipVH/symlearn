@@ -26,16 +26,14 @@
    ::solve
    (let [prog (str ctx "(check-sat)\n(get-model)\n")
          z3-output (:out (sh/sh "z3" "-in" :in prog))
-         negative (re-find #"-" z3-output)
+         negative (re-seq #"- " z3-output)
          witness (read-string (re-find #"\d+" z3-output))]
      (when (str/starts-with? z3-output "sat")
-       (println z3-output)
        (if negative (- witness) witness)))))
 
-(-> (make-context)
-    (assert "<=" -130)
-    (assert "!=" -120)
-    (solve))
+;; (-> (make-context)
+;;     (assert ">" 120)
+;;     (solve))
 
 ;; generate witness when a pc is first loaded
 
