@@ -8,7 +8,7 @@
                  [com.taoensso/carmine "2.19.1"]
                  [com.taoensso/tufte "2.0.1"]
                  [com.rpl/specter "1.1.2"]]
-  :main ^:skip-aot symlearn.user
+  :main ^:skip-aot symlearn.demo
   :java-source-paths ["src/main/java"]
   :target-path "target/%s"
   :resource-paths ["resources/"
