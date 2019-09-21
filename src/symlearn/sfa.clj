@@ -122,6 +122,7 @@
           "tmp.dot"
           "-o"
           "tmp.png")
-   (sh/sh "xdg-open" "tmp.png")
-   (sh/sh "rm" "tmp.png")
-   (sh/sh "rm" "tmp.dot")))
+   #_(when display?
+       (sh/sh "xdg-open" "tmp.png")
+       (sh/sh "rm" "tmp.png")
+       (sh/sh "rm" "tmp.dot"))))

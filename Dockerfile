@@ -1,8 +1,8 @@
 FROM clojure
 
-# Install z3 + redis + vim
+# Install z3 + redis + dot
 RUN apt update -y
-RUN apt install z3 redis-tools -y
+RUN apt install z3 redis-tools graphviz -y
 
 # Copy the project definition and download dependencies
 RUN mkdir -p /usr/src/symlearn

@@ -1,6 +1,9 @@
 (ns symlearn.demo
   (:gen-class)
   (:require [clojure.java.io :as io]
+            [ring.adapter.jetty :as jetty]
+            [ring.util.response :refer [file-response]]
+            [ring.middleware.params :refer [wrap-params]]
             [symlearn.coastal :as coastal]
             [symlearn.learner :as learner]
             [symlearn.table :as table]
@@ -12,24 +15,28 @@
   {"LearnLarge" #(LearnLarge/parse %)
    "PaperExample" #(PaperExample/parse %)})
 
-(defn -main
-  [& [config-name depth]]
-  (println "before")
-  (let [dse-engine (coastal/start-coastal! "PaperExample.xml")
-        _ (println "Started coasted")
-        _ (prn (.isAlive dse-engine))
-        {:keys [table]} (learner/learn {:depth 1, :parse-fn #(PaperExample/parse %)})
-        _ (println "did learn " table)
+(def config-for
+  {"LearnLarge" "LearnLarge.xml"
+   "PaperExample" "PaperExample.xml"})
+
+(defn learn-parser-to-depth
+  [parser depth]
+  (assert (config-for parser) (str parser " is not a known parser"))
+  (let [dse-engine (coastal/start-coastal! (config-for parser))
+        {:keys [table]} (learner/learn {:depth depth, :parse-fn (parse-fn-for parser)})
         hypothesis (table/table->sfa table)]
-    (clojure.pprint/pprint hypothesis)
-    (coastal/stop-coastal! dse-engine)
-    #_(sfa/sfa->img hypothesis))
-  #_(if (#{"PaperExample" "LearnLarge"} config-name)
-    (let [dse-engine (coastal/start-coastal! (str config-name ".xml"))
-          {:keys [table]} (learner/learn {:depth depth, :parse-fn (parse-fn-for config-name)})
-          hypothesis (table/table->sfa table)]
-      (coastal/stop-coastal! dse-engine)
-      (clojure.pprint/pprint hypothesis)
-      #_(sfa/sfa->img hypothesis))
-    (binding [*out* *err*]
-      (println config-name "does not exist in symlearn/resources"))))
+    (sfa/sfa->img hypothesis)
+    (prn hypothesis)
+    (coastal/stop-coastal! dse-engine)))
+
+(defn handler [request]
+  (let [{:strs [parser depth]} (:query-params request)]
+    (learn-parser-to-depth parser (read-string depth))
+    (file-response "tmp.png")))
+
+(def app
+  (wrap-params handler))
+
+(defn -main
+  [& args]
+  (jetty/run-jetty app {:port 3000}))
