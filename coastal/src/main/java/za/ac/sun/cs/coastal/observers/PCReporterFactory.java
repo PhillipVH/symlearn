@@ -157,7 +157,7 @@ public class PCReporterFactory implements ObserverFactory {
             redisResponse.append("]");
 
             // Write the respone to Redis
-            Jedis jedis = new Jedis();
+            Jedis jedis = new Jedis("redis");
             jedis.set("refined", redisResponse.toString());
         }
 
@@ -213,7 +213,7 @@ public class PCReporterFactory implements ObserverFactory {
             this.broker = coastal.getBroker();
             broker.subscribeThread("mark", this::mark);
             broker.subscribeThread("dive-end", this::diveEnd);
-            this.jedis = new Jedis();
+            this.jedis = new Jedis("redis");
         }
 
         public void diveEnd(Object object) {

@@ -176,7 +176,7 @@ public abstract class PathBasedInteractiveFactory implements StrategyFactory {
             this.manager = (PathBasedManager) manager;
             broker = coastal.getBroker();
             solver = new Solver(coastal);
-            jedis = new Jedis();
+            jedis = new Jedis("redis");
         }
 
         private Model createModelFromInput(String input) {

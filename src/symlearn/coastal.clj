@@ -14,7 +14,7 @@
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
   [& body]
-  `(let [redis-conn# {:pool {} :spec {:host "127.0.0.1" :port 6379}}]
+  `(let [redis-conn# {:pool {} :spec {:host "redis" :port 6379}}]
      (car/wcar redis-conn# ~@body)))
 
 (defn refine-path
