@@ -1,2 +1,6 @@
 #!/usr/bin
-docker run -it --rm redis redis-cli -h redis
+docker run -it \
+           --rm \
+           --link symlearn-redis:redis \
+           redis \
+           redis-cli -h redis

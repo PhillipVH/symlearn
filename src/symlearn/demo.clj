@@ -14,7 +14,17 @@
 
 (defn -main
   [& [config-name depth]]
-  (if (#{"PaperExample" "LearnLarge"} config-name)
+  (println "before")
+  (let [dse-engine (coastal/start-coastal! "PaperExample.xml")
+        _ (println "Started coasted")
+        _ (prn (.isAlive dse-engine))
+        {:keys [table]} (learner/learn {:depth 1, :parse-fn #(PaperExample/parse %)})
+        _ (println "did learn " table)
+        hypothesis (table/table->sfa table)]
+    (clojure.pprint/pprint hypothesis)
+    (coastal/stop-coastal! dse-engine)
+    #_(sfa/sfa->img hypothesis))
+  #_(if (#{"PaperExample" "LearnLarge"} config-name)
     (let [dse-engine (coastal/start-coastal! (str config-name ".xml"))
           {:keys [table]} (learner/learn {:depth depth, :parse-fn (parse-fn-for config-name)})
           hypothesis (table/table->sfa table)]

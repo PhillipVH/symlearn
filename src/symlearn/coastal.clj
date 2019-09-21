@@ -46,7 +46,9 @@
       (if (empty? unknown)
         known
         (let [guess (first unknown)
+              _ (println "refining")
               [constraint] (refine-path [guess])
+              _ (println "done")
               known' (conj known constraint)
               unknown' (ranges/get-completing-predicates known')]
           (recur (conj known constraint) unknown'))))))
@@ -72,8 +74,7 @@
   [filename]
   (tufte/p
    ::start-coastal
-   (let [config (io/resource filename)
-         args (into-array ["./gradlew" "run" (str "--args=" (.getPath config))])
+   (let [args (into-array ["bash" "gradlew" "run" (str "--args=/usr/src/symlearn/coastal/src/main/java/examples/tacas2017/" filename)])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)

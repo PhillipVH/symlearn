@@ -132,6 +132,7 @@
       (loop [db (or db (coastal/get-seed-inputs))
              table (or table (table/init-table (table/make-table) db))]
         (swap! counter inc)
+        (println "Learning Step: " @counter)
         (if-not (table/closed? table)
           (recur db (table/close table db))
 
