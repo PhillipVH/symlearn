@@ -5,8 +5,7 @@ docker run -it \
            --name symlearn-learner \
            --link symlearn-redis:redis \
            -p 3000:3000 \
-           symlearn:demo-21092019 \
-           bash
+           symlearn:demo-21092019
 
 # Clean up
 docker stop $(docker ps -aq)
