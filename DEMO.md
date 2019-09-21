@@ -3,6 +3,9 @@
 The SymLearn demo runs two Docker containers, one for Redis, the other for the learner. 
 The following commands should get you up and running:
 ```bash
+git clone https://github.com/PhillipVH/symlearn.git
+cd symlearn
+git checkout feature/demo-mode
 bash build.sh # Build the images
 bash start.sh # Start the containers
 ```
