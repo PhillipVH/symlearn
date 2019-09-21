@@ -9,15 +9,18 @@
             [symlearn.table :as table]
             [symlearn.sfa :as sfa])
   (:import LearnLarge
-           PaperExample))
+           PaperExample
+           TacasParser))
 
 (def parse-fn-for
   {"LearnLarge" #(LearnLarge/parse %)
-   "PaperExample" #(PaperExample/parse %)})
+   "PaperExample" #(PaperExample/parse %)
+   "TacasParser" #(TacasParser/parse %)})
 
 (def config-for
   {"LearnLarge" "LearnLarge.xml"
-   "PaperExample" "PaperExample.xml"})
+   "PaperExample" "PaperExample.xml"
+   "TacasParser" "TACAS.xml"})
 
 (defn learn-parser-to-depth
   [parser depth]
