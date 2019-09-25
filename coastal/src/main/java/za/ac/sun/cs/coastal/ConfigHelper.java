@@ -782,19 +782,19 @@ public class ConfigHelper {
 	 * @return an immutable configuration
 	 */
 	private static Configuration loadConfigFromString(Logger log, String configString) {
-		if (configString == null) {
-			return null;
-		}
-		try {
-			String finalString = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\" ?>"
-					+ "<!DOCTYPE configuration PUBLIC \"-//DEEPSEA//COASTAL configuration//EN\" "
-					+ "\"https://deepseaplatform.github.io/coastal/coastal.dtd\">" + "<configuration>" + configString
-					+ "</configuration>";
-			InputStream in = new ByteArrayInputStream(finalString.getBytes());
-			return loadConfigFromStream(log, in);
-		} catch (ConfigurationException x) {
-			// ignore
-		}
+//		if (configString == null) {
+//			return null;
+//		}
+//		try {
+//			String finalString = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\" ?>"
+//					+ "<!DOCTYPE configuration PUBLIC \"-//DEEPSEA//COASTAL configuration//EN\" "
+//					+ "\"https://deepseaplatform.github.io/coastal/coastal.dtd\">" + "<configuration>" + configString
+//					+ "</configuration>";
+//			InputStream in = new ByteArrayInputStream(finalString.getBytes());
+//			return loadConfigFromStream(log, in);
+//		} catch (ConfigurationException x) {
+//			// ignore
+//		}
 		return null;
 	}
 
