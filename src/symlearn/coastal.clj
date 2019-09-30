@@ -76,7 +76,7 @@
                    keys
                    (reduce max)
                    inc))
-  (witness [this] (z3/model this)))
+  (witness [this] (z3/solve this)))
 
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's
@@ -139,3 +139,12 @@
   "Stop a Coastal process running in `coastal`."
   [^Process coastal]
   (.destroyForcibly coastal))
+
+(defn running?
+  [^Process coastal]
+  (.isAlive coastal))
+
+
+;; (.isAlive coastal)
+;; (defonce coastal (start-coastal! "Regex.xml"))
+
