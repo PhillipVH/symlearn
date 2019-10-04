@@ -15,6 +15,8 @@
 
 (set! *warn-on-reflection* true)
 
+(def *coastal-instance* nil)
+
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
   [& body]
@@ -40,6 +42,7 @@
          (read-string refined-path))))))
 
 (defn refine-string
+  "Returns [boolean list] of accepted? and path conditions"
   [string]
   (wcar* (car/del :refined)
          (car/set :refine string))
@@ -121,11 +124,21 @@
         args (into-array ["./gradlew" "compileJava"])
         builder (ProcessBuilder. ^"[Ljava.lang.String;" args)]
     (.directory builder coastal-dir)
-    (.start builder)))
+    (let [compiler (.start builder)]
+      (while (.isAlive compiler)))))
 
-(defn ^Process start-coastal!
+(defn stop!
+  "Stop a Coastal process running in `coastal`."
+  []
+  (.destroyForcibly *coastal-instance*)
+  (while (.isAlive *coastal-instance*))
+  (alter-var-root #'*coastal-instance* (constantly nil)))
+
+(defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
   [filename]
+  (if *coastal-instance*
+    (stop!))
   (tufte/p
    ::start-coastal
    (let [config (io/resource filename)
@@ -133,18 +146,39 @@
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
-     (.start builder))))
+     (let [coastal-instance (.start builder)]
+       (alter-var-root #'*coastal-instance* (constantly coastal-instance))))))
 
-(defn stop-coastal!
-  "Stop a Coastal process running in `coastal`."
-  [^Process coastal]
-  (.destroyForcibly coastal))
+(defn install-parser!
+  [regex]
+  (stop!)
+  (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
+    (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
+    (compile-parsers!)
+    (start! "Regex.xml")))
 
 (defn running?
-  [^Process coastal]
-  (.isAlive coastal))
+  []
+  (if *coastal-instance*
+    (.isAlive *coastal-instance*)
+    false))
 
+(comment
 
-;; (.isAlive coastal)
-;; (defonce coastal (start-coastal! "Regex.xml"))
+  ;; Start an instance of Coastal
+  (start! "Regex.xml")
 
+  ;; Confirm that it is running
+  (running?)
+
+  ;; Install an arbitrary regex
+  (install-parser! "5?l|w")
+  (install-parser! "(a|b)?")
+
+  ;; Query Coastal for path information of some input given to the parser
+  (refine-string "w") ;; TODO Turn path conditions into fns we can call to check membership (fn [str] (>= 2 str[0]) (<= 1 str[2])) etc
+
+  ;; Stop Coastal
+  (stop!)
+
+  )

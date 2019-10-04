@@ -205,7 +205,7 @@
 
 
 
-  (regex->sfa "bbbbbbbbbbbb")
+  (regex->sfa "0-0(-0)?")
 
   (spit "Regex.java" (sfa->java (regex->sfa "(ab|b)+") "regex" "Regex"))
 
