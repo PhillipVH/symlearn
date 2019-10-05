@@ -15,7 +15,9 @@
 
 (set! *warn-on-reflection* true)
 
-(def *coastal-instance* nil)
+(def ^Process *coastal-instance* nil)
+
+(def string-config "Regex.xml")
 
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
@@ -132,30 +134,33 @@
   []
   (.destroyForcibly *coastal-instance*)
   (while (.isAlive *coastal-instance*))
-  (alter-var-root #'*coastal-instance* (constantly nil)))
+  (alter-var-root #'*coastal-instance* (constantly nil))
+  ::ok)
 
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
-  [filename]
+  []
   (if *coastal-instance*
     (stop!))
   (tufte/p
    ::start-coastal
-   (let [config (io/resource filename)
+   (let [config (io/resource string-config)
          args (into-array ["./gradlew" "run" (str "--args=" (.getPath config))])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
      (let [coastal-instance (.start builder)]
-       (alter-var-root #'*coastal-instance* (constantly coastal-instance))))))
+       (alter-var-root #'*coastal-instance* (constantly coastal-instance))
+       ::ok))))
 
 (defn install-parser!
   [regex]
-  (stop!)
+  (if *coastal-instance*
+    (stop!))
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
-    (start! "Regex.xml")))
+    (start!)))
 
 (defn running?
   []
@@ -166,7 +171,7 @@
 (comment
 
   ;; Start an instance of Coastal
-  (start! "Regex.xml")
+  (start!)
 
   ;; Confirm that it is running
   (running?)
@@ -174,9 +179,10 @@
   ;; Install an arbitrary regex
   (install-parser! "5?l|w")
   (install-parser! "(a|b)?")
+  (install-parser! "0-0(-0)?\\+?")
 
   ;; Query Coastal for path information of some input given to the parser
-  (refine-string "w") ;; TODO Turn path conditions into fns we can call to check membership (fn [str] (>= 2 str[0]) (<= 1 str[2])) etc
+  (refine-string "") ;; TODO Turn path conditions into fns we can call to check membership (fn [str] (>= 2 str[0]) (<= 1 str[2])) etc
 
   ;; Stop Coastal
   (stop!)
