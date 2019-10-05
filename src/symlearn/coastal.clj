@@ -16,6 +16,7 @@
 (set! *warn-on-reflection* true)
 
 (defonce ^Process *coastal-instance* nil)
+(defonce *current-parser* nil)
 
 (def string-config "Regex.xml")
 
@@ -24,24 +25,6 @@
   [& body]
   `(let [redis-conn# {:pool {} :spec {:host "127.0.0.1" :port 6379}}]
      (car/wcar redis-conn# ~@body)))
-
-;; (defn refine-path
-;;   "Return the exact constraints along `path` by invoking a Coastal diver."
-;;   [path]
-;;   (tufte/p
-;;    ::refine-path
-;;    (if (= path []) ;; the empty path will always be the empty path
-;;      []
-;;      (let [input (str/join " " (paths/make-concrete path))]
-
-;;        (wcar* (car/del :refined)
-;;               (car/set :refine input))
-
-;;        (while (not= 1 (wcar* (car/exists :refined))))
-
-;;        (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))]
-;;          (wcar* (car/del :refined))
-;;          (read-string refined-path))))))
 
 (defn refine-string
   "Returns [boolean list] of accepted? and path conditions"
@@ -71,17 +54,14 @@
   (accepted? [this] "Return true if `this` represents a successful parse.")
   (length [this] "Return the number of indices bounded by `this`.")
   (constraints [this] "Returns the bounds on each index bounded by `this`.")
-  #_(witness [this] "Return a string that satisfies the constraints in `this`."))
+  (witness [this] "Return a string that satisfies the constraints in `this`."))
 
 (defrecord PathCondition [accepted constraints]
   IPathCondition
-  (accepted? [_] accepted)
-  (constraints [_] constraints)
-  (length [_] (->> constraints
-                   keys
-                   (reduce max)
-                   inc))
-  #_(witness [this] (z3/solve constraints)))
+  (accepted? [this] (:accepted this))
+  (constraints [this] (:constraints this))
+  (length [this] (count (:constraints this)))
+  (witness [this] (z3/witness (:constraints this))))
 
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's
@@ -97,33 +77,9 @@
                          (sort-by first)
                          (partition-by first)
                          (map (fn [constraints] (vec (map #(vec (drop 1 %)) constraints))))
-                         #_(map #(drop 1 %)) ;; drop the idx after sorting
                          (map set)
                          (vec))]
     (->PathCondition accepted constraints)))
-
-;; (defn- get-seed-constraints
-;;   "Return all constraints of unit length for the parser currently running
-;;   in the Coastal system."
-;;   []
-;;   (let [[seed] (refine-path [[0 0]])
-;;         complement (first (ranges/get-completing-predicates #{seed}))]
-;;     (loop [known #{seed}
-;;            unknown #{complement}]
-;;       (if (empty? unknown)
-;;         known
-;;         (let [guess (first unknown)
-;;               [constraint] (refine-path [guess])
-;;               known' (conj known constraint)
-;;               unknown' (ranges/get-completing-predicates known')]
-;;           (recur (conj known constraint) unknown'))))))
-
-;; (defn get-seed-inputs
-;;   "Return a database of constraints and acceptance information for input of unit length."
-;;   []
-;;   (map (fn [[min max]]
-;;          {:path [[min max]] :accepted (table/member? [min])})
-;;        (get-seed-constraints)))
 
 (defn compile-parsers!
   "Compile the parsers installed in the Coastal system."
@@ -163,6 +119,7 @@
   [regex]
   (if *coastal-instance*
     (stop!))
+  (alter-var-root #'*current-parser* (constantly regex))
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
@@ -173,20 +130,23 @@
   (and *coastal-instance*
        (.isAlive *coastal-instance*)))
 
-;; (comment
+(defn active-parser
+  []
+  *current-parser*)
 
-;; install the castle move parser
-(install-parser! "0-0(-0)?\\+?")
+(comment
 
-;; Query Coastal for path information of some input given to the parser
-(query "0-0-")
+  ;; install the castle move parser
+  (install-parser! "0-0(-0)?\\+?")
 
+  ;; Query Coastal for path information of some input given to the parser
+  (query "\uFFFF")
 
-;; Install an arbitrary regex
-(install-parser! "5?l|w")
-(install-parser! "(a|b)?")
+  ;; Install an arbitrary regex
+  (install-parser! "5?l|w")
+  (install-parser! "(a|b)?")
 
   ;; Stop Coastal
   (stop!)
 
-  ;; )
+)
