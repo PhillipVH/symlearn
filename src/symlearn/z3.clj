@@ -27,9 +27,11 @@
        (if negative (- witness) witness)))))
 
 (defn witness
-  [constraints]
-  (let [assertions (map (fn [constraints] (map assert constraints)) constraints)
+  "Return a witness that satisfies a list of constraint sets."
+  [constraint-sets]
+  (let [assertions (map (fn [constraints] (map assert constraints)) constraint-sets)
         witness (map solve assertions)]
     witness))
+
 
 #_(def witness (memoize witness*))

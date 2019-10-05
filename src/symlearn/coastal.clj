@@ -61,25 +61,7 @@
   (accepted? [this] (:accepted this))
   (constraints [this] (:constraints this))
   (length [this] (count (:constraints this)))
-  (witness [this] (z3/witness (:constraints this))))
-
-(defn query
-  "Return a map with a set of assertions against `string`, and the parser's
-  acceptance status."
-  [string]
-  (if-not *coastal-instance*
-    (start!))
-  (let [[accepted path] (refine-string string)
-        constraints (->> path
-                         path->constraints
-                         (map (fn [[idx op guard]]
-                                [(Integer/parseInt idx) op (Integer/parseInt guard)]))
-                         (sort-by first)
-                         (partition-by first)
-                         (map (fn [constraints] (vec (map #(vec (drop 1 %)) constraints))))
-                         (map set)
-                         (vec))]
-    (->PathCondition accepted constraints)))
+  (witness [this] (str/join (map char (z3/witness (:constraints this))))))
 
 (defn compile-parsers!
   "Compile the parsers installed in the Coastal system."
@@ -134,13 +116,106 @@
   []
   *current-parser*)
 
+(defn query
+  "Return a map with a set of assertions against `string`, and the parser's
+  acceptance status."
+  [string]
+  (if-not *coastal-instance*
+    (start!))
+  (let [[accepted path] (refine-string string)
+        constraints (->> path
+                         path->constraints
+                         (map (fn [[idx op guard]]
+                                [(Integer/parseInt idx) op (Integer/parseInt guard)]))
+                         (sort-by first)
+                         (partition-by first)
+                         (map (fn [constraints] (vec (map #(vec (drop 1 %)) constraints))))
+                         (map set)
+                         (vec))]
+    (->PathCondition accepted constraints)))
+
+;; Constraint Set Fns
+(defn suffixes
+  "Return the suffixes of the path condition pc"
+  [constraint-sets]
+  (for [n (range (count constraint-sets))]
+    (->> constraint-sets
+         (drop n)
+         vec)))
+
+(defn prefixes
+  "Return every prefix of `path`, including `path`."
+  [constraint-sets]
+  (for [n (range (count constraint-sets))]
+    (->> constraint-sets
+         reverse
+         (drop n)
+         reverse
+         vec)))
+
+(defn make-table
+  []
+  {:S #{{:path (query "") :row []}}
+   :R #{}
+   :E [""]})
+
+(defn fill-row
+  [{:keys [path row] :as entry} evidence]
+  (let [row-length (count row)
+        evidence-count (count evidence)]
+    (if (= row-length evidence-count)
+      entry
+      (let [new-row (reduce (fn [row e]
+                              (conj row (accepted? (query (str (witness path) e)))))
+                            row
+                            (drop row-length evidence))]
+        (assoc entry :row new-row)))))
+
+(defn fill
+  [table]
+  (let [{:keys [S R E]} table]
+    (-> table
+        (assoc :S (set (map #(fill-row % E) S)))
+        (assoc :R (set (map #(fill-row % E) R))))))
+
+(defn add-path-condition
+  [table pc]
+  (update table :R #(conj % {:path pc, :row []})))
+
+(defn add-evidence
+  [table evidence]
+  (update table :E #(conj % evidence)))
+
+(defn closed?
+  [table]
+  )
+
 (comment
 
   ;; install the castle move parser
   (install-parser! "0-0(-0)?\\+?")
 
   ;; Query Coastal for path information of some input given to the parser
-  (query "\uFFFF")
+  (->> (query "\uFFFF")
+       constraints)
+
+  (-> (make-table)
+      (fill)
+      (add-pc (query "0-"))
+      (add-pc (query "0-0-"))
+      (add-evidence "0+")
+      (add-evidence "0+")
+      (add-evidence "0+")
+      (add-evidence "0+")
+      (add-evidence "0+")
+      (add-evidence "0+")
+      (add-evidence "0+")
+      (add-evidence "0+")
+      (fill)
+      (add-evidence "fill")
+      (fill)
+      (fill)
+      clojure.pprint/pprint)
 
   ;; Install an arbitrary regex
   (install-parser! "5?l|w")
@@ -150,3 +225,4 @@
   (stop!)
 
 )
+
