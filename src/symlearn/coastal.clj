@@ -10,7 +10,8 @@
             [symlearn.z3 :as z3]
             [clojure.java.shell :as shell]
             [clojure.java.io :as io]
-            [clojure.java.shell :as sh])
+            [clojure.java.shell :as sh]
+            [clojure.set :as set])
   (:import [java.io File]))
 
 (set! *warn-on-reflection* true)
@@ -76,9 +77,10 @@
 (defn stop!
   "Stop a Coastal process running in `coastal`."
   []
-  (.destroyForcibly *coastal-instance*)
-  (while (.isAlive *coastal-instance*))
-  (alter-var-root #'*coastal-instance* (constantly nil))
+  (when *coastal-instance*
+    (.destroyForcibly *coastal-instance*)
+    (while (.isAlive *coastal-instance*))
+    (alter-var-root #'*coastal-instance* (constantly nil)))
   ::ok)
 
 (defn ^Process start!
@@ -188,7 +190,9 @@
 
 (defn closed?
   [table]
-  )
+  (let [s-rows (set (map :row (:S table)))
+        r-rows (set (map :row (:R table)))]
+    (set/difference r-rows s-rows)))
 
 (comment
 
@@ -198,27 +202,21 @@
   ;; Query Coastal for path information of some input given to the parser
   (->> (query "\uFFFF")
        constraints)
-
+;; TODO Apply a constraint set to a characer qqq
   (-> (make-table)
       (fill)
-      (add-pc (query "0-"))
-      (add-pc (query "0-0-"))
-      (add-evidence "0+")
-      (add-evidence "0+")
-      (add-evidence "0+")
-      (add-evidence "0+")
-      (add-evidence "0+")
-      (add-evidence "0+")
-      (add-evidence "0+")
+      (add-path-condition (query "0-"))
+      (add-path-condition (query "0-0-"))
       (add-evidence "0+")
       (fill)
       (add-evidence "fill")
+      (add-path-condition (query "lolk"))
       (fill)
-      (fill)
+      ;; (closed?)
       clojure.pprint/pprint)
 
   ;; Install an arbitrary regex
-  (install-parser! "5?l|w")
+  (install-parser! "(fill)(ed)?")
   (install-parser! "(a|b)?")
 
   ;; Stop Coastal

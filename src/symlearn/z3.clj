@@ -26,7 +26,7 @@
      (when (str/starts-with? z3-output "sat")
        (if negative (- witness) witness)))))
 
-(defn witness
+(defn witness*
   "Return a witness that satisfies a list of constraint sets."
   [constraint-sets]
   (let [assertions (map (fn [constraints] (map assert constraints)) constraint-sets)
@@ -34,4 +34,4 @@
     witness))
 
 
-#_(def witness (memoize witness*))
+(def witness (memoize witness*))
