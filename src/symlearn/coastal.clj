@@ -191,13 +191,16 @@
 (defn closed?
   [table]
   (let [s-rows (set (map :row (:S table)))
-        r-rows (set (map :row (:R table)))]
-    (set/difference r-rows s-rows)))
+        r-rows (set (map :row (:R table)))
+        unique-r-rows (set/difference r-rows s-rows)]
+    (empty? unique-r-rows)))
 
 (comment
 
   ;; install the castle move parser
   (install-parser! "0-0(-0)?\\+?")
+
+  (prn *current-parser*)
 
   ;; Query Coastal for path information of some input given to the parser
   (->> (query "\uFFFF")
