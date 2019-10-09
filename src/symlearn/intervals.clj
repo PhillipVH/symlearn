@@ -119,7 +119,7 @@
       (.append "\t}\n"))
 
     (doto java-src
-      (.append "\tpublic static boolean parse(char[] A) {\n")
+      (.append "\tpublic boolean parse(char[] A) {\n")
       (.append "\t\tint state = ")
       (.append (.getInitialState sfa))
       (.append ";\n")
