@@ -38,12 +38,12 @@
 (defn jump-targets
   "Return a set of labels that are the targets of branching instructions in the bytecode."
   [bytecode]
-  (let [bytecode (java->bytecode)
-        jumpers (filter (fn [[_ opcode _ _ _]]
+  (let [jump-instructions (filter (fn [[_ opcode _ _ _]]
                           (or (= "goto" (name opcode))
                               (str/starts-with? (name opcode) "if")))
-                        bytecode)]
-    (set (map last jumpers))))
+                                  bytecode)
+        target-labels (map last jump-instructions)]
+    (set target-labels)))
 
 (defn drop-nil-args
   "Remove args that are nil from the instruction."
@@ -58,8 +58,8 @@
   (let [targets (jump-targets bytecode)]
     (reduce (fn [bytecode [label opcode arg1 arg2]]
               (if (targets label)
-                (conj bytecode [:mark label] (drop-nils [opcode arg1 arg2]))
-                (conj bytecode (drop-nils [opcode arg1 arg2]))))
+                (conj bytecode [:mark label] (drop-nil-args [opcode arg1 arg2]))
+                (conj bytecode (drop-nil-args [opcode arg1 arg2]))))
             []
             bytecode)))
 
@@ -67,6 +67,9 @@
 
   ;; the bytecode for the parse fn
   (regex->bytecode "hel")
+
+  ;; the insn format bytecode
+  (emit-insn (regex->bytecode "hel"))
 
   ;; the class representating the parser
   (def class-data
