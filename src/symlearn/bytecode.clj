@@ -70,11 +70,10 @@
 
   ;; the class representating the parser
   (def class-data
-    (let [label-1 (insn.util/label)]
-      {:name 'my.pkg.Adder
-       :fields [{:flags #{:public :static}, :name "VALUE", :type :long, :value 42}]
-       :methods [{:flags #{:public}, :name "parse", :desc [:int :boolean]
-                  :emit (emit-insn (java->bytecode))}]}))
+    {:name 'symlearn.java.Parser
+     :fields [#_{:flags #{:public :static}, :name "VALUE", :type :long, :value 42}]
+     :methods [{:flags #{:public}, :name "parse", :desc [:int :boolean]
+                :emit (emit-insn (regex->bytecode "l"))}]})
 
   ;; create an instance of the parser
   (def parser (insn/new-instance class-data))
