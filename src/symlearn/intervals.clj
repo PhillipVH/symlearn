@@ -104,13 +104,13 @@
 (defn sfa->java
   "Return the Java source code that represents a parser accepting the language
   described by `sfa`."
-  [^SFA sfa, package-name, class-name]
+  [^SFA sfa, package-name, class-name, symbolic?]
   (let [java-src (StringBuilder.)]
     (doto java-src
-      (.append "package ")
-      (.append package-name)
+      (.append (if symbolic? "package " ""))
+      (.append (if symbolic? package-name ""))
       (.append ";\n")
-      (.append "import za.ac.sun.cs.coastal.Symbolic;\n")
+      (.append (if symbolic? "import za.ac.sun.cs.coastal.Symbolic;\n" ""))
       (.append "public final class ")
       (.append class-name)
       (.append " {\n")
@@ -185,10 +185,10 @@
               (.append ") || ")))))
       (doto java-src
         (.append "false) { \n")
-        (.append "\t\t\tSymbolic.mark(1);\n")
+        (.append (if symbolic? "\t\t\tSymbolic.mark(1);\n" ""))
         (.append "\t\t\treturn true;\n")
         (.append "\t\t} else {\n")
-        (.append "\t\t\tSymbolic.mark(0);\n")
+        (.append (if symbolic? "\t\t\tSymbolic.mark(0);\n" ""))
         (.append "\t\t\treturn false;\n\t\t}\n")
         (.append "\t}")
         (.append "\n}\n")))
