@@ -13,7 +13,7 @@
       (format "(assert (not (%s a %s)))\n" op bound)
       (format "(assert (%s a %s))\n" op bound))))
 
-(defn- solve
+(defn- solve*
   "Runs the z3 solver with the constraints specified in `ctx`. Returns
   a witness if one exists, and `nil` if the constraints are unsat."
   [assertions]
@@ -26,12 +26,11 @@
      (when (str/starts-with? z3-output "sat")
        (if negative (- witness) witness)))))
 
-(defn witness*
+(def solve (memoize solve*))
+
+(defn witness
   "Return a witness that satisfies a list of constraint sets."
   [constraint-sets]
   (let [assertions (map (fn [constraints] (map assert constraints)) constraint-sets)
         witness (map solve assertions)]
     witness))
-
-
-(def witness (memoize witness*))

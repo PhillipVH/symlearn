@@ -136,7 +136,6 @@
                          (vec))]
     (->PathCondition accepted constraints)))
 
-;; Constraint Set Fns
 (defn suffixes
   "Return the suffixes of the path condition pc"
   [constraint-sets]
@@ -155,47 +154,97 @@
          reverse
          vec)))
 
+;; create and fill the table
+
 (defn make-table
   []
-  {:S #{{:path (query "") :row []}}
-   :R #{}
+  {:S {(query "") []}
+   :R {}
    :E [""]})
 
 (defn fill-row
-  [{:keys [path row] :as entry} evidence]
+  [[path row] evidence]
   (let [row-length (count row)
         evidence-count (count evidence)]
     (if (= row-length evidence-count)
-      entry
+      row
       (let [new-row (reduce (fn [row e]
                               (conj row (accepted? (query (str (witness path) e)))))
                             row
                             (drop row-length evidence))]
-        (assoc entry :row new-row)))))
+        new-row))))
 
 (defn fill
   [table]
   (let [{:keys [S R E]} table]
     (-> table
-        (assoc :S (set (map #(fill-row % E) S)))
-        (assoc :R (set (map #(fill-row % E) R))))))
+        (assoc :S (reduce
+                   (fn [new-s [path row]] (assoc new-s path (fill-row [path row] E)))
+                   {}, S))
+        (assoc :R (reduce
+                   (fn [new-r [path row]] (assoc new-r path (fill-row [path row] E)))
+                   {}, R)))))
+
+;; adding new information to the table
 
 (defn add-path-condition
-  [table pc]
-  (update table :R #(conj % {:path pc, :row []})))
+  [table {:keys [constraints accepted] :as path}]
+  (update table :R #(assoc % path [accepted])))
 
 (defn add-evidence
   [table evidence]
   (update table :E #(conj % evidence)))
 
+;; closing a table
+
 (defn closed?
-  [table]
-  (let [s-rows (set (map :row (:S table)))
-        r-rows (set (map :row (:R table)))
-        unique-r-rows (set/difference r-rows s-rows)]
-    (empty? unique-r-rows)))
+  [{:keys [S R]}]
+  (let [s-rows (set (vals S))
+        r-rows (set (vals R))]
+    (set/subset? r-rows s-rows)))
+
+(defn open-entries
+  "Return a entries from R in `table` that do not appear in S. Return nil
+  if no open entries are present"
+  [{:keys [S R]}]
+  (let [s-rows (set (vals S))
+        r-rows (set (vals R))]
+    (let [candidate-rows (set/difference r-rows s-rows)
+          entries (filter (fn [[k v]] (candidate-rows v)) R)]
+      (set (keys entries)))))
+
+(defn close
+  [{:keys [R] :as table}]
+  (if-not (closed? table)
+    (let [promotee (first (open-entries table))
+          row (R promotee)]
+      (-> table
+          (update-in [:R] #(dissoc % promotee))
+          (update-in [:S] #(assoc % promotee row))))
+    table))
+
 
 (comment
+
+
+  (-> (make-table)
+      (fill)
+      (add-path-condition (query "0-0"))
+      (add-path-condition (query "0-0-0"))
+      ;; (fill)
+      ;; (closed?)
+      (open-entries)
+      ;;  (close)
+      ;; (close)
+      ;; (keys)
+      (clojure.pprint/pprint)
+      ;; (fill)
+      ;; (fill)
+      ;; (:R)
+      ;; section->map
+      ;; (closed?)
+      ;; (open-entries)
+      #_(as-> $ (map (comp length :path) $)))
 
   ;; install the castle move parser
   (install-parser! "0-0(-0)?\\+?")
