@@ -139,7 +139,7 @@
 (defn suffixes
   "Return the suffixes of the path condition pc"
   [constraint-sets]
-  (for [n (range (count constraint-sets))]
+  (for [n (range 1 (count constraint-sets))]
     (->> constraint-sets
          (drop n)
          vec)))
@@ -147,12 +147,15 @@
 (defn prefixes
   "Return every prefix of `path`, including `path`."
   [constraint-sets]
-  (for [n (range (count constraint-sets))]
+  (for [n (range 1 (count constraint-sets))]
     (->> constraint-sets
          reverse
          (drop n)
          reverse
          vec)))
+
+(assert (= [[#{:a} #{:b}] [#{:a}]] (prefixes [#{:a} #{:b} #{:c}])))
+(assert (= [[#{:b} #{:c}] [#{:c}]] (suffixes [#{:a} #{:b} #{:c}])))
 
 ;; create and fill the table
 
@@ -223,28 +226,36 @@
           (update-in [:S] #(assoc % promotee row))))
     table))
 
+(query "ab")
+(prefixes (:constraints (query "ab")))
+
+(-> (make-table)
+    (fill)
+    (add-path-condition (query "a"))
+    (add-path-condition (query "0-0-0"))
+    (add-evidence "b")
+    (fill)
+    (close)
+    (close)
+    ;; (fill)
+    ;; (closed?)
+    ;; (open-entries)
+    ;;  (close)
+    ;; (close)
+    ;; (keys)
+    (clojure.pprint/pprint)
+    ;; (fill)
+    ;; (fill)
+    ;; (:R)
+    ;; section->map
+    ;; (closed?)
+    ;; (open-entries)
+    #_(as-> $ (map (comp length :path) $)))
+
 
 (comment
 
 
-  (-> (make-table)
-      (fill)
-      (add-path-condition (query "0-0"))
-      (add-path-condition (query "0-0-0"))
-      ;; (fill)
-      ;; (closed?)
-      (open-entries)
-      ;;  (close)
-      ;; (close)
-      ;; (keys)
-      (clojure.pprint/pprint)
-      ;; (fill)
-      ;; (fill)
-      ;; (:R)
-      ;; section->map
-      ;; (closed?)
-      ;; (open-entries)
-      #_(as-> $ (map (comp length :path) $)))
 
   ;; install the castle move parser
   (install-parser! "0-0(-0)?\\+?")
