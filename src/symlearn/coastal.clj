@@ -31,7 +31,7 @@
   "Returns [boolean list] of accepted? and path conditions"
   [string]
   (wcar* (car/del :refined)
-         (car/set :refine string))
+         (car/set :refine (str "_" string)))
 
   (while (not= 1 (wcar* (car/exists :refined))))
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
@@ -51,18 +51,35 @@
          (sort-by first)
          (set))))
 
+(defn constraint-suffixes
+  "Return the suffixes of the path condition pc"
+  [constraint-sets]
+  (for [n (range 1 (count constraint-sets))]
+    (->> constraint-sets
+         (drop n)
+         vec)))
+
+(defn constraint-prefixes
+  "Return every prefix of `path`, including `path`."
+  [constraint-sets]
+  (for [n (range 1 (count constraint-sets))]
+    (->> constraint-sets
+         reverse
+         (drop n)
+         reverse
+         vec)))
+
+(assert (= [[#{:a} #{:b}] [#{:a}]] (constraint-prefixes [#{:a} #{:b} #{:c}])))
+(assert (= [[#{:b} #{:c}] [#{:c}]] (constraint-suffixes [#{:a} #{:b} #{:c}])))
+
+
 (defprotocol IPathCondition
   (accepted? [this] "Return true if `this` represents a successful parse.")
   (length [this] "Return the number of indices bounded by `this`.")
   (constraints [this] "Returns the bounds on each index bounded by `this`.")
-  (witness [this] "Return a string that satisfies the constraints in `this`."))
-
-(defrecord PathCondition [accepted constraints]
-  IPathCondition
-  (accepted? [this] (:accepted this))
-  (constraints [this] (:constraints this))
-  (length [this] (count (:constraints this)))
-  (witness [this] (str/join (map char (z3/witness (:constraints this))))))
+  (witness [this] "Return a string that satisfies the constraints in `this`.")
+  (suffixes [this] "Return the path conditions that are suffixes of `this`. Exludes `this` and epsilon.")
+  (prefixes [this] "Return the path conditions that are prefixes of `this`. Exludes `this` and epsilon."))
 
 (defn compile-parsers!
   "Compile the parsers installed in the Coastal system."
@@ -72,7 +89,8 @@
         builder (ProcessBuilder. ^"[Ljava.lang.String;" args)]
     (.directory builder coastal-dir)
     (let [compiler (.start builder)]
-      (while (.isAlive compiler)))))
+      (while (.isAlive compiler))
+      ::ok)))
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
@@ -118,6 +136,27 @@
   []
   *current-parser*)
 
+(declare query)
+
+(defrecord PathCondition [accepted constraints]
+  IPathCondition
+  (accepted? [this] (:accepted this))
+  (constraints [this] (:constraints this))
+  (length [this] (count (:constraints this)))
+  (witness [this] (str/join (map char (z3/witness (:constraints this)))))
+  (suffixes [this]
+    (map query (map #(str/join (map char %)) (map z3/witness (constraint-suffixes (:constraints this)))))
+    #_(let [suffix-sets (constraint-suffixes (:constraints this))
+          witnesses (map z3/witness suffix-sets)
+          input (map (fn [witness] (str/join (map char witness))) witnesses)]
+      suffix-sets))
+  (prefixes [this]
+    (map query (map #(str/join (map char %)) (map z3/witness (constraint-prefixes (:constraints this)))))
+    #_(let [prefix-sets (constraint-prefixes (:constraints this))
+          witnesses (map z3/witness prefix-sets)
+          input (map (fn [witness] (str/join (map char witness))) witnesses)]
+      prefix-sets)))
+
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's
   acceptance status."
@@ -135,27 +174,6 @@
                          (map set)
                          (vec))]
     (->PathCondition accepted constraints)))
-
-(defn suffixes
-  "Return the suffixes of the path condition pc"
-  [constraint-sets]
-  (for [n (range 1 (count constraint-sets))]
-    (->> constraint-sets
-         (drop n)
-         vec)))
-
-(defn prefixes
-  "Return every prefix of `path`, including `path`."
-  [constraint-sets]
-  (for [n (range 1 (count constraint-sets))]
-    (->> constraint-sets
-         reverse
-         (drop n)
-         reverse
-         vec)))
-
-(assert (= [[#{:a} #{:b}] [#{:a}]] (prefixes [#{:a} #{:b} #{:c}])))
-(assert (= [[#{:b} #{:c}] [#{:c}]] (suffixes [#{:a} #{:b} #{:c}])))
 
 ;; create and fill the table
 
@@ -213,7 +231,7 @@
   (let [s-rows (set (vals S))
         r-rows (set (vals R))]
     (let [candidate-rows (set/difference r-rows s-rows)
-          entries (filter (fn [[k v]] (candidate-rows v)) R)]
+          entries (filter (fn [[_ row]] (candidate-rows row)) R)]
       (set (keys entries)))))
 
 (defn close
@@ -226,31 +244,30 @@
           (update-in [:S] #(assoc % promotee row))))
     table))
 
-(query "ab")
-(prefixes (:constraints (query "ab")))
+;; (prefixes (map->PathCondition (query "0-")))
 
-(-> (make-table)
-    (fill)
-    (add-path-condition (query "a"))
-    (add-path-condition (query "0-0-0"))
-    (add-evidence "b")
-    (fill)
-    (close)
-    (close)
-    ;; (fill)
-    ;; (closed?)
-    ;; (open-entries)
-    ;;  (close)
-    ;; (close)
-    ;; (keys)
-    (clojure.pprint/pprint)
-    ;; (fill)
-    ;; (fill)
-    ;; (:R)
-    ;; section->map
-    ;; (closed?)
-    ;; (open-entries)
-    #_(as-> $ (map (comp length :path) $)))
+;; (-> (make-table)
+;;     (fill)
+;;     (add-path-condition (query "a"))
+;;     (add-path-condition (query "0-0-0"))
+;;     (add-evidence "b")
+;;     (fill)
+;;     (close)
+;;     (close)
+;;     ;; (fill)
+;;     ;; (closed?)
+;;     ;; (open-entries)
+;;     ;;  (close)
+;;     ;; (close)
+;;     ;; (keys)
+;;     (clojure.pprint/pprint)
+;;     ;; (fill)
+;;     ;; (fill)
+;;     ;; (:R)
+;;     ;; section->map
+;;     ;; (closed?)
+;;     ;; (open-entries)
+;;     #_(as-> $ (map (comp length :path) $)))
 
 
 (comment
@@ -260,7 +277,14 @@
   ;; install the castle move parser
   (install-parser! "0-0(-0)?\\+?")
 
+  (map (comp println :constraints) (suffixes (query "0-0-0")))
+
+  (println "----")
+  (clojure.pprint/pprint (suffixes (query "0-0l")))
+
   (prn *current-parser*)
+
+  (query "")
 
   ;; Query Coastal for path information of some input given to the parser
   (->> (query "\uFFFF")
@@ -282,6 +306,7 @@
   (install-parser! "(fill)(ed)?")
   (install-parser! "(a|b)?")
 
+  (compile-parsers!)
   ;; Stop Coastal
   (stop!)
 

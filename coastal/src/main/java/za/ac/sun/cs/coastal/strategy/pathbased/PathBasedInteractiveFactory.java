@@ -184,7 +184,7 @@ public abstract class PathBasedInteractiveFactory implements StrategyFactory {
 //            String[] parts = input.split(" ");
             char[] parts = input.toCharArray();
             System.out.println(input);
-            for (int i = 0; i < parts.length; i++) {
+            for (int i = 1; i < parts.length; i++) { // drop the leading underscore
                 log.info("Adding to model " + (int) parts[i]);
                 values.put("A$" + i, new Long((int) parts[i]));
             }
