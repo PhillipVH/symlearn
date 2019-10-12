@@ -31,7 +31,7 @@
   "Returns [boolean list] of accepted? and path conditions"
   [string]
   (wcar* (car/del :refined)
-         (car/set :refine (str "_" string)))
+         (car/set :refine string))
 
   (while (not= 1 (wcar* (car/exists :refined))))
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
