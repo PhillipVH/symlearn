@@ -32,10 +32,11 @@
   "Returns [boolean list] of accepted? and path conditions"
   [string]
   ;; enqueue the string for solving
-  (let [exploded-string (map int (.toCharArray string))] ;; avoid "first byte is null" encoding issues
+  (let [exploded-string (map int (.toCharArray string))
+        strlen (count string)] ;; avoid "first byte is null" encoding issues
     (wcar* (car/del :refine)
            (car/del :refined)
-           (apply (partial car/rpush :refine) exploded-string)))
+           (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))))
 
   ;; wait for a solved response
   (while (not= 1 (wcar* (car/exists :refined))))

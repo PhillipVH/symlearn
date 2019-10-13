@@ -215,6 +215,9 @@ public abstract class PathBasedInteractiveFactory implements StrategyFactory {
                     log.info(request);
                     String newString = "";
                     for (String part : request) {
+                        if (part.equals("epsilon")) {
+                            break;
+                        }
                         int nextChar = (Integer.parseInt(part));
                         log.info(nextChar);
                         if (nextChar < 0) {
