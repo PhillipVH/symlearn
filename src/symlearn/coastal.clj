@@ -27,17 +27,36 @@
   `(let [redis-conn# {:pool {} :spec {:host "127.0.0.1" :port 6379}}]
      (car/wcar redis-conn# ~@body)))
 
+
 (defn refine-string
   "Returns [boolean list] of accepted? and path conditions"
   [string]
-  (wcar* (car/del :refined)
-         (car/set :refine (str "_" string)))
+  ;; enqueue the string for solving
+  (let [exploded-string (map int (.toCharArray string))] ;; avoid "first byte is null" encoding issues
+    (wcar* (car/del :refine)
+           (car/del :refined)
+           (apply (partial car/rpush :refine) exploded-string)))
 
+  ;; wait for a solved response
   (while (not= 1 (wcar* (car/exists :refined))))
+
+  ;; process reponse
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
+        _ (println refined-path)
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
     [(read-string accepted) path-condition]))
+
+;; (refine-string "\u0000h\u0000e\uffffll")
+
+;; (let [bytes (first (wcar* (car/lrange :refine 0 -1)))
+;;       input (str/join (map char bytes))]
+;;   input)
+
+;; (install-parser! "a|b")
+;; (refine-string "\u0000")
+;; (stop!)
+
 
 (defn path->constraints
   "Return a seq of constraints extracted from `path-condition`, each of
@@ -71,7 +90,6 @@
 
 (assert (= [[#{:a} #{:b}] [#{:a}]] (constraint-prefixes [#{:a} #{:b} #{:c}])))
 (assert (= [[#{:b} #{:c}] [#{:c}]] (constraint-suffixes [#{:a} #{:b} #{:c}])))
-
 
 (defprotocol IPathCondition
   (accepted? [this] "Return true if `this` represents a successful parse.")
@@ -145,17 +163,9 @@
   (length [this] (count (:constraints this)))
   (witness [this] (str/join (map char (z3/witness (:constraints this)))))
   (suffixes [this]
-    (map query (map #(str/join (map char %)) (map z3/witness (constraint-suffixes (:constraints this)))))
-    #_(let [suffix-sets (constraint-suffixes (:constraints this))
-          witnesses (map z3/witness suffix-sets)
-          input (map (fn [witness] (str/join (map char witness))) witnesses)]
-      suffix-sets))
+    (map z3/witness (constraint-suffixes (:constraints this))))
   (prefixes [this]
-    (map query (map #(str/join (map char %)) (map z3/witness (constraint-prefixes (:constraints this)))))
-    #_(let [prefix-sets (constraint-prefixes (:constraints this))
-          witnesses (map z3/witness prefix-sets)
-          input (map (fn [witness] (str/join (map char witness))) witnesses)]
-      prefix-sets)))
+    (map query (map #(str/join (map char %)) (map z3/witness (constraint-prefixes (:constraints this)))))))
 
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's

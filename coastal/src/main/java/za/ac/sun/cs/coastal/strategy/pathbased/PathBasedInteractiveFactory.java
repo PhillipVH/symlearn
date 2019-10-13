@@ -184,7 +184,7 @@ public abstract class PathBasedInteractiveFactory implements StrategyFactory {
 //            String[] parts = input.split(" ");
             char[] parts = input.toCharArray();
             System.out.println(input);
-            for (int i = 1; i < parts.length; i++) { // drop the leading underscore
+            for (int i = 0; i < parts.length; i++) {
                 log.info("Adding to model " + (int) parts[i]);
                 values.put("A$" + i, new Long((int) parts[i]));
             }
@@ -207,15 +207,29 @@ public abstract class PathBasedInteractiveFactory implements StrategyFactory {
 
 
                     // Wait for a refinement request to be issued
-                    String request;
-                    while ((request = jedis.get("refine")) == null) {
+                    while (!(jedis.exists("refine"))) {
                         continue;
                     }
+
+                    List<String> request = jedis.lrange("refine", 0, -1);
+                    log.info(request);
+                    String newString = "";
+                    for (String part : request) {
+                        int nextChar = (Integer.parseInt(part));
+                        log.info(nextChar);
+                        if (nextChar < 0) {
+                            break;
+                        } else {
+                            newString += (char) nextChar;
+                        }
+                    }
+
+                    log.info(newString);
 
                     // Remove refinement request from redis
                     jedis.del("refine");
 
-                    Model mdl = createModelFromInput(request);
+                    Model mdl = createModelFromInput(newString);
 
                     int m = coastal.addDiverModels(Collections.singletonList(mdl));
                     int d = -1;
