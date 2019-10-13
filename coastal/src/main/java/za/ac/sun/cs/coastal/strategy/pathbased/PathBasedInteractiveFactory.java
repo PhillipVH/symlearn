@@ -207,15 +207,32 @@ public abstract class PathBasedInteractiveFactory implements StrategyFactory {
 
 
                     // Wait for a refinement request to be issued
-                    String request;
-                    while ((request = jedis.get("refine")) == null) {
+                    while (!(jedis.exists("refine"))) {
                         continue;
                     }
+
+                    List<String> request = jedis.lrange("refine", 0, -1);
+                    log.info(request);
+                    String newString = "";
+                    for (String part : request) {
+                        if (part.equals("epsilon")) {
+                            break;
+                        }
+                        int nextChar = (Integer.parseInt(part));
+                        log.info(nextChar);
+                        if (nextChar < 0) {
+                            break;
+                        } else {
+                            newString += (char) nextChar;
+                        }
+                    }
+
+                    log.info(newString);
 
                     // Remove refinement request from redis
                     jedis.del("refine");
 
-                    Model mdl = createModelFromInput(request);
+                    Model mdl = createModelFromInput(newString);
 
                     int m = coastal.addDiverModels(Collections.singletonList(mdl));
                     int d = -1;

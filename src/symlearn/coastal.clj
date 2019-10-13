@@ -20,6 +20,7 @@
 (defonce *current-parser* nil)
 
 (def string-config "Regex.xml")
+(def default-parser "")
 
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
@@ -30,11 +31,19 @@
 (defn refine-string
   "Returns [boolean list] of accepted? and path conditions"
   [string]
-  (wcar* (car/del :refined)
-         (car/set :refine string))
+  ;; enqueue the string for solving
+  (let [exploded-string (map int (.toCharArray ^String string))
+        strlen (count string)] ;; avoid "first byte is null" encoding issues
+    (wcar* (car/del :refine)
+           (car/del :refined)
+           (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))))
 
+  ;; wait for a solved response
   (while (not= 1 (wcar* (car/exists :refined))))
+
+  ;; process reponse
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
+        _ (println refined-path)
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
     [(read-string accepted) path-condition]))
@@ -51,18 +60,34 @@
          (sort-by first)
          (set))))
 
+(defn constraint-suffixes
+  "Return the suffixes of the path condition pc"
+  [constraint-sets]
+  (for [n (range 1 (count constraint-sets))]
+    (->> constraint-sets
+         (drop n)
+         vec)))
+
+(defn constraint-prefixes
+  "Return every prefix of `path`, including `path`."
+  [constraint-sets]
+  (for [n (range 1 (count constraint-sets))]
+    (->> constraint-sets
+         reverse
+         (drop n)
+         reverse
+         vec)))
+
+(assert (= [[#{:a} #{:b}] [#{:a}]] (constraint-prefixes [#{:a} #{:b} #{:c}])))
+(assert (= [[#{:b} #{:c}] [#{:c}]] (constraint-suffixes [#{:a} #{:b} #{:c}])))
+
 (defprotocol IPathCondition
   (accepted? [this] "Return true if `this` represents a successful parse.")
   (length [this] "Return the number of indices bounded by `this`.")
   (constraints [this] "Returns the bounds on each index bounded by `this`.")
-  (witness [this] "Return a string that satisfies the constraints in `this`."))
-
-(defrecord PathCondition [accepted constraints]
-  IPathCondition
-  (accepted? [this] (:accepted this))
-  (constraints [this] (:constraints this))
-  (length [this] (count (:constraints this)))
-  (witness [this] (str/join (map char (z3/witness (:constraints this))))))
+  (witness [this] "Return a string that satisfies the constraints in `this`.")
+  (suffixes [this] "Return the path conditions that are suffixes of `this`. Exludes `this` and epsilon.")
+  (prefixes [this] "Return the path conditions that are prefixes of `this`. Exludes `this` and epsilon."))
 
 (defn compile-parsers!
   "Compile the parsers installed in the Coastal system."
@@ -72,7 +97,8 @@
         builder (ProcessBuilder. ^"[Ljava.lang.String;" args)]
     (.directory builder coastal-dir)
     (let [compiler (.start builder)]
-      (while (.isAlive compiler)))))
+      (while (.isAlive compiler))
+      ::ok)))
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
@@ -107,7 +133,10 @@
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
-    (start!)))
+    (start!)
+    ;; flush the result from the default run
+    (refine-string "")
+    ::ok))
 
 (defn running?
   []
@@ -118,12 +147,25 @@
   []
   *current-parser*)
 
+(declare query)
+
+(defrecord PathCondition [accepted constraints]
+  IPathCondition
+  (accepted? [this] (:accepted this))
+  (constraints [this] (:constraints this))
+  (length [this] (count (:constraints this)))
+  (witness [this] (str/join (map char (z3/witness (:constraints this)))))
+  (suffixes [this]
+    (map query (map #(str/join (map char %)) (map z3/witness (constraint-suffixes (:constraints this))))))
+  (prefixes [this]
+    (map query (map #(str/join (map char %)) (map z3/witness (constraint-prefixes (:constraints this)))))))
+
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's
   acceptance status."
   [string]
   (if-not *coastal-instance*
-    (start!))
+    (install-parser! default-parser)) ;; default parser accepts nothing
   (let [[accepted path] (refine-string string)
         constraints (->> path
                          path->constraints
@@ -136,71 +178,120 @@
                          (vec))]
     (->PathCondition accepted constraints)))
 
-;; Constraint Set Fns
-(defn suffixes
-  "Return the suffixes of the path condition pc"
-  [constraint-sets]
-  (for [n (range (count constraint-sets))]
-    (->> constraint-sets
-         (drop n)
-         vec)))
-
-(defn prefixes
-  "Return every prefix of `path`, including `path`."
-  [constraint-sets]
-  (for [n (range (count constraint-sets))]
-    (->> constraint-sets
-         reverse
-         (drop n)
-         reverse
-         vec)))
+;; create and fill the table
 
 (defn make-table
   []
-  {:S #{{:path (query "") :row []}}
-   :R #{}
+  {:S {(query "") []}
+   :R {}
    :E [""]})
 
 (defn fill-row
-  [{:keys [path row] :as entry} evidence]
+  [[path row] evidence]
   (let [row-length (count row)
         evidence-count (count evidence)]
     (if (= row-length evidence-count)
-      entry
+      row
       (let [new-row (reduce (fn [row e]
                               (conj row (accepted? (query (str (witness path) e)))))
                             row
                             (drop row-length evidence))]
-        (assoc entry :row new-row)))))
+        new-row))))
 
 (defn fill
   [table]
   (let [{:keys [S R E]} table]
     (-> table
-        (assoc :S (set (map #(fill-row % E) S)))
-        (assoc :R (set (map #(fill-row % E) R))))))
+        (assoc :S (reduce
+                   (fn [new-s [path row]] (assoc new-s path (fill-row [path row] E)))
+                   {}, S))
+        (assoc :R (reduce
+                   (fn [new-r [path row]] (assoc new-r path (fill-row [path row] E)))
+                   {}, R)))))
+
+;; adding new information to the table
 
 (defn add-path-condition
-  [table pc]
-  (update table :R #(conj % {:path pc, :row []})))
+  [table {:keys [constraints accepted] :as path}]
+  (update table :R #(assoc % path [accepted])))
 
 (defn add-evidence
   [table evidence]
   (update table :E #(conj % evidence)))
 
+;; closing a table
+
 (defn closed?
-  [table]
-  (let [s-rows (set (map :row (:S table)))
-        r-rows (set (map :row (:R table)))
-        unique-r-rows (set/difference r-rows s-rows)]
-    (empty? unique-r-rows)))
+  [{:keys [S R]}]
+  (let [s-rows (set (vals S))
+        r-rows (set (vals R))]
+    (set/subset? r-rows s-rows)))
+
+(defn open-entries
+  "Return a entries from R in `table` that do not appear in S. Return nil
+  if no open entries are present"
+  [{:keys [S R]}]
+  (let [s-rows (set (vals S))
+        r-rows (set (vals R))]
+    (let [candidate-rows (set/difference r-rows s-rows)
+          entries (filter (fn [[_ row]] (candidate-rows row)) R)]
+      (set (keys entries)))))
+
+(defn close
+  [{:keys [R] :as table}]
+  (if-not (closed? table)
+    (let [promotee (first (open-entries table))
+          row (R promotee)]
+      (-> table
+          (update-in [:R] #(dissoc % promotee))
+          (update-in [:S] #(assoc % promotee row))))
+    table))
+
+;; (prefixes (map->PathCondition (query "0-")))
+
+;; (-> (make-table)
+;;     (fill)
+;;     (add-path-condition (query "a"))
+;;     (add-path-condition (query "0-0-0"))
+;;     (add-evidence "b")
+;;     (fill)
+;;     (close)
+;;     (close)
+;;     ;; (fill)
+;;     ;; (closed?)
+;;     ;; (open-entries)
+;;     ;;  (close)
+;;     ;; (close)
+;;     ;; (keys)
+;;     (clojure.pprint/pprint)
+;;     ;; (fill)
+;;     ;; (fill)
+;;     ;; (:R)
+;;     ;; section->map
+;;     ;; (closed?)
+;;     ;; (open-entries)
+;;     #_(as-> $ (map (comp length :path) $)))
+
 
 (comment
+
+
 
   ;; install the castle move parser
   (install-parser! "0-0(-0)?\\+?")
 
+  (install-parser! default-parser)
+
+  (refine-string "")
+
+  (map (comp println :constraints) (suffixes (query "0-0-0")))
+
+  (println "----")
+  (clojure.pprint/pprint (suffixes (query "0-0l")))
+
   (prn *current-parser*)
+
+  (query "")
 
   ;; Query Coastal for path information of some input given to the parser
   (->> (query "\uFFFF")
@@ -222,6 +313,7 @@
   (install-parser! "(fill)(ed)?")
   (install-parser! "(a|b)?")
 
+  (compile-parsers!)
   ;; Stop Coastal
   (stop!)
 
