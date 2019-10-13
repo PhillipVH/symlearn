@@ -20,13 +20,13 @@
 (defonce *current-parser* nil)
 
 (def string-config "Regex.xml")
+(def default-parser "")
 
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
   [& body]
   `(let [redis-conn# {:pool {} :spec {:host "127.0.0.1" :port 6379}}]
      (car/wcar redis-conn# ~@body)))
-
 
 (defn refine-string
   "Returns [boolean list] of accepted? and path conditions"
@@ -47,17 +47,6 @@
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
     [(read-string accepted) path-condition]))
-
-;; (refine-string "\u0000h\u0000e\uffffll")
-
-;; (let [bytes (first (wcar* (car/lrange :refine 0 -1)))
-;;       input (str/join (map char bytes))]
-;;   input)
-
-;; (install-parser! "a|b")
-;; (refine-string "\u0000")
-;; (stop!)
-
 
 (defn path->constraints
   "Return a seq of constraints extracted from `path-condition`, each of
@@ -167,7 +156,7 @@
   (length [this] (count (:constraints this)))
   (witness [this] (str/join (map char (z3/witness (:constraints this)))))
   (suffixes [this]
-    (map z3/witness (constraint-suffixes (:constraints this))))
+    (map query (map #(str/join (map char %)) (map z3/witness (constraint-suffixes (:constraints this))))))
   (prefixes [this]
     (map query (map #(str/join (map char %)) (map z3/witness (constraint-prefixes (:constraints this)))))))
 
@@ -176,7 +165,7 @@
   acceptance status."
   [string]
   (if-not *coastal-instance*
-    (start!))
+    (install-parser! default-parser)) ;; default parser accepts nothing
   (let [[accepted path] (refine-string string)
         constraints (->> path
                          path->constraints
@@ -290,6 +279,10 @@
 
   ;; install the castle move parser
   (install-parser! "0-0(-0)?\\+?")
+
+  (install-parser! default-parser)
+
+  (refine-string "")
 
   (map (comp println :constraints) (suffixes (query "0-0-0")))
 
