@@ -247,31 +247,22 @@
           (update-in [:S] #(assoc % promotee row))))
     table))
 
-;; (prefixes (map->PathCondition (query "0-")))
+;; make an sfa from a table
 
-;; (-> (make-table)
-;;     (fill)
-;;     (add-path-condition (query "a"))
-;;     (add-path-condition (query "0-0-0"))
-;;     (add-evidence "b")
-;;     (fill)
-;;     (close)
-;;     (close)
-;;     ;; (fill)
-;;     ;; (closed?)
-;;     ;; (open-entries)
-;;     ;;  (close)
-;;     ;; (close)
-;;     ;; (keys)
-;;     (clojure.pprint/pprint)
-;;     ;; (fill)
-;;     ;; (fill)
-;;     ;; (:R)
-;;     ;; section->map
-;;     ;; (closed?)
-;;     ;; (open-entries)
-;;     #_(as-> $ (map (comp length :path) $)))
-
+(defn constraint-set->fn
+  [constraint-set]
+  (let [->fn (fn [[op bound]]
+               (case op
+                 ">=" #(>= % bound)
+                 ">" #(> % bound)
+                 "==" #(== % bound)
+                 "!=" #(not= % bound)
+                 "<" #(< % bound)
+                 "<=" #(<= % bound)))
+        fns (map ->fn constraint-set)]
+    (fn [input]
+      (let [tests (map #(% input) fns)]
+        (not (some false? tests))))))
 
 (comment
 
@@ -317,5 +308,4 @@
   ;; Stop Coastal
   (stop!)
 
-)
-
+  )
