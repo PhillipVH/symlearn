@@ -32,7 +32,7 @@
   "Returns [boolean list] of accepted? and path conditions"
   [string]
   ;; enqueue the string for solving
-  (let [exploded-string (map int (.toCharArray string))
+  (let [exploded-string (map int (.toCharArray ^String string))
         strlen (count string)] ;; avoid "first byte is null" encoding issues
     (wcar* (car/del :refine)
            (car/del :refined)
@@ -144,7 +144,10 @@
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
-    (start!)))
+    (start!)
+    ;; flush the result from the default run
+    (refine-string "")
+    ::ok))
 
 (defn running?
   []
