@@ -251,18 +251,18 @@
 
 (defn constraint-set->fn
   [constraint-set]
-  (let [->fn (fn [[op bound]]
-               (case op
-                 ">=" #(>= % bound)
-                 ">" #(> % bound)
-                 "==" #(== % bound)
-                 "!=" #(not= % bound)
-                 "<" #(< % bound)
-                 "<=" #(<= % bound)))
-        fns (map ->fn constraint-set)]
+  (let [assert->fn (fn [[op bound]]
+                     (case op
+                       ">=" #(>= % bound)
+                       ">" #(> % bound)
+                       "==" #(== % bound)
+                       "!=" #(not= % bound)
+                       "<" #(< % bound)
+                       "<=" #(<= % bound)))
+        assertions (map assert->fn constraint-set)]
     (fn [input]
-      (let [tests (map #(% input) fns)]
-        (not (some false? tests))))))
+      (let [results (map #(% input) assertions)]
+        (not (some false? results))))))
 
 (comment
 
