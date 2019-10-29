@@ -28,7 +28,7 @@
   `(let [redis-conn# {:pool {} :spec {:host "127.0.0.1" :port 6379}}]
      (car/wcar redis-conn# ~@body)))
 
-(defn refine-string
+(defn- refine-string
   "Returns [boolean list] of accepted? and path conditions"
   [string]
   ;; enqueue the string for solving
@@ -43,7 +43,6 @@
 
   ;; process reponse
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
-        _ (println refined-path)
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
     [(read-string accepted) path-condition]))
@@ -60,26 +59,22 @@
          (sort-by first)
          (set))))
 
-(defn constraint-suffixes
+(defn suffixes*
   "Return the suffixes of the path condition pc"
   [constraint-sets]
-  (for [n (range 1 (count constraint-sets))]
-    (->> constraint-sets
-         (drop n)
-         vec)))
+  (let [suffixes (map #(drop % constraint-sets)
+                      (range 1 (count constraint-sets)))]
+    (set suffixes)))
 
-(defn constraint-prefixes
-  "Return every prefix of `path`, including `path`."
+(defn prefixes*
+  "Return the suffixes of the path condition pc"
   [constraint-sets]
-  (for [n (range 1 (count constraint-sets))]
-    (->> constraint-sets
-         reverse
-         (drop n)
-         reverse
-         vec)))
+  (let [prefixes (map #(take % constraint-sets)
+                      (range 1 (count constraint-sets)))]
+    (set prefixes)))
 
-(assert (= [[#{:a} #{:b}] [#{:a}]] (constraint-prefixes [#{:a} #{:b} #{:c}])))
-(assert (= [[#{:b} #{:c}] [#{:c}]] (constraint-suffixes [#{:a} #{:b} #{:c}])))
+(assert (= #{[#{:a} #{:b}] [#{:a}]} (prefixes* [#{:a} #{:b} #{:c}])))
+(assert (= #{[#{:b} #{:c}] [#{:c}]} (suffixes* [#{:a} #{:b} #{:c}])))
 
 (defprotocol IPathCondition
   (accepted? [this] "Return true if `this` represents a successful parse.")
@@ -156,9 +151,9 @@
   (length [this] (count (:constraints this)))
   (witness [this] (str/join (map char (z3/witness (:constraints this)))))
   (suffixes [this]
-    (map query (map #(str/join (map char %)) (map z3/witness (constraint-suffixes (:constraints this))))))
+    (map query (map #(str/join (map char %)) (map z3/witness (suffixes* (:constraints this))))))
   (prefixes [this]
-    (map query (map #(str/join (map char %)) (map z3/witness (constraint-prefixes (:constraints this)))))))
+    (map query (map #(str/join (map char %)) (map z3/witness (prefixes* (:constraints this)))))))
 
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's
@@ -181,6 +176,7 @@
 ;; create and fill the table
 
 (defn make-table
+  "Table"
   []
   {:S {(query "") []}
    :R {}
@@ -199,6 +195,7 @@
         new-row))))
 
 (defn fill
+  "Table -> Table"
   [table]
   (let [{:keys [S R E]} table]
     (-> table
@@ -212,16 +209,24 @@
 ;; adding new information to the table
 
 (defn add-path-condition
-  [table {:keys [constraints accepted] :as path}]
-  (update table :R #(assoc % path [accepted])))
+  "Table -> PathCondition -> Table"
+  [table {:keys [accepted] :as path}]
+  (let [prefixes (prefixes path)
+        table* (update table :R #(assoc % path [accepted]))]
+    (reduce (fn [table* {:keys [accepted] :as path}]
+              (update table* :R #(assoc % path [accepted])))
+            table*
+            prefixes)))
 
 (defn add-evidence
+  "Table -> Evidence -> Table"
   [table evidence]
   (update table :E #(conj % evidence)))
 
 ;; closing a table
 
 (defn closed?
+  "Table -> Boolean"
   [{:keys [S R]}]
   (let [s-rows (set (vals S))
         r-rows (set (vals R))]
@@ -238,6 +243,7 @@
       (set (keys entries)))))
 
 (defn close
+  "Table -> Table"
   [{:keys [R] :as table}]
   (if-not (closed? table)
     (let [promotee (first (open-entries table))
@@ -250,6 +256,7 @@
 ;; make an sfa from a table
 
 (defn constraint-set->fn
+  "[Constraint] -> (Char -> Boolean)"
   [constraint-set]
   (let [assert->fn (fn [[op bound]]
                      (case op
@@ -266,15 +273,12 @@
 
 (comment
 
-
-
   ;; install the castle move parser
   (install-parser! "0-0(-0)?\\+?")
 
   (install-parser! default-parser)
-
   (refine-string "")
-
+  
   (map (comp println :constraints) (suffixes (query "0-0-0")))
 
   (println "----")
