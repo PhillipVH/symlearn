@@ -1,5 +1,8 @@
 (ns symlearn.coastal
   (:require [clojure.string :as str]
+            [clojure.pprint :refer [pprint]]
+            [clojure.spec.alpha :as s]
+            [clojure.spec.gen.alpha :as gen]
             [taoensso.carmine :as car]
             [taoensso.tufte :as tufte]
             [clojure.walk :as walk]
@@ -178,9 +181,10 @@
 (defn make-table
   "Table"
   []
-  {:S {(query "") []}
-   :R {}
-   :E [""]})
+  (let [epsilon (query "")]
+    {:S {epsilon [(accepted? epsilon)]}
+     :R {}
+     :E [""]}))
 
 (defn fill-row
   [[path row] evidence]
@@ -270,6 +274,24 @@
     (fn [input]
       (let [results (map #(% input) assertions)]
         (not (some false? results))))))
+
+
+(install-parser! "(abc|a*)")
+
+(-> (make-table)
+    (add-path-condition (query "b"))
+    ;; (closed?) ; false
+    (close)
+    ;; (closed?) ; true
+    (add-path-condition (query "abc"))
+    (add-path-condition (query "abcd"))
+    (add-evidence "c")
+    (fill)
+    ;; (closed?) ; false
+    (close)
+    ;; (closed?) ; true
+    (pprint)
+    )
 
 (comment
 
