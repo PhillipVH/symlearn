@@ -278,20 +278,34 @@
 
 (install-parser! "(abc|a*)")
 
-(-> (make-table)
-    (add-path-condition (query "b"))
-    ;; (closed?) ; false
-    (close)
-    ;; (closed?) ; true
-    (add-path-condition (query "abc"))
-    (add-path-condition (query "abcd"))
-    (add-evidence "c")
-    (fill)
-    ;; (closed?) ; false
-    (close)
-    ;; (closed?) ; true
-    (pprint)
-    )
+(defn root-entries
+  [{:keys [S R]}]
+  (group-by (comp first :constraints first) (merge S R)))
+
+(let [{:keys [S R] :as table}
+      (-> (make-table)
+          (add-path-condition (query "b"))
+          ;; (closed?) ; false
+          (close)
+          ;; (closed?) ; true
+          (add-path-condition (query "abc"))
+          (add-path-condition (query "abcd"))
+          (add-evidence "c")
+          (fill)
+          ;; (closed?) ; false
+          (close)
+          ;; (closed?) ; true
+          )]
+  (println "----")
+  (pprint S)
+  (pprint R)
+  (println "----")
+  (pprint (get  (root-entries table)  #{[">" 96] ["==" 97] [">=" 0] ["<" 98]} ))
+  (println "----"))
+
+
+(merge {:a :b} {:a :c})
+
 
 (comment
 
