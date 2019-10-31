@@ -15,7 +15,9 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.set :as set])
-  (:import [java.io File]))
+  (:import [java.io File]
+           (com.google.common.collect Range
+                                      Predicate)))
 
 (set! *warn-on-reflection* true)
 
@@ -225,7 +227,9 @@
 (defn add-evidence
   "Table -> Evidence -> Table"
   [table evidence]
-  (update table :E #(conj % evidence)))
+  (-> table
+      (update :E #(conj % evidence))
+      fill))
 
 ;; closing a table
 
@@ -278,11 +282,25 @@
 
 (install-parser! "(abc|a*)")
 
+(count {:a :b, :b :c})
+
 (defn root-entries
   [{:keys [S R]}]
-  (group-by (comp first :constraints first) (merge S R)))
+  (let [s+r (count (merge S R))
+        s (count S)
+        r (count R)]
+    #_(do
+      (println "--S--")
+      (pprint (keys S))
+      (println "--R--")
+      (pprint (keys R))
+      (println "--S + R--")
+      (pprint (keys (merge S R)))
+      (assert (= s+r (+ s r)) (str "Elements lost in during map merge (" s+r " instead of " (+ s r) ")\n")))
+    (group-by (comp first :constraints first) (merge S R))))
 
-(let [{:keys [S R] :as table}
+
+(let [{:keys [S R E] :as table}
       (-> (make-table)
           (add-path-condition (query "b"))
           ;; (closed?) ; false
@@ -291,21 +309,39 @@
           (add-path-condition (query "abc"))
           (add-path-condition (query "abcd"))
           (add-evidence "c")
-          (fill)
           ;; (closed?) ; false
           (close)
           ;; (closed?) ; true
+          (add-evidence "a")
+          ;; (closed?) ; false
+          (close)
+          (add-evidence "abc")
+          (close)
+          (close)
           )]
-  (println "----")
+  (println "--Closed?--")
+  (println (closed? table))
+  (println "--E--")
+  (pprint E)
+  (println "--S--")
   (pprint S)
+  (println "--R--")
   (pprint R)
-  (println "----")
-  (pprint (get  (root-entries table)  #{[">" 96] ["==" 97] [">=" 0] ["<" 98]} ))
+  (println "--Roots--")
+  (pprint (keys (root-entries table)))
   (println "----"))
 
+(let [U (Range/closed (int (Character/MIN_VALUE)) (int (Character/MAX_VALUE)))]
+  (-> U
+      (.intersection (Range/atLeast (int 98)))
+      (.intersection (Range/greaterThan (int 96)))
+      (.intersection (.negate (Range/singleton (int 97)))))
+  )
 
-(merge {:a :b} {:a :c})
+(.negate (Range/closed 0 10))
 
+
+(char 97)
 
 (comment
 
