@@ -15,9 +15,7 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.set :as set])
-  (:import [java.io File]
-           (com.google.common.collect Range
-                                      Predicate)))
+  (:import [java.io File]))
 
 (set! *warn-on-reflection* true)
 
@@ -279,109 +277,64 @@
       (let [results (map #(% input) assertions)]
         (not (some false? results))))))
 
-
-(install-parser! "(abc|a*)")
-
-(count {:a :b, :b :c})
-
-(defn root-entries
+(defn- root-entries
   [{:keys [S R]}]
-  (let [s+r (count (merge S R))
-        s (count S)
-        r (count R)]
-    #_(do
-      (println "--S--")
-      (pprint (keys S))
-      (println "--R--")
-      (pprint (keys R))
-      (println "--S + R--")
-      (pprint (keys (merge S R)))
-      (assert (= s+r (+ s r)) (str "Elements lost in during map merge (" s+r " instead of " (+ s r) ")\n")))
-    (group-by (comp first :constraints first) (merge S R))))
+  (let [s+r (merge S R)]
+    (assert (= (count s+r) (+ (count S) (count R))) "Elements lost during map merge")
+    (group-by (comp #(or (first %) #{}) :constraints first) s+r)))
+
+(defn- roots
+  [table]
+  (let [root-entries (root-entries table)]
+    (map (fn [[prefix entries]]
+           [prefix (sort-by (comp length first) entries)]) root-entries)))
+
+(defn states
+  "Table -> [State]"
+  [{:keys [S]}]
+  (set (vals S)))
+
+(defn pop*
+  "Safe version of `clojure.core/pop`; returns nil when `coll` is empty"
+  [coll]
+  (when (seq coll)
+    (pop coll)))
+
+(comment "This explodes!" (pop []))
+(comment "This returns nil :)" (pop* []))
+
+;; domain impl
+(defn compute-prefix-pairs
+  [{:keys [S R]}]
+  (let [s+r (merge S R)]
+    (reduce (fn [prefix-pairs [path row :as entry]]
+              (let [prefixes  (filter (fn [[other-path other-row]]
+                                        (= (constraints path)
+                                           (pop* (constraints other-path))))
+                                      s+r)]
+                (conj prefix-pairs [entry :is-prefix-of prefixes])))
+            []
+            s+r)))
 
 
-(let [{:keys [S R E] :as table}
-      (-> (make-table)
-          (add-path-condition (query "b"))
-          ;; (closed?) ; false
-          (close)
-          ;; (closed?) ; true
-          (add-path-condition (query "abc"))
-          (add-path-condition (query "abcd"))
-          (add-evidence "c")
-          ;; (closed?) ; false
-          (close)
-          ;; (closed?) ; true
-          (add-evidence "a")
-          ;; (closed?) ; false
-          (close)
-          (add-evidence "abc")
-          (close)
-          (close)
-          )]
-  (println "--Closed?--")
-  (println (closed? table))
-  (println "--E--")
-  (pprint E)
-  (println "--S--")
-  (pprint S)
-  (println "--R--")
-  (pprint R)
-  (println "--Roots--")
-  (pprint (keys (root-entries table)))
-  (println "----"))
-
-(let [U (Range/closed (int (Character/MIN_VALUE)) (int (Character/MAX_VALUE)))]
-  (-> U
-      (.intersection (Range/atLeast (int 98)))
-      (.intersection (Range/greaterThan (int 96)))
-      (.intersection (.negate (Range/singleton (int 97)))))
-  )
-
-(.negate (Range/closed 0 10))
-
-
-(char 97)
-
+;; domain demo
 (comment
-
-  ;; install the castle move parser
-  (install-parser! "0-0(-0)?\\+?")
-
-  (install-parser! default-parser)
-  (refine-string "")
-  
-  (map (comp println :constraints) (suffixes (query "0-0-0")))
-
-  (println "----")
-  (clojure.pprint/pprint (suffixes (query "0-0l")))
-
-  (prn *current-parser*)
-
-  (query "")
-
-  ;; Query Coastal for path information of some input given to the parser
-  (->> (query "\uFFFF")
-       constraints)
-;; TODO Apply a constraint set to a characer qqq
-  (-> (make-table)
-      (fill)
-      (add-path-condition (query "0-"))
-      (add-path-condition (query "0-0-"))
-      (add-evidence "0+")
-      (fill)
-      (add-evidence "fill")
-      (add-path-condition (query "lolk"))
-      (fill)
-      ;; (closed?)
-      clojure.pprint/pprint)
-
-  ;; Install an arbitrary regex
-  (install-parser! "(fill)(ed)?")
-  (install-parser! "(a|b)?")
-
-  (compile-parsers!)
-  ;; Stop Coastal
-  (stop!)
-
+  "Create a table, and compute the prefix pairs"
+  (let [{:keys [S R E] :as table}
+       (-> (make-table)
+           (add-path-condition (query "b"))
+           (close)
+           (add-path-condition (query "abc"))
+           (fill)
+           ;; (close)
+           (add-path-condition (query "abca"))
+           (add-evidence "a")
+           (close)
+           (add-evidence "c")
+           (close))
+       states (states table)
+       _ (println (count S) (count R) (count (merge S R)))
+       s+r (merge S R)]
+   (println "----")
+   (count (compute-prefix-pairs table)))
   )
