@@ -289,11 +289,6 @@
     (map (fn [[prefix entries]]
            [prefix (sort-by (comp length first) entries)]) root-entries)))
 
-(defn states
-  "Table -> [State]"
-  [{:keys [S]}]
-  (set (vals S)))
-
 (defn pop*
   "Safe version of `clojure.core/pop`; returns nil when `coll` is empty"
   [coll]
@@ -303,8 +298,7 @@
 (comment "This explodes!" (pop []))
 (comment "This returns nil :)" (pop* []))
 
-;; domain impl
-(defn compute-prefix-pairs
+(defn- compute-prefix-pairs
   [{:keys [S R]}]
   (let [s+r (merge S R)]
     (reduce (fn [prefix-pairs [path row :as entry]]
@@ -316,25 +310,53 @@
             []
             s+r)))
 
+(defn compute-transitions
+  "Table -> [Transition]"
+  [table]
+  (let [prefix-pairs (compute-prefix-pairs table)
+        transitions
+        (reduce (fn [transitions [[prefix-path prefix-row] _ follow]]
+                  (if (seq? follow)
+                    (conj transitions
+                          (map (fn [[path row]]
+                                 (let [guard (drop (length prefix-path) (constraints path))
+                                       guard-fn (constraint-set->fn (first guard))]
+                                   {:from prefix-row
+                                    :guard guard
+                                    :guard-fn guard-fn
+                                    :to row})) follow))
+                    transitions))
+                []
+                prefix-pairs)]
+    (flatten transitions)))
+
+(defn initial-state
+  "Table -> State"
+  [{:keys [S]}]
+  (let [[[path row]] (filter (fn [[path row]](= 0 (length path))) S)]
+    row))
+
+(comment "Evaluate a guard-fn" ((:guard-fn (first transitions)) (int 97)))
 
 ;; domain demo
 (comment
   "Create a table, and compute the prefix pairs"
   (let [{:keys [S R E] :as table}
-       (-> (make-table)
-           (add-path-condition (query "b"))
-           (close)
-           (add-path-condition (query "abc"))
-           (fill)
-           ;; (close)
-           (add-path-condition (query "abca"))
-           (add-evidence "a")
-           (close)
-           (add-evidence "c")
-           (close))
-       states (states table)
-       _ (println (count S) (count R) (count (merge S R)))
-       s+r (merge S R)]
-   (println "----")
-   (count (compute-prefix-pairs table)))
+        (-> (make-table)
+            (add-path-condition (query "b"))
+            (close)
+            (add-path-condition (query "abc"))
+            (fill)
+            ;; (close)
+            (add-path-condition (query "abca"))
+            (add-evidence "a")
+            (close)
+            (add-evidence "c")
+            (close))
+        states (states table)
+        _ (println (count S) (count R) (count (merge S R)))
+        s+r (merge S R)]
+    (println "----")
+    (println (initial-state table))
+    (pprint (compute-transitions table)))
   )
