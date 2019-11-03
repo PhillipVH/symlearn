@@ -15,7 +15,9 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.set :as set])
-  (:import [java.io File]))
+  (:import [java.io File]
+           [java.util LinkedList]
+           [automata.sfa SFA]))
 
 (set! *warn-on-reflection* true)
 
@@ -216,18 +218,23 @@
   "Table -> PathCondition -> Table"
   [table {:keys [accepted] :as path}]
   (let [prefixes (prefixes path)
-        table* (update table :R #(assoc % path [accepted]))]
-    (reduce (fn [table* {:keys [accepted] :as path}]
-              (update table* :R #(assoc % path [accepted])))
-            table*
-            prefixes)))
+        table-with-ce (update table :R #(assoc % path [accepted]))
+        table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
+                                      (update table* :R #(assoc % path [accepted])))
+                                    table-with-ce
+                                    prefixes)
+        filled-table (fill table-with-prefixes)]
+    (if-not (closed? filled-table)
+      (close filled-table)
+      filled-table)))
 
 (defn add-evidence
   "Table -> Evidence -> Table"
   [table evidence]
   (-> table
       (update :E #(conj % evidence))
-      fill))
+      fill
+      close))
 
 ;; closing a table
 
@@ -319,7 +326,7 @@
                   (if (seq? follow)
                     (conj transitions
                           (map (fn [[path row]]
-                                 (let [guard (drop (length prefix-path) (constraints path))
+                                 (let [guard (first (drop (length prefix-path) (constraints path)))
                                        guard-fn (constraint-set->fn (first guard))]
                                    {:from prefix-row
                                     :guard guard
@@ -333,76 +340,123 @@
 (defn initial-state
   "Table -> State"
   [{:keys [S]}]
-  (let [[[path row]] (filter (fn [[path row]](= 0 (length path))) S)]
+  (let [[[path row]] (filter (fn [[path row]] (= 0 (length path))) S)]
     row))
 
-(comment "Evaluate a guard-fn" ((:guard-fn (first transitions)) (int 97)))
 
-(defn run-input
-  [table input]
+
+(defn table->sfa
+  "Table -> (String -> Maybe Boolean)"
+  [table]
   (let [transitions (compute-transitions table)]
-    (reduce (fn [state ch]
-              (println (str "state " state ", looking at: " ch) )
-              (let [transitions-from-state (filter (fn [{:keys [from to guard-fn]}]
-                                                     (and
-                                                      (= state from)
-                                                      (guard-fn (int ch))))
-                                                   transitions)
-                    n-transitions (count transitions-from-state)]
-                (println transitions-from-state)
-                (cond
-                  (= 0 n-transitions) state ;; self loop
-                  (= 1 n-transitions) (:to (first transitions-from-state)) ;; jump as per transitions
-                  (>= 2 n-transitions) (let [targets (map :to transitions-from-state)
-                                            unique-targets (set targets)]
-                                        (if (= 1 (count unique-targets)) ;; jump to the one state possible
-                                          (first unique-targets)
-                                          [::non-determinism transitions-from-state]))
-                  :default state)))
-            (initial-state table)
-            input)))
+    (fn [input]
+      (let [halted-state
+            (reduce
+             (fn [state ch]
+               (println (str "state " state ", looking at: " ch) )
+               (let [transitions-from-state
+                     (filter (fn [{:keys [from to guard-fn]}]
+                               (and
+                                (= state from)
+                                (guard-fn (int ch))))
+                             transitions)
+                     n-transitions (count transitions-from-state)]
+                 (cond
+                   (= 0 n-transitions) state ;; self loop
+                   (= 1 n-transitions) (:to (first transitions-from-state)) ;; jump as per transitions
+                   (>= 2 n-transitions) (let [targets (map :to transitions-from-state)
+                                              unique-targets (set targets)]
+                                          (if (= 1 (count unique-targets)) ;; jump to the one state possible
+                                            (first unique-targets)
+                                            (reduced [[::non-det (vec transitions-from-state)]])))
+                   :default state)))
+             (initial-state table)
+             input)]
+        (first halted-state)))))
 
-(comment
-  "Huh, this works pretty well"
-  (let [{:keys [S R E] :as table}
-       (-> (make-table)
-           (add-path-condition (query "b"))
-           (close)
-           (add-path-condition (query "abc"))
-           (fill)
-           ;; (close)
-           (add-path-condition (query "abca"))
-           (add-evidence "a")
-           (close)
-           (add-evidence "c")
-           (close))
-       states (states table)
-       _ (println (count S) (count R) (count (merge S R)))
-       s+r (merge S R)]
-   (println "----")
-   (pprint table)
-   (pprint (compute-transitions table))
-   (pprint (run-input table "abc"))))
+(defn accepts?
+  "Table -> String -> Maybe Boolean"
+  [table input]
+  ((table->sfa table) input))
 
-;; domain demo
-(comment
-  "Create a table, and compute the prefix pairs"
-  (let [{:keys [S R E] :as table}
-        (-> (make-table)
-            (add-path-condition (query "b"))
-            (close)
-            (add-path-condition (query "abc"))
-            (fill)
-            ;; (close)
-            (add-path-condition (query "abca"))
-            (add-evidence "a")
-            (close)
-            (add-evidence "c")
-            (close))
-        states (states table)
-        _ (println (count S) (count R) (count (merge S R)))
-        s+r (merge S R)]
-    (println "----")
-    (println (initial-state table))
-    (run-input table "hello"))
-  )
+#_(defn generate-langauge
+  "Table -> [String]"
+  [table])
+
+#_(defn equivalent?
+  [table depth]
+  (let [accepts? (table->sfa)]))
+
+(defn states
+  [{:keys [S]}]
+  (set (vals S)))
+
+(defn- state-map
+  "Convert transitions from our internal representation (states are rows, guards are
+  constraint sets) to the format required by Symbolic Automata (states are integers,
+  guards are CharPreds)."
+  [table]
+  (let [states (states table)
+        state-labels (map-indexed (fn [idx state]
+                                    [state idx]) states)]
+    (into {} state-labels)))
+
+(defn final-states
+  [{:keys [S] :as table}]
+  (let [states (states table)
+        state-map (state-map table)
+        final-states (filter (fn [state] (first state)) states)]
+    (map #(get state-map %) final-states)))
+
+(defn- transition->SFAInputMove
+  [{:keys [from to guard]}]
+  (intervals/make-transition from to guard))
+
+(defn make-sfa
+  [table]
+  (let [state-map (state-map table)
+        transitions (compute-transitions table)
+        relabeled (map (fn [{:keys [from guard to]}]
+                         {:from (get state-map from)
+                          :to (get state-map to)
+                          :guard (intervals/constraint-set->CharPred guard)})
+                       transitions)
+        _ (pprint relabeled)
+        transitions (map transition->SFAInputMove relabeled)
+        initial-state (get state-map (initial-state table))
+        final-states (final-states table)]
+    (SFA/MkSFA
+     (doto (LinkedList.) (.addAll transitions))
+     (int initial-state)
+     (doto (LinkedList.) (.addAll (map int final-states)))
+     intervals/solver
+     false
+     false)))
+
+
+(defn show-dot
+  [table & args]
+  (let [sfa (make-sfa table)]
+    (.createDotFile (if args (.mkTotal sfa intervals/solver) sfa) "aut" "")
+    (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
+    (sh/sh "xdg-open" "outfile.ps")))
+
+
+(defn not-quite-a*
+  []
+  (-> (make-table)
+      (add-path-condition (query "c"))
+      (add-evidence "c")
+
+      (add-path-condition (query "abc"))
+      (add-evidence "abc")
+
+      (add-path-condition (query "abca"))
+      (add-evidence "abca")
+
+      (add-path-condition (query "bc"))
+      (add-evidence "bc")
+
+      (show-dot :complete)
+      println
+      ))
