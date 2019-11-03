@@ -224,17 +224,21 @@
                                     table-with-ce
                                     prefixes)
         filled-table (fill table-with-prefixes)]
-    (if-not (closed? filled-table)
+    filled-table
+    #_(if-not (closed? filled-table)
       (close filled-table)
       filled-table)))
 
 (defn add-evidence
   "Table -> Evidence -> Table"
   [table evidence]
-  (-> table
-      (update :E #(conj % evidence))
-      fill
-      close))
+  (let [new-table (-> table
+                      (update :E #(conj % evidence))
+                      fill)]
+    (loop [table new-table]
+      (if (closed? table)
+        table
+        (recur (close table))))))
 
 ;; closing a table
 
@@ -421,7 +425,6 @@
                           :to (get state-map to)
                           :guard (intervals/constraint-set->CharPred guard)})
                        transitions)
-        _ (pprint relabeled)
         transitions (map transition->SFAInputMove relabeled)
         initial-state (get state-map (initial-state table))
         final-states (final-states table)]
@@ -430,8 +433,8 @@
      (int initial-state)
      (doto (LinkedList.) (.addAll (map int final-states)))
      intervals/solver
-     false
-     false)))
+     true
+     true)))
 
 
 (defn show-dot
@@ -460,3 +463,21 @@
       (show-dot :complete)
       println
       ))
+
+(defn a*|abc
+  []
+  (install-parser! "a*|abc")
+  (-> (make-table)
+
+      (add-path-condition (query "a"))
+      (add-evidence "a")
+
+      (add-path-condition (query "abc"))
+      (add-evidence "abc")
+
+      (add-path-condition (query "aa"))
+      (add-evidence "aa")
+
+      (show-dot :complete)))
+
+(a*|abc)

@@ -214,35 +214,3 @@
         (.append "\n}\n")))
 
     (.toString java-src)))
-
-(comment
-
-  (map (comp right guard) (transitions-from (regex->sfa "a|b") 0))
-
-  (.getMovesFrom (regex->sfa "a|b") (int 0))
-
-  (right (guard (first (get-transitions-from (regex->sfa "a|b") 0))))
-
-
-
-  (regex->sfa "0-0(-0)?")
-
-  (spit "Regex.java" (sfa->java (regex->sfa "(ab|b)+") "regex" "Regex"))
-
-  (println (sfa->java (regex->sfa "a") "examples.tacas2017" "Regex"))
-
-
-  (println (sfa->java (regex->sfa "a|b") "regex" "regex"))
-
-    (let [our-sfa (regex->sfa "a|(b|c)?")]
-      (println (sfa->java our-sfa "examples.tacas2017" "Regex") ))
-
-  (intervals (union (make-interval \a \g) (make-interval \z \z)))
-  pred
-  (left (make-interval \a \g))
-
-  (intervals (negate (make-interval \a \g)))
-
-  )
-
-
