@@ -224,10 +224,10 @@
                                     table-with-ce
                                     prefixes)
         filled-table (fill table-with-prefixes)]
-    filled-table
-    #_(if-not (closed? filled-table)
-      (close filled-table)
-      filled-table)))
+    (loop [table filled-table]
+      (if (closed? table)
+        table
+        (recur (close table))))))
 
 (defn add-evidence
   "Table -> Evidence -> Table"
@@ -433,51 +433,42 @@
      (int initial-state)
      (doto (LinkedList.) (.addAll (map int final-states)))
      intervals/solver
-     true
-     true)))
+     false
+     false)))
 
 
 (defn show-dot
-  [table & args]
-  (let [sfa (make-sfa table)]
-    (.createDotFile (if args (.mkTotal sfa intervals/solver) sfa) "aut" "")
+  [table & [{:keys [minimize?]}]]
+  (let [sfa (make-sfa table)
+        min-sfa (if minimize? (.minimize sfa intervals/solver) sfa)]
+    (println sfa)
+    (.createDotFile min-sfa  "aut" "")
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
     (sh/sh "xdg-open" "outfile.ps")))
 
 
-(defn not-quite-a*
-  []
-  (-> (make-table)
-      (add-path-condition (query "c"))
-      (add-evidence "c")
+(-> (make-table)
+    (add-path-condition (query "a"))
+    (add-evidence "a")
 
-      (add-path-condition (query "abc"))
-      (add-evidence "abc")
+    (add-path-condition (query "abc"))
+    (add-evidence "abc")
+    (add-evidence "bc")
+    (add-evidence "c")
 
-      (add-path-condition (query "abca"))
-      (add-evidence "abca")
+    (add-path-condition (query "aa"))
+    (add-evidence "aa")
 
-      (add-path-condition (query "bc"))
-      (add-evidence "bc")
+    (add-path-condition (query "aaa"))
+    (add-evidence "aaa")
 
-      (show-dot :complete)
-      println
-      ))
+    (show-dot {:minimize? false}))
 
-(defn a*|abc
-  []
-  (install-parser! "a*|abc")
-  (-> (make-table)
+(defn generate-language
+  [^SFA sfa])
 
-      (add-path-condition (query "a"))
-      (add-evidence "a")
-
-      (add-path-condition (query "abc"))
-      (add-evidence "abc")
-
-      (add-path-condition (query "aa"))
-      (add-evidence "aa")
-
-      (show-dot :complete)))
-
-(a*|abc)
+#_(defn add-ce
+    [table ce]
+    (-> table
+        (add-path-condition (query ce))
+        (add-evidence ce)))
