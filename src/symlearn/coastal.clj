@@ -213,6 +213,33 @@
                    {}, R)))))
 
 ;; adding new information to the table
+(defn open-entries
+  "Return a entries from R in `table` that do not appear in S. Return nil
+  if no open entries are present"
+  [{:keys [S R]}]
+  (let [s-rows (set (vals S))
+        r-rows (set (vals R))]
+    (let [candidate-rows (set/difference r-rows s-rows)
+          entries (filter (fn [[_ row]] (candidate-rows row)) R)]
+      (set (keys entries)))))
+
+(defn close
+  "Table -> Table"
+  [{:keys [R] :as table}]
+  (if-not (closed? table)
+    (let [promotee (first (open-entries table))
+          row (R promotee)]
+      (-> table
+          (update-in [:R] #(dissoc % promotee))
+          (update-in [:S] #(assoc % promotee row))))
+    table))
+
+(defn closed?
+  "Table -> Boolean"
+  [{:keys [S R]}]
+  (let [s-rows (set (vals S))
+        r-rows (set (vals R))]
+    (set/subset? r-rows s-rows)))
 
 (defn add-path-condition
   "Table -> PathCondition -> Table"
@@ -242,33 +269,8 @@
 
 ;; closing a table
 
-(defn closed?
-  "Table -> Boolean"
-  [{:keys [S R]}]
-  (let [s-rows (set (vals S))
-        r-rows (set (vals R))]
-    (set/subset? r-rows s-rows)))
 
-(defn open-entries
-  "Return a entries from R in `table` that do not appear in S. Return nil
-  if no open entries are present"
-  [{:keys [S R]}]
-  (let [s-rows (set (vals S))
-        r-rows (set (vals R))]
-    (let [candidate-rows (set/difference r-rows s-rows)
-          entries (filter (fn [[_ row]] (candidate-rows row)) R)]
-      (set (keys entries)))))
 
-(defn close
-  "Table -> Table"
-  [{:keys [R] :as table}]
-  (if-not (closed? table)
-    (let [promotee (first (open-entries table))
-          row (R promotee)]
-      (-> table
-          (update-in [:R] #(dissoc % promotee))
-          (update-in [:S] #(assoc % promotee row))))
-    table))
 
 ;; make an sfa from a table
 
@@ -446,6 +448,12 @@
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
     (sh/sh "xdg-open" "outfile.ps")))
 
+(defn make-sfa*
+  [table]
+  (let [sfa (make-sfa table)]
+    (.minimize sfa intervals/solver)))
+
+(install-parser! "a*|abc")
 
 (-> (make-table)
     (add-path-condition (query "a"))
@@ -462,7 +470,13 @@
     (add-path-condition (query "aaa"))
     (add-evidence "aaa")
 
-    (show-dot {:minimize? false}))
+    ;; (make-sfa*)
+
+    ;; (intervals/sfa->java "" "")
+
+    ;; (print)
+
+    (show-dot {:minimize? true}))
 
 (defn generate-language
   [^SFA sfa])
