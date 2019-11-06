@@ -21,8 +21,8 @@
 
 (set! *warn-on-reflection* true)
 
-(defonce ^Process *coastal-instance* nil)
-(defonce *current-parser* nil)
+(defonce ^Process coastal-instance nil)
+(defonce current-parser nil)
 
 (def string-config "Regex.xml")
 (def default-parser "")
@@ -100,19 +100,32 @@
       (while (.isAlive compiler))
       ::ok)))
 
+(defn compile-equivalence-oracle!
+  []
+  (sh/with-sh-dir "eqv-coastal"
+    ;; compile coastal
+    (sh/sh "./gradlew" "build" "installDist")
+
+    ;; install coastal runner
+    (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))
+
+(defn check-equivalence!
+  []
+  (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal/build/classes/java/examples"))
+
 (defn stop!
   "Stop a Coastal process running in `coastal`."
   []
-  (when *coastal-instance*
-    (.destroyForcibly *coastal-instance*)
-    (while (.isAlive *coastal-instance*))
-    (alter-var-root #'*coastal-instance* (constantly nil)))
+  (when coastal-instance
+    (.destroyForcibly coastal-instance)
+    (while (.isAlive coastal-instance))
+    (alter-var-root #'coastal-instance (constantly nil)))
   ::ok)
 
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
   []
-  (if *coastal-instance*
+  (if coastal-instance
     (stop!))
   (tufte/p
    ::start-coastal
@@ -122,30 +135,29 @@
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
      (let [coastal-instance (.start builder)]
-       (alter-var-root #'*coastal-instance* (constantly coastal-instance))
+       (alter-var-root #'coastal-instance (constantly coastal-instance))
        ::ok))))
 
 (defn install-parser!
   [regex]
-  (if *coastal-instance*
+  (if coastal-instance
     (stop!))
-  (alter-var-root #'*current-parser* (constantly regex))
+  (alter-var-root #'current-parser (constantly regex))
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
     (start!)
-    ;; flush the result from the default run
-    (refine-string "")
+    (refine-string "") ; flush the result from the first run
     ::ok))
 
 (defn running?
   []
-  (and *coastal-instance*
-       (.isAlive *coastal-instance*)))
+  (and coastal-instance
+       (.isAlive coastal-instance)))
 
 (defn active-parser
   []
-  *current-parser*)
+  current-parser)
 
 (declare query)
 
@@ -164,7 +176,7 @@
   "Return a map with a set of assertions against `string`, and the parser's
   acceptance status."
   [string]
-  (if-not *coastal-instance*
+  (if-not coastal-instance
     (install-parser! default-parser)) ;; default parser accepts nothing
   (let [[accepted path] (refine-string string)
         constraints (->> path
@@ -212,33 +224,6 @@
                    (fn [new-r [path row]] (assoc new-r path (fill-row [path row] E)))
                    {}, R)))))
 
-;; adding new information to the table
-
-(defn add-path-condition
-  "Table -> PathCondition -> Table"
-  [table {:keys [accepted] :as path}]
-  (let [prefixes (prefixes path)
-        table-with-ce (update table :R #(assoc % path [accepted]))
-        table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
-                                      (update table* :R #(assoc % path [accepted])))
-                                    table-with-ce
-                                    prefixes)
-        filled-table (fill table-with-prefixes)]
-    (loop [table filled-table]
-      (if (closed? table)
-        table
-        (recur (close table))))))
-
-(defn add-evidence
-  "Table -> Evidence -> Table"
-  [table evidence]
-  (let [new-table (-> table
-                      (update :E #(conj % evidence))
-                      fill)]
-    (loop [table new-table]
-      (if (closed? table)
-        table
-        (recur (close table))))))
 
 ;; closing a table
 
@@ -269,6 +254,34 @@
           (update-in [:R] #(dissoc % promotee))
           (update-in [:S] #(assoc % promotee row))))
     table))
+
+;; adding new information to the table
+
+(defn add-path-condition
+  "Table -> PathCondition -> Table"
+  [table {:keys [accepted] :as path}]
+  (let [prefixes (prefixes path)
+        table-with-ce (update table :R #(assoc % path [accepted]))
+        table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
+                                      (update table* :R #(assoc % path [accepted])))
+                                    table-with-ce
+                                    prefixes)
+        filled-table (fill table-with-prefixes)]
+    (loop [table filled-table]
+      (if (closed? table)
+        table
+        (recur (close table))))))
+
+(defn add-evidence
+  "Table -> Evidence -> Table"
+  [table evidence]
+  (let [new-table (-> table
+                      (update :E #(conj % evidence))
+                      fill)]
+    (loop [table new-table]
+      (if (closed? table)
+        table
+        (recur (close table))))))
 
 ;; make an sfa from a table
 
@@ -347,8 +360,6 @@
   (let [[[path row]] (filter (fn [[path row]] (= 0 (length path))) S)]
     row))
 
-
-
 (defn table->sfa
   "Table -> (String -> Maybe Boolean)"
   [table]
@@ -378,19 +389,6 @@
              input)]
         (first halted-state)))))
 
-(defn accepts?
-  "Table -> String -> Maybe Boolean"
-  [table input]
-  ((table->sfa table) input))
-
-#_(defn generate-langauge
-  "Table -> [String]"
-  [table])
-
-#_(defn equivalent?
-  [table depth]
-  (let [accepts? (table->sfa)]))
-
 (defn states
   [{:keys [S]}]
   (set (vals S)))
@@ -417,7 +415,7 @@
   (intervals/make-transition from to guard))
 
 (defn make-sfa
-  [table]
+  [table & [{:keys [minimize?]}]]
   (let [state-map (state-map table)
         transitions (compute-transitions table)
         relabeled (map (fn [{:keys [from guard to]}]
@@ -427,48 +425,49 @@
                        transitions)
         transitions (map transition->SFAInputMove relabeled)
         initial-state (get state-map (initial-state table))
-        final-states (final-states table)]
-    (SFA/MkSFA
-     (doto (LinkedList.) (.addAll transitions))
-     (int initial-state)
-     (doto (LinkedList.) (.addAll (map int final-states)))
-     intervals/solver
-     false
-     false)))
+        final-states (final-states table)
+        sfa (SFA/MkSFA
+             (doto (LinkedList.) (.addAll transitions))
+             (int initial-state)
+             (doto (LinkedList.) (.addAll (map int final-states)))
+             intervals/solver
+             false
+             false)]
+    (if minimize?
+      (.minimize sfa intervals/solver)
+      sfa)))
 
 
 (defn show-dot
-  [table & [{:keys [minimize?]}]]
-  (let [sfa (make-sfa table)
-        min-sfa (if minimize? (.minimize sfa intervals/solver) sfa)]
+  [table]
+  (let [sfa (make-sfa table {:minimize? true})]
     (println sfa)
-    (.createDotFile min-sfa  "aut" "")
+    (.createDotFile ^SFA sfa  "aut" "")
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
     (sh/sh "xdg-open" "outfile.ps")))
 
 
-(-> (make-table)
-    (add-path-condition (query "a"))
-    (add-evidence "a")
+(comment
+  (install-parser! "a*|abc")
 
-    (add-path-condition (query "abc"))
-    (add-evidence "abc")
-    (add-evidence "bc")
-    (add-evidence "c")
+  (-> (make-table)
+      (add-path-condition (query "a")) ;; from ce
+      (add-evidence "a")
 
-    (add-path-condition (query "aa"))
-    (add-evidence "aa")
+      (add-path-condition (query "abc")) ;; from ce
+      (add-evidence "abc")
+      (add-evidence "bc")
+      (add-evidence "c")
 
-    (add-path-condition (query "aaa"))
-    (add-evidence "aaa")
+      (add-path-condition (query "aa")) ;; from ce
+      (add-evidence "aa")
 
-    (show-dot {:minimize? false}))
+      (add-path-condition (query "aaa"));; from ce
+      (add-evidence "aaa")
 
-(defn generate-language
-  [^SFA sfa])
+      ;; (make-sfa {:minimize? true})
+      ;; (intervals/sfa->java "" "")
+      ;; (println)
+      (show-dot ))
 
-#_(defn add-ce
-    [table ce]
-    (-> table
-        (add-path-condition (query ce))
-        (add-evidence ce)))
+  )
