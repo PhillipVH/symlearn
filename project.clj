@@ -8,6 +8,7 @@
                  [org.clojure/test.check "0.9.0"]
                  [com.taoensso/carmine "2.19.1"]
                  [com.taoensso/tufte "2.0.1"]
+                 [cljstache "2.0.4"]
                  [com.rpl/specter "1.1.2"]]
   :main ^:skip-aot symlearn.user
   :java-source-paths ["src/main/java"]

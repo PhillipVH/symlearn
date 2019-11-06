@@ -1,0 +1,93 @@
+plugins {
+	id 'application'
+	id 'java'
+	id 'eclipse'
+	id 'checkstyle'
+	// FOR USING THE ECLIPSE COMPILER
+	// id 'de.set.ecj' version '1.4.1'
+}
+
+// FOR USING THE ECLIPSE COMPILER
+// (VERSION FROM "ABOUT" INFORMATION FOR "Eclipse Java Development Tools")
+// ecj.toolVersion = '3.18.0'
+
+mainClassName = 'za.ac.sun.cs.coastal.COASTAL'
+
+repositories {
+	jcenter()
+	maven { url 'https://plugins.gradle.org/m2/' }
+}
+
+dependencies {
+	compile group: 'com.github.green-solver', name: 'green', version: '0.2.0'
+	compile group: 'commons-beanutils', name: 'commons-beanutils', version: '1.9.3'
+	compile group: 'commons-io', name: 'commons-io', version: '2.6'
+	compile group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.10.0'
+	compile group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.10.0'
+	compile group: 'org.ow2.asm', name: 'asm', version: '7.2'
+	compile group: 'org.ow2.asm', name: 'asm-commons', version: '7.2'
+	compile group: 'org.ow2.asm', name: 'asm-util', version: '7.2'
+	testCompile group: 'junit', name: 'junit', version: '4.12'
+	testCompile group: 'org.slf4j', name: 'slf4j-nop', version: '1.7.25'
+	implementation files(org.gradle.internal.jvm.Jvm.current().toolsJar)
+	compile files('libs/commons-collections4-4.4.jar')
+}
+
+// Includes sources for examples
+sourceSets {
+	examples {
+		java.srcDir file('src/examples/java')
+		resources.srcDir file('src/examples/resources')
+		output.resourcesDir = 'build/classes/java/examples'
+		compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+		runtimeClasspath += output + compileClasspath
+	}
+	test {
+		output.resourcesDir = 'build/classes/java/test'
+	}
+}
+
+// So that property files in src/test/java/tests/* are copied
+// to the test sources directory.
+sourceSets.test.resources.srcDirs += [ 'src/test/java' ]
+
+// Enforce gradle version for Travis CI
+task wrapper(type: Wrapper) {
+	gradleVersion = '4.3'
+}
+
+// Chosen version of https://checkstyle.org/
+checkstyle {
+	toolVersion '8.1'
+}
+
+javadoc {
+	destinationDir = file('build/docs/api')
+	options.docletpath = [ file('build/classes/java/main') ]
+	options.doclet = 'za.ac.sun.cs.coastal.utility.Doclet'
+	options.noQualifiers = [ 'java.lang.*', 'java.io.*', 'java.util.*', 'org.apache.*' , 'za.ac.sun.cs.coastal.' ]
+	options.memberLevel = JavadocMemberLevel.PRIVATE
+}
+
+// Add manifest attribute to identify instrumenter for system classes (java.*)
+jar {
+	manifest{
+		attributes 'Premain-Class' : 'za.ac.sun.cs.coastal.instrument.agent.InstrumentationAgent'
+	}
+}
+
+// Add JVM runtime option to switch off JIT compilation
+applicationDefaultJvmArgs = [ '-Xint -ea' ]
+
+// Fix to make scripts more portable 
+startScripts {
+	doLast {
+		unixScript.text = unixScript.text.replace('COASTAL_APP_HOME', '\$APP_HOME')
+		windowsScript.text = windowsScript.text.replace('COASTAL_APP_HOME', '%~dp0..')
+	}
+}
+
+run {
+	if (project.hasProperty('args'))
+		args findProperty('args')
+}

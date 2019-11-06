@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!ELEMENT configuration (coastal)>
+<!ELEMENT coastal (target?,bounds?,settings?,divers?,surfers?,strategies?,observers?,delegates?)>
+
+<!-- settings for strategies, delegates, and observers -->
+<!ELEMENT options ANY>
+
+<!ELEMENT target (jar?,main?,entrypoint?,arg*,instrument*,trigger*)>
+<!ELEMENT jar (#PCDATA)>
+<!ATTLIST jar directory CDATA #IMPLIED>
+<!ELEMENT main (#PCDATA)>
+<!ELEMENT entrypoint (#PCDATA)>
+<!ELEMENT arg (#PCDATA)>
+<!ELEMENT instrument (#PCDATA)>
+<!ELEMENT trigger (#PCDATA)>
+
+<!-- bounds on variables and types -->
+<!ELEMENT bounds (bound*)>
+<!ELEMENT bound EMPTY>
+<!ATTLIST bound name ID #REQUIRED>
+<!ATTLIST bound min CDATA #REQUIRED>
+<!ATTLIST bound max CDATA #REQUIRED>
+
+<!-- general settings -->
+<!ELEMENT settings (trace-all?,echo-output?,draw-paths?,concrete-values?,show-instrumentation?,write-classfile?,max-threads?,run-limit?,time-limit?,path-limit?,conjunct-limit?,solver?)>
+<!ELEMENT trace-all (#PCDATA)>
+<!ELEMENT echo-output (#PCDATA)>
+<!ELEMENT draw-paths (#PCDATA)>
+<!ELEMENT concrete-values (#PCDATA)>
+<!ELEMENT show-instrumentation (#PCDATA)>
+<!ELEMENT write-classfile (#PCDATA)>
+<!--<! ELEMENT load-balance (#PCDATA)>-->
+<!ELEMENT max-threads (#PCDATA)>
+<!ELEMENT run-limit (#PCDATA)>
+<!ELEMENT time-limit (#PCDATA)>
+<!ELEMENT path-limit (#PCDATA)>
+<!ELEMENT conjunct-limit (#PCDATA)>
+<!ELEMENT solver (#PCDATA|options)*>
+<!-- <!ELEMENT z3-path (#PCDATA)> <!ATTLIST z3-path args CDATA #IMPLIED> -->
+
+<!ELEMENT divers EMPTY>
+<!ATTLIST divers threads NMTOKEN #IMPLIED>
+<!ATTLIST divers min-threads NMTOKEN #IMPLIED>
+<!ATTLIST divers max-threads NMTOKEN #IMPLIED>
+
+<!ELEMENT surfers EMPTY>
+<!ATTLIST surfers threads NMTOKEN #IMPLIED>
+<!ATTLIST surfers min-threads NMTOKEN #IMPLIED>
+<!ATTLIST surfers max-threads NMTOKEN #IMPLIED>
+
+<!-- strategies and their settings -->
+<!ELEMENT strategies (strategy+)>
+<!ELEMENT strategy (#PCDATA|options)*>
+<!ATTLIST strategy threads NMTOKEN #IMPLIED>
+<!ATTLIST strategy min-threads NMTOKEN #IMPLIED>
+<!ATTLIST strategy max-threads NMTOKEN #IMPLIED>
+<!ATTLIST strategy seed NMTOKEN #IMPLIED>
+<!ATTLIST strategy full CDATA #IMPLIED>
+<!ATTLIST strategy topdown CDATA #IMPLIED>
+
+<!-- observers and their settings -->
+<!ELEMENT observers (observer*)>
+<!ELEMENT observer (#PCDATA|options)*>
+
+<!-- delegates and their settings -->
+<!ELEMENT delegates (delegate*)>
+<!ELEMENT delegate (for,model)>
+<!ELEMENT for (#PCDATA)>
+<!ELEMENT model (#PCDATA|options)*>
