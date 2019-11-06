@@ -224,15 +224,7 @@
                    (fn [new-r [path row]] (assoc new-r path (fill-row [path row] E)))
                    {}, R)))))
 
-
-;; closing a table
-
-(defn closed?
-  "Table -> Boolean"
-  [{:keys [S R]}]
-  (let [s-rows (set (vals S))
-        r-rows (set (vals R))]
-    (set/subset? r-rows s-rows)))
+;; closing the table
 
 (defn open-entries
   "Return a entries from R in `table` that do not appear in S. Return nil
@@ -244,6 +236,13 @@
           entries (filter (fn [[_ row]] (candidate-rows row)) R)]
       (set (keys entries)))))
 
+(defn closed?
+  "Table -> Boolean"
+  [{:keys [S R]}]
+  (let [s-rows (set (vals S))
+        r-rows (set (vals R))]
+    (set/subset? r-rows s-rows)))
+
 (defn close
   "Table -> Table"
   [{:keys [R] :as table}]
@@ -251,9 +250,35 @@
     (let [promotee (first (open-entries table))
           row (R promotee)]
       (-> table
-          (update-in [:R] #(dissoc % promotee))
-          (update-in [:S] #(assoc % promotee row))))
+          (update :R #(dissoc % promotee))
+          (update :S #(assoc % promotee row))))
     table))
+
+(defn add-path-condition
+  "Table -> PathCondition -> Table"
+  [table {:keys [accepted] :as path}]
+  (let [prefixes (prefixes path)
+        table-with-ce (update table :R #(assoc % path [accepted]))
+        table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
+                                      (update table* :R #(assoc % path [accepted])))
+                                    table-with-ce
+                                    prefixes)
+        filled-table (fill table-with-prefixes)]
+    (loop [table filled-table]
+      (if (closed? table)
+        table
+        (recur (close table))))))
+
+(defn add-evidence
+  "Table -> Evidence -> Table"
+  [table evidence]
+  (let [new-table (-> table
+                      (update :E #(conj % evidence))
+                      fill)]
+    (loop [table new-table]
+      (if (closed? table)
+        table
+        (recur (close table))))))
 
 ;; adding new information to the table
 
@@ -437,7 +462,6 @@
       (.minimize sfa intervals/solver)
       sfa)))
 
-
 (defn show-dot
   [table]
   (let [sfa (make-sfa table {:minimize? true})]
@@ -446,6 +470,10 @@
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
     (sh/sh "xdg-open" "outfile.ps")))
 
+(defn make-sfa*
+  [table]
+  (let [sfa (make-sfa table)]
+    (.minimize ^SFA sfa intervals/solver)))
 
 (comment
   (install-parser! "a*|abc")
@@ -465,9 +493,5 @@
       (add-path-condition (query "aaa"));; from ce
       (add-evidence "aaa")
 
-      ;; (make-sfa {:minimize? true})
-      ;; (intervals/sfa->java "" "")
-      ;; (println)
-      (show-dot ))
-
+      (show-dot))
   )
