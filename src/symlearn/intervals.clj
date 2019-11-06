@@ -22,7 +22,8 @@
   (intersection [this pred] "Return the intersection of `this` and `pred`.")
   (negate [this] "Return the negation of this `this`.")
   (equivalent? [this that] "Return true if `this` and `that` are equivalent.")
-  (generate-witness [this] "Return a character that satisfies the constraint in `this`."))
+  (generate-witness [this] "Return a character that satisfies the constraint in `this`.")
+  (satisfied-by [this character] "True if `character` satifies the constraints in `this`."))
 
 (defprotocol IInterval
   "A protocol for character predicates expressed as intervals."
@@ -48,6 +49,7 @@
   (negate [this] (.MkNot solver this))
   (equivalent? [this that] (.AreEquivalent solver this that))
   (generate-witness [this] (.generateWitness solver this))
+  (satisfied-by [this character] (.isSatisfiedBy this character))
 
   IInterval
   (left [this] (first (first (intervals this))))
@@ -79,6 +81,23 @@
   (from [this] "Return the state from which `this` transition originates.")
   (to [this] "Return the state to which `this` transition goes.")
   (guard [this] "Return the guard used by `this` to check if a transition should occur."))
+
+(defn constraint->CharPred
+  [[op bound]]
+  (case op
+    ">" (CharPred. (char (inc bound)) \uFFFF)
+    ">=" (CharPred. (char bound) \uFFFF)
+    "<" (CharPred. \u0000 (char (dec bound)))
+    "<=" (CharPred. \u0000 (char bound))
+    "==" (CharPred. (char bound))
+    "!=" (negate (CharPred. (char bound)))))
+
+(defn constraint-set->CharPred
+  [constraints]
+  (reduce (fn [predicate constraint]
+            (intersection predicate (constraint->CharPred constraint)))
+          (CharPred. \u0000 \uFFFF)
+          constraints))
 
 (extend-type SFAInputMove
   ITransition
@@ -168,6 +187,7 @@
                   (.append ") {\n")
                   (.append "\t\t\t\t\tstate = ")
                   (.append (.to transition))
+
                   (.append ";\n")
                   (.append "\t\t\t\t\tcontinue;\n")
                   (.append "\t\t\t\t}\n"))))))
@@ -194,35 +214,3 @@
         (.append "\n}\n")))
 
     (.toString java-src)))
-
-(comment
-
-  (map (comp right guard) (transitions-from (regex->sfa "a|b") 0))
-
-  (.getMovesFrom (regex->sfa "a|b") (int 0))
-
-  (right (guard (first (get-transitions-from (regex->sfa "a|b") 0))))
-
-
-
-  (regex->sfa "0-0(-0)?")
-
-  (spit "Regex.java" (sfa->java (regex->sfa "(ab|b)+") "regex" "Regex"))
-
-  (println (sfa->java (regex->sfa "a") "examples.tacas2017" "Regex"))
-
-
-  (println (sfa->java (regex->sfa "a|b") "regex" "regex"))
-
-    (let [our-sfa (regex->sfa "a|(b|c)?")]
-      (println (sfa->java our-sfa "examples.tacas2017" "Regex") ))
-
-  (intervals (union (make-interval \a \g) (make-interval \z \z)))
-  pred
-  (left (make-interval \a \g))
-
-  (intervals (negate (make-interval \a \g)))
-
-  )
-
-
