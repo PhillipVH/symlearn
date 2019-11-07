@@ -582,64 +582,6 @@
   (let [sfa (make-sfa table)]
     (.minimize ^SFA sfa intervals/solver)))
 
-(comment
-  (install-parser! "a*|abc")
-
-  (-> (make-table)
-      (add-path-condition (query "a")) ;; from ce
-      (add-evidence "a")
-
-      (add-path-condition (query "abc")) ;; from ce
-      (add-evidence "abc")
-      (add-evidence "bc")
-      (add-evidence "c")
-
-      (add-path-condition (query "aa")) ;; from ce
-      (add-evidence "aa")
-
-      ;; (add-path-condition (query "aaa"));; from ce
-      ;; (add-evidence "aaa")
-
-      #_(make-sfa*)
-
-      (show-dot))
-  )
-
-
-(defn mk-candidate
-  []
-  (-> (make-table)
-      (add-path-condition (query "a")) ;; from ce
-      (add-evidence "a")
-
-      (add-path-condition (query "abc")) ;; from ce
-      (add-evidence "abc")
-      (add-evidence "bc")
-      (add-evidence "c")
-
-      (add-path-condition (query "aa")) ;; from ce
-      (add-evidence "aa")
-
-      (add-path-condition (query "aaa"));; from ce
-      (add-evidence "aaa")
-
-     #_(make-sfa*)
-      #_(show-dot))
-
-
-  )
-
-(install-parser! "a*|abc")
-
-(def good-learnt (mk-candidate))
-
-(pprint good-learnt)
-
-(check-equivalence! {:depth 3,
-                     :target "a*|abc"
-                     :candidate (mk-candidate)})
-
-
 (defn make-evidence
   "String -> [String]"
   [word]
@@ -658,10 +600,6 @@
                 table))
             (add-path-condition table (query counter-example))
             (make-evidence counter-example))))
-
-(install-parser! "a*|abc")
-
-(stop!)
 
 (defn learn
   "Learn `target` to `depth`."
@@ -684,42 +622,6 @@
           new-table)
         (recur new-table)))))
 
-(if (< 2 3)
-  "eq")
+;; (def eqv-table (learn "a*|abc" 3))
 
-(def eqv-table (learn "a*|abc" 3))
-
-(def eqv-table (learn "ymca|a2" 4))
-
-(pprint eqv-table)
-
-(query "aaaaaaaaaaaaaa")
-
-#_(check-equivalence! {:depth 2
-                     :target "a*|abc"
-                     :candidate (mk-candidate)})
-
-#_(loop [table table
-       max-depth 0]
-  (let [counter-example (check-equivalence! {:depth :foo})]))
-
-(comment
-
-  (println
-   (check-equivalence! {:depth 1
-                        :target "a*|abc"
-                        :candidate (mk-candidate)}))
-
-  
-
-
-  (let [coastal-log (check-equivalence! {:depth 2
-                                         :target "a*|abc"
-                                         :candidate (mk-candidate)})
-        ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
-    (println coastal-log)
-    (if ce
-      (let [counter-example ((comp second first) ce)
-            ce-string (apply str (map str/trim (str/split counter-example #",")))]
-        ce-string)
-      (println "Equivalent at depth X" ))))
+;; (def eqv-table (learn "ymca|a2" 4))
