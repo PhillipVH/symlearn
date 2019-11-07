@@ -114,15 +114,95 @@
 (defn- mk-input
   [n]
   (str/join \, (take n (repeatedly (constantly " '.' ")))))
+(defn sfa->java
+  "Return the Java source code that represents a parser accepting the language
+  described by `sfa`."
+  [^SFA sfa fn-name]
+  (let [java-src (StringBuilder.)]
+    (doto java-src
+      (.append (str "\tpublic static boolean " fn-name " (char[] A) {\n"))
+      (.append "\t\tint state = ")
+      (.append (.getInitialState sfa))
+      (.append ";\n")
+      (.append "\t\tfor (int idx = 0; idx < A.length; idx++) {\n")
+      (.append "\t\t\tchar current = A[idx];\n"))
+
+    (let [states-iter (.iterator (.getStates sfa))]
+      (while (.hasNext states-iter)
+        (let [state (.next states-iter)]
+          (doto java-src
+            (.append "\t\t\tif (state == ")
+            (.append state)
+            (.append ") {\n"))
+
+          (let [transitions-iter (.iterator (.getTransitionsFrom sfa state))]
+            (while (.hasNext transitions-iter)
+              (let [transition (.next transitions-iter)
+                    interval-size (.. transition guard intervals size)]
+                (.append java-src "\t\t\t\tif (")
+                (doseq [id (range 0 interval-size)]
+                  (let [bound (.. transition guard intervals (get id))
+                        left (.getLeft bound)
+                        right (.getRight bound)]
+                    (when (> id 0)
+                      (.append java-src " || "))
+
+                    (if (not (.equals left right))
+                      (doto java-src
+                        (.append "(current >= ")
+                        (.append (if (nil? left)
+                                   "Character.MIN_VALUE"
+                                   (str "(char)" (int (.charValue left)))))
+                        (.append " && current <= ")
+                        (.append (if (nil? right)
+                                   "Character.MAX_VALUE"
+                                   (str "(char)" (int (.charValue right)))))
+                        (.append ")"))
+
+                      (doto java-src
+                        (.append "(current == ")
+                        (.append (if (nil? left)
+                                   "Character.MIN_VALUE"
+                                   (str "(char)" (int (.charValue left)))))
+                        (.append ")")))))
+                (doto java-src
+                  (.append ") {\n")
+                  (.append "\t\t\t\t\tstate = ")
+                  (.append (.to transition))
+
+                  (.append ";\n")
+                  (.append "\t\t\t\t\tcontinue;\n")
+                  (.append "\t\t\t\t}\n"))))))
+        (.append java-src "\t\t\t}\n"))
+      (doto java-src
+        (.append "\t\t}\n")
+        (.append "\t\tif ("))
+
+      (let [states-iter (.iterator (.getFinalStates sfa))]
+        (while (.hasNext states-iter)
+          (let [final-state (.next states-iter)]
+            (doto java-src
+              (.append "(state == ")
+              (.append final-state)
+              (.append ") || ")))))
+      (doto java-src
+        (.append "false) { \n")
+        (.append "\t\t\treturn true;\n")
+        (.append "\t\t} else {\n")
+        (.append "\t\t\treturn false;\n\t\t}\n")
+        (.append "\t}")))
+
+    (.toString java-src)))
+
 
 (defn mk-equivalence-oracle
-  [^SFA candidate-sfa target-regex depth]
+  [^SFA candidate-sfa target depth]
   (render-resource "templates/Example.java" {:target-fn (sfa->java (intervals/regex->sfa target) "target")
                                              :candidate-fn (sfa->java candidate-sfa "candidate")
                                              :input (mk-input depth)}))
 
 (defn install-equivalence-oracle!
-  [^SFA candidate target-regex depth]
+  [^SFA candidate target depth]
   (spit "eqv-coastal/src/examples/java/learning/Example.java"
         (mk-equivalence-oracle candidate target depth))
   (compile-equivalence-oracle!))
@@ -130,7 +210,15 @@
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
   (install-equivalence-oracle! candidate target depth)
-  (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal/build/classes/java/examples"))
+  (println "Starting equivalence check: depth " depth)
+  (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal/build/classes/java/examples"))
+        ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
+    (println "Finished equivalence check...")
+    (when ce
+      (let [counter-example ((comp second first) ce)
+            ce-string (apply str (map str/trim (str/split counter-example #",")))]
+        (println "Found Counter Example: " ce-string)
+        ce-string))))
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
@@ -498,103 +586,25 @@
   (install-parser! "a*|abc")
 
   (-> (make-table)
-      ;; (add-path-condition (query "a")) ;; from ce
-      ;; (add-evidence "a")
+      (add-path-condition (query "a")) ;; from ce
+      (add-evidence "a")
 
-      ;; (add-path-condition (query "abc")) ;; from ce
-      ;; (add-evidence "abc")
-      ;; (add-evidence "bc")
-      ;; (add-evidence "c")
+      (add-path-condition (query "abc")) ;; from ce
+      (add-evidence "abc")
+      (add-evidence "bc")
+      (add-evidence "c")
 
-      ;; (add-path-condition (query "aa")) ;; from ce
-      ;; (add-evidence "aa")
+      (add-path-condition (query "aa")) ;; from ce
+      (add-evidence "aa")
 
       ;; (add-path-condition (query "aaa"));; from ce
       ;; (add-evidence "aaa")
 
-      (make-sfa*)
+      #_(make-sfa*)
 
-      #_(show-dot))
+      (show-dot))
   )
-(defn sfa->java
-  "Return the Java source code that represents a parser accepting the language
-  described by `sfa`."
-  [^SFA sfa fn-name]
-  (let [java-src (StringBuilder.)]
-    (doto java-src
-      (.append (str "\tpublic static boolean " fn-name " (char[] A) {\n"))
-      (.append "\t\tint state = ")
-      (.append (.getInitialState sfa))
-      (.append ";\n")
-      (.append "\t\tfor (int idx = 0; idx < A.length; idx++) {\n")
-      (.append "\t\t\tchar current = A[idx];\n"))
 
-    (let [states-iter (.iterator (.getStates sfa))]
-      (while (.hasNext states-iter)
-        (let [state (.next states-iter)]
-          (doto java-src
-            (.append "\t\t\tif (state == ")
-            (.append state)
-            (.append ") {\n"))
-
-          (let [transitions-iter (.iterator (.getTransitionsFrom sfa state))]
-            (while (.hasNext transitions-iter)
-              (let [transition (.next transitions-iter)
-                    interval-size (.. transition guard intervals size)]
-                (.append java-src "\t\t\t\tif (")
-                (doseq [id (range 0 interval-size)]
-                  (let [bound (.. transition guard intervals (get id))
-                        left (.getLeft bound)
-                        right (.getRight bound)]
-                    (when (> id 0)
-                      (.append java-src " || "))
-
-                    (if (not (.equals left right))
-                      (doto java-src
-                        (.append "(current >= ")
-                        (.append (if (nil? left)
-                                   "Character.MIN_VALUE"
-                                   (str "(char)" (int (.charValue left)))))
-                        (.append " && current <= ")
-                        (.append (if (nil? right)
-                                   "Character.MAX_VALUE"
-                                   (str "(char)" (int (.charValue right)))))
-                        (.append ")"))
-
-                      (doto java-src
-                        (.append "(current == ")
-                        (.append (if (nil? left)
-                                   "Character.MIN_VALUE"
-                                   (str "(char)" (int (.charValue left)))))
-                        (.append ")")))))
-                (doto java-src
-                  (.append ") {\n")
-                  (.append "\t\t\t\t\tstate = ")
-                  (.append (.to transition))
-
-                  (.append ";\n")
-                  (.append "\t\t\t\t\tcontinue;\n")
-                  (.append "\t\t\t\t}\n"))))))
-        (.append java-src "\t\t\t}\n"))
-      (doto java-src
-        (.append "\t\t}\n")
-        (.append "\t\tif ("))
-
-      (let [states-iter (.iterator (.getFinalStates sfa))]
-        (while (.hasNext states-iter)
-          (let [final-state (.next states-iter)]
-            (doto java-src
-              (.append "(state == ")
-              (.append final-state)
-              (.append ") || ")))))
-      (doto java-src
-        (.append "false) { \n")
-        (.append "\t\t\treturn true;\n")
-        (.append "\t\t} else {\n")
-        (.append "\t\t\treturn false;\n\t\t}\n")
-        (.append "\t}")))
-
-    (.toString java-src)))
 
 (defn mk-candidate
   []
@@ -602,24 +612,114 @@
       (add-path-condition (query "a")) ;; from ce
       (add-evidence "a")
 
-      ;; (add-path-condition (query "abc")) ;; from ce
-      ;; (add-evidence "abc")
-      ;; (add-evidence "bc")
-      ;; (add-evidence "c")
+      (add-path-condition (query "abc")) ;; from ce
+      (add-evidence "abc")
+      (add-evidence "bc")
+      (add-evidence "c")
 
-      ;; (add-path-condition (query "aa")) ;; from ce
-      ;; (add-evidence "aa")
+      (add-path-condition (query "aa")) ;; from ce
+      (add-evidence "aa")
 
-      ;; (add-path-condition (query "aaa"));; from ce
-      ;; (add-evidence "aaa")
+      (add-path-condition (query "aaa"));; from ce
+      (add-evidence "aaa")
 
-      (make-sfa*)
+     #_(make-sfa*)
+      #_(show-dot))
 
-      #_(show-dot)))
+
+  )
+
+(install-parser! "a*|abc")
+
+(def good-learnt (mk-candidate))
+
+(pprint good-learnt)
+
+(check-equivalence! {:depth 3,
+                     :target "a*|abc"
+                     :candidate (mk-candidate)})
+
+
+(defn make-evidence
+  "String -> [String]"
+  [word]
+  (let [ns (range 0 (count word))]
+    (map #(apply str (drop % word)) ns)))
+
+(comment (make-evidence "abc"))
+
+(defn process-counter-example
+  "Table -> String -> Table"
+  [table counter-example]
+  (let [unique-evidence (set (:E table))]
+    (reduce (fn [table evidence]
+              (if-not (contains? unique-evidence evidence)
+                (add-evidence table evidence)
+                table))
+            (add-path-condition table (query counter-example))
+            (make-evidence counter-example))))
+
+(install-parser! "a*|abc")
+
+(stop!)
+
+(defn learn
+  "Learn `target` to `depth`."
+  [target depth-limit]
+  (install-parser! target)
+  (loop [table (make-table)]
+    (let [conjecture (make-sfa* table)
+          _ (show-dot table)
+          new-table (loop [depth 1]
+                      (let [counter-example (check-equivalence! {:depth depth,
+                                                                 :target target
+                                                                 :candidate conjecture})]
+                        (if counter-example
+                          (process-counter-example table counter-example)
+                          (if (< depth depth-limit) (recur (inc depth)) table))))]
+      (if (= table new-table)
+        (do
+          (println "Equivalent")
+          (show-dot new-table)
+          new-table)
+        (recur new-table)))))
+
+(if (< 2 3)
+  "eq")
+
+(def eqv-table (learn "a*|abc" 3))
+
+(def eqv-table (learn "ymca|a2" 4))
+
+(pprint eqv-table)
+
+(query "aaaaaaaaaaaaaa")
+
+#_(check-equivalence! {:depth 2
+                     :target "a*|abc"
+                     :candidate (mk-candidate)})
+
+#_(loop [table table
+       max-depth 0]
+  (let [counter-example (check-equivalence! {:depth :foo})]))
 
 (comment
 
   (println
-   (check-equivalence! {:depth 3
+   (check-equivalence! {:depth 1
                         :target "a*|abc"
-                        :candidate (mk-candidate)})))
+                        :candidate (mk-candidate)}))
+
+  
+
+
+  (let [coastal-log (check-equivalence! {:depth 2
+                                         :target "a*|abc"
+                                         :candidate (mk-candidate)})
+        ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
+    (println coastal-log)
+    (if ce
+      (let [counter-example ((comp second first) ce)
+            ce-string (apply str (map str/trim (str/split counter-example #",")))]
+        ce-string)
+      (println "Equivalent at depth X" ))))
