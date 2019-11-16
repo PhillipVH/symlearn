@@ -1,4 +1,5 @@
 (ns symlearn.coastal
+  (:gen-class)
   (:require [clojure.string :as str]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
@@ -602,10 +603,16 @@
             (add-path-condition table (query counter-example))
             (make-evidence counter-example))))
 
+(defonce target-parser (atom ""))
+
 (defn learn
   "Learn `target` to `depth`."
   [target depth-limit]
-  (tufte/p ::install-parser! (install-parser! target))
+
+  (tufte/p ::install-parser!
+           (reset! target-parser target)
+           (install-parser! target))
+
   (loop [table (make-table)]
     (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
           new-table (tufte/p ::check-equivalence!
@@ -619,15 +626,31 @@
       (if (= table new-table)
         (do
           (println "Equivalent")
-          (show-dot new-table)
+          #_(show-dot new-table)
           new-table)
         (recur new-table)))))
+
+(def stats-accumulator
+  (tufte/add-handler! :symlearn "*"
+                      (fn [{:keys [pstats]}]
+                        (spit (str "result-" (System/currentTimeMillis))
+                              (str "Parser: " @target-parser
+                                   "\n" (tufte/format-pstats pstats))))))
 
 (comment
   (tufte/add-basic-println-handler! {})
 
   (tufte/profile
    {}
-   (learn "a*|abc" 3))
+   (let [target "ggwp"]
+     (learn target 4)))
   )
 
+(defn -main
+  [args]
+  (let [target args]
+    (println "Learning " target)
+    (tufte/profile
+     {}
+     (learn target 4)))
+  )
