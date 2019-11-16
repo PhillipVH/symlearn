@@ -114,6 +114,7 @@
 (defn- mk-input
   [n]
   (str/join \, (take n (repeatedly (constantly " '.' ")))))
+
 (defn sfa->java
   "Return the Java source code that represents a parser accepting the language
   described by `sfa`."
@@ -604,17 +605,17 @@
 (defn learn
   "Learn `target` to `depth`."
   [target depth-limit]
-  (install-parser! target)
+  (tufte/p ::install-parser! (install-parser! target))
   (loop [table (make-table)]
-    (let [conjecture (make-sfa* table)
-          _ (show-dot table)
-          new-table (loop [depth 1]
-                      (let [counter-example (check-equivalence! {:depth depth,
-                                                                 :target target
-                                                                 :candidate conjecture})]
-                        (if counter-example
-                          (process-counter-example table counter-example)
-                          (if (< depth depth-limit) (recur (inc depth)) table))))]
+    (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
+          new-table (tufte/p ::check-equivalence!
+                             (loop [depth 1]
+                               (let [counter-example (check-equivalence! {:depth depth,
+                                                                          :target target
+                                                                          :candidate conjecture})]
+                                 (if counter-example
+                                   (tufte/p ::process-counter-example (process-counter-example table counter-example))
+                                   (if (< depth depth-limit) (recur (inc depth)) table)))))]
       (if (= table new-table)
         (do
           (println "Equivalent")
@@ -622,6 +623,14 @@
           new-table)
         (recur new-table)))))
 
-;; (def eqv-table (learn "a*|abc" 3))
+(comment
+  (tufte/add-basic-println-handler! {})
 
-;; (def eqv-table (learn "ymca|a2" 4))
+  (tufte/profile
+   {}
+   (learn "a*|abc" 3))
+  )
+
+(learn "a" 1)
+
+
