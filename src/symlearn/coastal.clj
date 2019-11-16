@@ -631,6 +631,3 @@
    (learn "a*|abc" 3))
   )
 
-(learn "a" 1)
-
-
