@@ -10,6 +10,8 @@
             [symlearn.paths :as paths]
             [symlearn.intervals :as intervals]
             [symlearn.ranges :as ranges]
+
+
             [symlearn.table :as table]
             [symlearn.z3 :as z3]
             [clojure.java.shell :as shell]
@@ -33,7 +35,7 @@
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
   [& body]
-  `(let [redis-conn# {:pool {} :spec {:host "127.0.0.1" :port 6379}}]
+  `(let [redis-conn# {:pool {} :spec {:host (or (System/getenv "REDIS_HOST") "localhost") :port 6379}}]
      (car/wcar redis-conn# ~@body)))
 
 (defn- refine-string
@@ -107,10 +109,10 @@
   []
   (sh/with-sh-dir "eqv-coastal"
     ;; compile coastal
-    (sh/sh "./gradlew" "build" "installDist")
+    (println (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test")))
 
     ;; install coastal runner
-    (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))
+    (println (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))))
 
 (defn- mk-input
   [n]
@@ -642,12 +644,13 @@
 
   (tufte/profile
    {}
-   (let [target "ggwp"]
-     (learn target 4)))
+   (let [target "a"]
+     (learn target 1)))
   )
 
 (defn -main
   [args]
+  (println "hi" (or (System/getenv "REDIS_HOST") "localhost"))
   (let [target args]
     (println "Learning " target)
     (tufte/profile

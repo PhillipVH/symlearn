@@ -9,8 +9,18 @@
                  [com.taoensso/carmine "2.19.1"]
                  [com.taoensso/tufte "2.0.1"]
                  [cljstache "2.0.4"]
-                 [com.rpl/specter "1.1.2"]]
+                 [com.rpl/specter "1.1.2"]
+                 
+                 ;; symbolic automata
+                 [cs.wisc.edu/Parsers "1.0"]
+                 [cs.wisc.edu/SVPAlib "1.0"]
+                 [SVPABenchmark/SVPABenchmark "0.0.1-SNAPSHOT"]
+                 [org.ow2.sat4j/org.ow2.sat4j.core "2.3.4"]
+                 [org.apache.commons/commons-lang3 "3.4"]
+                 [com.google.guava/guava "18.0"]
+                 [javacup/cup "11"]]
   :main ^:skip-aot symlearn.coastal
+  :repositories {"local" "file:lib"}
   :java-source-paths ["src/main/java"]
   :target-path "target/%s"
   :resource-paths ["resources/"
