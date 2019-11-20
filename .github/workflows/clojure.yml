@@ -20,7 +20,7 @@ jobs:
       run: lein deps
     # - name: Run the tests with Lein
     #   run: lein test
-    - uses: elgohr/Publish-Docker-Github-Action@master
+    - uses: HurricanKai/Publish-Docker-Github-Action@master
       with:
         name: owner/repository/image
         username: ${{ secrets.DOCKER_USERNAME }}
