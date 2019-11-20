@@ -1,4 +1,5 @@
 (ns symlearn.coastal
+  (:gen-class)
   (:require [clojure.string :as str]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
@@ -9,15 +10,22 @@
             [symlearn.paths :as paths]
             [symlearn.intervals :as intervals]
             [symlearn.ranges :as ranges]
+
+
             [symlearn.table :as table]
             [symlearn.z3 :as z3]
             [clojure.java.shell :as shell]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [cljstache.core :refer [render render-resource]]
+            [symlearn.sfa :as sfa])
   (:import [java.io File]
-           [java.util LinkedList]
-           [automata.sfa SFA]))
+           [java.util LinkedList Collection Iterator]
+           [automata.sfa SFA SFAInputMove]
+           [com.google.common.collect ImmutableList]
+           [org.apache.commons.lang3.tuple ImmutablePair]
+           [theory.characters CharPred]))
 
 (set! *warn-on-reflection* true)
 
@@ -30,7 +38,7 @@
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
   [& body]
-  `(let [redis-conn# {:pool {} :spec {:host "127.0.0.1" :port 6379}}]
+  `(let [redis-conn# {:pool {} :spec {:host (or (System/getenv "REDIS_HOST") "localhost") :port 6379}}]
      (car/wcar redis-conn# ~@body)))
 
 (defn- refine-string
@@ -104,14 +112,129 @@
   []
   (sh/with-sh-dir "eqv-coastal"
     ;; compile coastal
-    (sh/sh "./gradlew" "build" "installDist")
+    (println (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test")))
 
     ;; install coastal runner
-    (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))
+    (println (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))))
+
+(defn- mk-input
+  [n]
+  (str/join \, (take n (repeatedly (constantly " '.' ")))))
+
+(defn sfa->java
+  "Return the Java source code that represents a parser accepting the language
+  described by `sfa`."
+  [^SFA sfa fn-name]
+  (let [java-src (StringBuilder.)]
+    (doto java-src
+      (.append (str "\tpublic static boolean " fn-name " (char[] A) {\n"))
+      (.append "\t\tint state = ")
+      (.append (.getInitialState sfa))
+      (.append ";\n")
+      (.append "\t\tfor (int idx = 0; idx < A.length; idx++) {\n")
+      (.append "\t\t\tchar current = A[idx];\n"))
+
+    (let [states-iter (.iterator (.getStates sfa))]
+      (while (.hasNext states-iter)
+        (let [state (.next states-iter)]
+          (doto java-src
+            (.append "\t\t\tif (state == ")
+            (.append state)
+            (.append ") {\n"))
+
+          (let [transitions-iter ^Iterator (.iterator ^Collection (.getTransitionsFrom ^SFA sfa ^Integer state))]
+            (while (.hasNext transitions-iter)
+              (let [transition ^SFAInputMove (.next transitions-iter)
+                    zi-guard ^CharPred (.guard transition)
+                    zi-intervals (.intervals zi-guard)
+                    interval-size (.size zi-intervals)
+                    ;; interval-size (.. transition ^CharPred guard ^ImmutableList intervals size)
+                    ]
+                (.append java-src "\t\t\t\tif (")
+                (doseq [id (range 0 interval-size)]
+                  (let [
+                        zi-guard ^CharPred (.guard transition)
+                        zi-intervals (.intervals zi-guard)
+                        ;; bound (.. transition guard intervals (get id))
+                        bound (.get zi-intervals id)
+                        left (.getLeft ^ImmutablePair bound)
+                        right (.getRight ^ImmutablePair bound)]
+                    (when (> id 0)
+                      (.append java-src " || "))
+
+                    (if (not (.equals left right))
+                      (doto java-src
+                        (.append "(current >= ")
+                        (.append (if (nil? left)
+                                   "Character.MIN_VALUE"
+                                   (str "(char)" (int (.charValue ^Character left)))))
+                        (.append " && current <= ")
+                        (.append (if (nil? right)
+                                   "Character.MAX_VALUE"
+                                   (str "(char)" (int (.charValue ^Character right)))))
+                        (.append ")"))
+
+                      (doto java-src
+                        (.append "(current == ")
+                        (.append (if (nil? left)
+                                   "Character.MIN_VALUE"
+                                   (str "(char)" (int (.charValue ^Character left)))))
+                        (.append ")")))))
+                (doto java-src
+                  (.append ") {\n")
+                  (.append "\t\t\t\t\tstate = ")
+                  (.append (.to transition))
+
+                  (.append ";\n")
+                  (.append "\t\t\t\t\tcontinue;\n")
+                  (.append "\t\t\t\t}\n"))))))
+        (.append java-src "\t\t\t}\n"))
+      (doto java-src
+        (.append "\t\t}\n")
+        (.append "\t\tif ("))
+
+      (let [states-iter (.iterator (.getFinalStates sfa))]
+        (while (.hasNext states-iter)
+          (let [final-state (.next states-iter)]
+            (doto java-src
+              (.append "(state == ")
+              (.append final-state)
+              (.append ") || ")))))
+      (doto java-src
+        (.append "false) { \n")
+        (.append "\t\t\treturn true;\n")
+        (.append "\t\t} else {\n")
+        (.append "\t\t\treturn false;\n\t\t}\n")
+        (.append "\t}")))
+
+    (.toString java-src)))
+
+
+(defn mk-equivalence-oracle
+  [^SFA candidate-sfa target depth]
+  (render-resource "templates/Example.java" {:target-fn (sfa->java (intervals/regex->sfa target) "target")
+                                             :candidate-fn (sfa->java candidate-sfa "candidate")
+                                             :input (mk-input depth)}))
+
+(defn install-equivalence-oracle!
+  [^SFA candidate target depth]
+  (spit "eqv-coastal/src/examples/java/learning/Example.java"
+        (mk-equivalence-oracle candidate target depth))
+  (compile-equivalence-oracle!))
 
 (defn check-equivalence!
-  []
-  (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal/build/classes/java/examples"))
+  [{:keys [depth target ^SFA candidate]}]
+  (install-equivalence-oracle! candidate target depth)
+  (println "Starting equivalence check: depth " depth)
+  (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal/build/classes/java/examples"))
+        ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
+    (println "Finished equivalence check...")
+
+    (when ce
+      (let [counter-example ((comp second first) ce)
+            ce-string (apply str (map str/trim (str/split counter-example #",")))]
+        (println "Found Counter Example: " ce-string)
+        ce-string))))
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
@@ -475,23 +598,77 @@
   (let [sfa (make-sfa table)]
     (.minimize ^SFA sfa intervals/solver)))
 
+(defn make-evidence
+  "String -> [String]"
+  [word]
+  (let [ns (range 0 (count word))]
+    (map #(apply str (drop % word)) ns)))
+
+(comment (make-evidence "abc"))
+
+(defn process-counter-example
+  "Table -> String -> Table"
+  [table counter-example]
+  (let [unique-evidence (set (:E table))]
+    (reduce (fn [table evidence]
+              (if-not (contains? unique-evidence evidence)
+                (add-evidence table evidence)
+                table))
+            (add-path-condition table (query counter-example))
+            (make-evidence counter-example))))
+
+(defonce target-parser (atom ""))
+
+(defn learn
+  "Learn `target` to `depth`."
+  [target depth-limit]
+
+  (tufte/p ::install-parser!
+           (reset! target-parser target)
+           (install-parser! target))
+
+  (loop [table (make-table)]
+    (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
+          ;; _ (show-dot table)
+          new-table (tufte/p ::check-equivalence!
+                             (loop [depth 1]
+                               (let [counter-example (check-equivalence! {:depth depth,
+                                                                          :target target
+                                                                          :candidate conjecture})]
+                                 (if counter-example
+                                   (tufte/p ::process-counter-example (process-counter-example table counter-example))
+                                   (if (< depth depth-limit) (recur (inc depth)) table)))))]
+      (if (= table new-table)
+        (do
+          (println "Equivalent")
+          (show-dot new-table)
+          (pprint new-table))
+        (do
+          (pprint new-table)
+          (recur new-table))))))
+
+(def stats-accumulator
+  (tufte/add-handler! :symlearn "*"
+                      (fn [{:keys [pstats]}]
+                        (let [now (System/currentTimeMillis)]
+                          (println (str "Result saved to result-" now))
+                          (spit (str "result-" now)
+                                (str "Parser: " @target-parser
+                                     "\n" (tufte/format-pstats pstats)))))))
+
 (comment
-  (install-parser! "a*|abc")
+  (tufte/add-basic-println-handler! {})
 
-  (-> (make-table)
-      (add-path-condition (query "a")) ;; from ce
-      (add-evidence "a")
-
-      (add-path-condition (query "abc")) ;; from ce
-      (add-evidence "abc")
-      (add-evidence "bc")
-      (add-evidence "c")
-
-      (add-path-condition (query "aa")) ;; from ce
-      (add-evidence "aa")
-
-      (add-path-condition (query "aaa"));; from ce
-      (add-evidence "aaa")
-
-      (show-dot))
+  (tufte/profile
+   {}
+   (let [target "a"]
+     (learn target 1)))
   )
+
+(defn -main
+  [args]
+  (let [target args]
+    (println "Learning " target)
+    (tufte/profile
+     {}
+     (learn target 4))))

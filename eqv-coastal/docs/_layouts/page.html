@@ -1,0 +1,20 @@
+---
+layout: default
+---
+
+<div class="content"><div class="wrapper">
+	<section class="sidebar">
+		{% include sidebar.html %}
+	</section>
+	<section class="main">
+		<h1>{{ page.title | escape }}</h1>
+		{{ content }}
+		{% include navbuttons.html %}
+	</section>
+	{% if page.toc %}
+	<section class="toc">
+		{% assign td = page.tocdepth | default: 3 %}
+		{% include toc.html html=content h_max=td %}
+	</section>
+	{% endif %}
+</div></div>

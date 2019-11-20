@@ -150,15 +150,14 @@ public class PCReporterFactory implements ObserverFactory {
             StringBuilder redisResponse = new StringBuilder();
             redisResponse.append("[");
 
-//            processedConstraints.forEach((pos, bounds) -> {
-//                redisResponse.append("[").append(bounds[0]).append(" ").append(bounds[1]).append("]");
-//            });
-//
-//            redisResponse.append("]");
-
             // Write the respone to Redis
-            Jedis jedis = new Jedis();
-//            jedis.set("refined", redisResponse.toString());
+            String host = System.getenv("REDIS_HOST");
+            Jedis jedis;
+            if (host != null) {
+                jedis = new Jedis(host);
+            } else {
+                jedis = new Jedis("localhost");
+            }
             jedis.set("refined", accepted + "\n" + pathCondition.toString());
         }
 
@@ -214,7 +213,13 @@ public class PCReporterFactory implements ObserverFactory {
             this.broker = coastal.getBroker();
             broker.subscribeThread("mark", this::mark);
             broker.subscribeThread("dive-end", this::diveEnd);
-            this.jedis = new Jedis();
+
+            String host = System.getenv("REDIS_HOST");
+            if (host != null) {
+                this.jedis = new Jedis(host);
+            } else {
+                this.jedis = new Jedis("localhost");
+            }
         }
 
         public void diveEnd(Object object) {
