@@ -1,6 +1,0 @@
-<h3>Recent posts</h3>
-<ul>
-	{% for p in site.posts limit:5 %}
-	<li><a href="{{ p.url | relative_url }}">{{ p.title }}</a></li>
-	{% endfor %}
-</ul>

@@ -4,22 +4,16 @@
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
-            [taoensso.carmine :as car]
-            [taoensso.tufte :as tufte]
-            [clojure.walk :as walk]
-            [symlearn.paths :as paths]
-            [symlearn.intervals :as intervals]
-            [symlearn.ranges :as ranges]
-
-
-            [symlearn.table :as table]
-            [symlearn.z3 :as z3]
             [clojure.java.shell :as shell]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
+            [clojure.walk :as walk]
             [clojure.set :as set]
-            [cljstache.core :refer [render render-resource]]
-            [symlearn.sfa :as sfa])
+            [taoensso.carmine :as car]
+            [taoensso.tufte :as tufte]
+            [symlearn.intervals :as intervals]
+            [symlearn.z3 :as z3]
+            [cljstache.core :refer [render render-resource]])
   (:import [java.io File]
            [java.util LinkedList Collection Iterator]
            [automata.sfa SFA SFAInputMove]
