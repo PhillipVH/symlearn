@@ -18,8 +18,8 @@ jobs:
         mvn deploy:deploy-file -DgroupId=javacup -DartifactId=cup -Dversion=11 -Dpackaging=jar -Dfile=symbolicautomata/javacup-11c.jar -Durl=file:lib
     - name: Install Clojure dependencies
       run: lein deps
-    - name: Run the tests with Lein
-      run: lein test
+    # - name: Run the tests with Lein
+    #   run: lein test
     - uses: elgohr/Publish-Docker-Github-Action@master
       with:
         name: owner/repository/image
