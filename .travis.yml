@@ -1,4 +1,4 @@
-language: clojure
+language: generic
 services:
   docker
 jobs:
