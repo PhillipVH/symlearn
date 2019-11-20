@@ -4,10 +4,10 @@ jobs:
     - stage: setup
       name: "Setup Maven repository"
       script: ./install_mvn_local
-    - stage: test
-      name : "Run tests with lein"
-      script: lein test
+    # - stage: test
+    #   name : "Run tests with lein"
+    #   script: lein test
 
 stages:
   - setup
-  - test
+  # - test
