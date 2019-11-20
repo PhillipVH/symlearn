@@ -10,6 +10,4 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Install dependencies
-      run: lein deps
-    - name: Run tests
-      run: lein test
+      run: mvn deploy:deploy-file -Dfile=symbolicautomata/SVPAlib-1.0.jar -DartifactId=SVPAlib -Dversion=1.0 -DgroupId=cs.wisc.edu -Dpackaging=jar -Durl=file:lib
