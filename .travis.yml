@@ -1,9 +1,12 @@
 language: clojure
+services:
+  docker
 jobs:
   include:
     - stage: setup
       name: "Setup Maven repository"
-      script: ./install_mvn_local
+      script: |
+        docker build -t lol .
     # - stage: test
     #   name : "Run tests with lein"
     #   script: lein test
