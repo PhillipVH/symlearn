@@ -15,7 +15,7 @@
                  [cs.wisc.edu/Parsers "1.0"]
                  [cs.wisc.edu/SVPAlib "1.0"]
                  [SVPABenchmark/SVPABenchmark "0.0.1-SNAPSHOT"]
-                 [org.ow2.sat4j/org.ow2.sat4j.core "2.3.4"]
+                 [org.sat4j/org.sat4j.core "2.3.1"]
                  [org.apache.commons/commons-lang3 "3.4"]
                  [com.google.guava/guava "18.0"]
                  [javacup/cup "11"]]

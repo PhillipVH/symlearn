@@ -21,8 +21,11 @@
             [cljstache.core :refer [render render-resource]]
             [symlearn.sfa :as sfa])
   (:import [java.io File]
-           [java.util LinkedList]
-           [automata.sfa SFA]))
+           [java.util LinkedList Collection Iterator]
+           [automata.sfa SFA SFAInputMove]
+           [com.google.common.collect ImmutableList]
+           [org.apache.commons.lang3.tuple ImmutablePair]
+           [theory.characters CharPred]))
 
 (set! *warn-on-reflection* true)
 
@@ -139,15 +142,23 @@
             (.append state)
             (.append ") {\n"))
 
-          (let [transitions-iter (.iterator (.getTransitionsFrom sfa state))]
+          (let [transitions-iter ^Iterator (.iterator ^Collection (.getTransitionsFrom ^SFA sfa ^Integer state))]
             (while (.hasNext transitions-iter)
-              (let [transition (.next transitions-iter)
-                    interval-size (.. transition guard intervals size)]
+              (let [transition ^SFAInputMove (.next transitions-iter)
+                    zi-guard ^CharPred (.guard transition)
+                    zi-intervals (.intervals zi-guard)
+                    interval-size (.size zi-intervals)
+                    ;; interval-size (.. transition ^CharPred guard ^ImmutableList intervals size)
+                    ]
                 (.append java-src "\t\t\t\tif (")
                 (doseq [id (range 0 interval-size)]
-                  (let [bound (.. transition guard intervals (get id))
-                        left (.getLeft bound)
-                        right (.getRight bound)]
+                  (let [
+                        zi-guard ^CharPred (.guard transition)
+                        zi-intervals (.intervals zi-guard)
+                        ;; bound (.. transition guard intervals (get id))
+                        bound (.get zi-intervals id)
+                        left (.getLeft ^ImmutablePair bound)
+                        right (.getRight ^ImmutablePair bound)]
                     (when (> id 0)
                       (.append java-src " || "))
 
@@ -156,18 +167,18 @@
                         (.append "(current >= ")
                         (.append (if (nil? left)
                                    "Character.MIN_VALUE"
-                                   (str "(char)" (int (.charValue left)))))
+                                   (str "(char)" (int (.charValue ^Character left)))))
                         (.append " && current <= ")
                         (.append (if (nil? right)
                                    "Character.MAX_VALUE"
-                                   (str "(char)" (int (.charValue right)))))
+                                   (str "(char)" (int (.charValue ^Character right)))))
                         (.append ")"))
 
                       (doto java-src
                         (.append "(current == ")
                         (.append (if (nil? left)
                                    "Character.MIN_VALUE"
-                                   (str "(char)" (int (.charValue left)))))
+                                   (str "(char)" (int (.charValue ^Character left)))))
                         (.append ")")))))
                 (doto java-src
                   (.append ") {\n")
@@ -218,6 +229,7 @@
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal/build/classes/java/examples"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
     (println "Finished equivalence check...")
+
     (when ce
       (let [counter-example ((comp second first) ce)
             ce-string (apply str (map str/trim (str/split counter-example #",")))]
@@ -617,6 +629,7 @@
 
   (loop [table (make-table)]
     (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
+          ;; _ (show-dot table)
           new-table (tufte/p ::check-equivalence!
                              (loop [depth 1]
                                (let [counter-example (check-equivalence! {:depth depth,
@@ -628,16 +641,20 @@
       (if (= table new-table)
         (do
           (println "Equivalent")
-          #_(show-dot new-table)
-          new-table)
-        (recur new-table)))))
+          (show-dot new-table)
+          (pprint new-table))
+        (do
+          (pprint new-table)
+          (recur new-table))))))
 
 (def stats-accumulator
   (tufte/add-handler! :symlearn "*"
                       (fn [{:keys [pstats]}]
-                        (spit (str "result-" (System/currentTimeMillis))
-                              (str "Parser: " @target-parser
-                                   "\n" (tufte/format-pstats pstats))))))
+                        (let [now (System/currentTimeMillis)]
+                          (println (str "Result saved to result-" now))
+                          (spit (str "result-" now)
+                                (str "Parser: " @target-parser
+                                     "\n" (tufte/format-pstats pstats)))))))
 
 (comment
   (tufte/add-basic-println-handler! {})
@@ -650,10 +667,8 @@
 
 (defn -main
   [args]
-  (println "hi" (or (System/getenv "REDIS_HOST") "localhost"))
   (let [target args]
     (println "Learning " target)
     (tufte/profile
      {}
-     (learn target 4)))
-  )
+     (learn target 4))))
