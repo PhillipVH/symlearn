@@ -27,3 +27,4 @@ jobs:
         password: ${{ secrets.DOCKER_PASSWORD }}
         registry: docker.pkg.github.com
         snapshot: true
+        tag_names: true
