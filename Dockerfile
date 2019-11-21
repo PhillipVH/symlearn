@@ -2,13 +2,13 @@ FROM clojure:openjdk-8-lein
 
 # Install z3 + redis + dot + maven + vim
 RUN mkdir -p /usr/share/man/man1
-RUN apt update -y && apt upgrade -y
-RUN apt install z3 redis-tools graphviz -y
-RUN apt install maven vim -y
+RUN apt update -y && apt upgrade -y && apt install z3 redis-tools graphviz maven vim -y
 
 # Move z3 into the position that coastal expects it to be in
 RUN cp /usr/bin/z3 /usr/local/bin/
 
+# Point to Redis
+ENV REDIS_HOST redis
 
 # Install membership-coastal
 RUN mkdir -p /usr/src/symlearn
@@ -42,9 +42,9 @@ RUN lein deps
 # Install the rest of the learner
 COPY src /usr/src/symlearn/src
 COPY lib /usr/src/symlearn/lib
+COPY resources /usr/src/symlearn/resources
 
-# Point to Redis
-ENV REDIS_HOST redis
+RUN lein uberjar
 
 # Compile the learner
 WORKDIR /usr/src/symlearn

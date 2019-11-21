@@ -247,7 +247,7 @@
   (tufte/p
    ::start-coastal
    (let [config (io/resource string-config)
-         args (into-array ["./gradlew" "run" (str "--args=" (.getPath config))])
+         args (into-array ["./gradlew" "run" (str "--args=/usr/src/symlearn/resources/Regex.xml")])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
@@ -585,7 +585,7 @@
     (println sfa)
     (.createDotFile ^SFA sfa  "aut" "")
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
-    (sh/sh "xdg-open" "outfile.ps")))
+    #_(sh/sh "xdg-open" "outfile.ps")))
 
 (defn make-sfa*
   [table]
@@ -660,9 +660,12 @@
   )
 
 (defn -main
-  [args]
-  (let [target args]
-    (println "Learning " target)
-    (tufte/profile
-     {}
-     (learn target 4))))
+  [& args]
+  (println "Install parser: [a-z]..|[a-g]...")
+  (println (install-parser! "[a-z]..|[a-g]..."))
+  
+  (println "Query Parser")
+  (println (query "gxxx"))
+
+  (println "Learn")
+  (println (learn "[a-z]..|[a-g]..." 4)))
