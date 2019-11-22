@@ -14,12 +14,14 @@
             [symlearn.intervals :as intervals]
             [symlearn.z3 :as z3]
             [cljstache.core :refer [render render-resource]])
-  (:import [java.io File]
+  (:import [java.io File FileReader]
            [java.util LinkedList Collection Iterator]
            [automata.sfa SFA SFAInputMove]
            [com.google.common.collect ImmutableList]
            [org.apache.commons.lang3.tuple ImmutablePair]
-           [theory.characters CharPred]))
+           [theory.characters CharPred]
+           [RegexParser RegexParserProvider]
+           [benchmark.regexconverter RegexConverter]))
 
 (set! *warn-on-reflection* true)
 
@@ -246,7 +248,7 @@
     (stop!))
   (tufte/p
    ::start-coastal
-   (let [config (io/resource string-config)
+   (let [config (.getPath (io/resource string-config))
          args (into-array ["./gradlew" "run" (str "--args=/usr/src/symlearn/resources/Regex.xml")])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
@@ -669,3 +671,12 @@
 
   (println "Learn")
   (println (learn "[a-z]..|[a-g]..." 4)))
+
+(defn load-benchmark
+  [^String filename]
+  (doall (for [node (RegexParserProvider/parse (FileReader. filename))]
+     (let [solver intervals/solver]
+       (try
+         (let [sfa (RegexConverter/toSFA node solver)]
+           (.minimize sfa solver))
+         (catch UnsupportedOperationException e (str "gg")))))))
