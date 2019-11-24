@@ -15,6 +15,8 @@
             [symlearn.z3 :as z3]
             [cljstache.core :refer [render render-resource]])
   (:import [java.io File FileReader]
+           [java.nio.file Paths Path]
+           [java.net URI]
            [java.util LinkedList Collection Iterator]
            [automata.sfa SFA SFAInputMove]
            [com.google.common.collect ImmutableList]
@@ -241,6 +243,8 @@
     (alter-var-root #'coastal-instance (constantly nil)))
   ::ok)
 
+
+
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
   []
@@ -248,8 +252,10 @@
     (stop!))
   (tufte/p
    ::start-coastal
-   (let [config (.getPath (io/resource string-config))
-         args (into-array ["./gradlew" "run" (str "--args=/usr/src/symlearn/resources/Regex.xml")])
+   (let [path-in-docker (System/getenv "MEMBERSHIP_CONFIG_PATH")
+         args-in (or path-in-docker (str (System/getProperty "user.dir") "/resources/Regex.xml"))
+         _ (println args-in)
+         args (into-array ["./gradlew" "run" (str "--args=" args-in)])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
@@ -652,31 +658,18 @@
                                 (str "Parser: " @target-parser
                                      "\n" (tufte/format-pstats pstats)))))))
 
-(comment
-  (tufte/add-basic-println-handler! {})
-
-  (tufte/profile
-   {}
-   (let [target "a"]
-     (learn target 1)))
-  )
-
 (defn -main
   [& args]
-  (println "Install parser: [a-z]..|[a-g]...")
-  (println (install-parser! "[a-z]..|[a-g]..."))
-  
-  (println "Query Parser")
-  (println (query "gxxx"))
-
-  (println "Learn")
-  (println (learn "[a-z]..|[a-g]..." 4)))
+  (println (install-parser! "abc|g"))
+  (println (query "abc"))
+  (println (query "ggwp")))
 
 (defn load-benchmark
   [^String filename]
-  (doall (for [node (RegexParserProvider/parse (FileReader. filename))]
-     (let [solver intervals/solver]
-       (try
-         (let [sfa (RegexConverter/toSFA node solver)]
-           (.minimize sfa solver))
-         (catch UnsupportedOperationException e (str "gg")))))))
+  (for [node (RegexParserProvider/parse (FileReader. filename))]
+    (let [solver intervals/solver]
+      (try
+        (let [sfa (RegexConverter/toSFA node solver)]
+          (.minimize sfa solver))
+        (catch UnsupportedOperationException e (str (.getMessage e)))))))
+

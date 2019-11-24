@@ -38,6 +38,9 @@ COPY resources /usr/src/symlearn/resources
 
 RUN lein uberjar
 
+# Fix path to file when the jar is run
+ENV MEMBERSHIP_CONFIG_PATH /usr/src/symlearn/resources/Regex.xml
+
 # Compile the learner
 WORKDIR /usr/src/symlearn
 
