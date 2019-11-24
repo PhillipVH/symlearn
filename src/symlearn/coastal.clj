@@ -665,7 +665,9 @@
   (println (query "ggwp"))
   (println (check-equivalence! {:depth 2
                                 :target "gz"
-                                :candidate (intervals/regex->sfa "g")})))
+                                :candidate (intervals/regex->sfa "g")}))
+  (stop!)
+  (shutdown-agents))
 
 (defn load-benchmark
   [^String filename]
