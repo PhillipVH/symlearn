@@ -662,7 +662,10 @@
   [& args]
   (println (install-parser! "abc|g"))
   (println (query "abc"))
-  (println (query "ggwp")))
+  (println (query "ggwp"))
+  (println (check-equivalence! {:depth 2
+                                :target "gz"
+                                :candidate (intervals/regex->sfa "g")})))
 
 (defn load-benchmark
   [^String filename]
