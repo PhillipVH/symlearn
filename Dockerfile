@@ -33,7 +33,6 @@ RUN lein deps
 
 # Install the rest of the learner
 COPY src /usr/src/symlearn/src
-COPY lib /usr/src/symlearn/lib
 COPY resources /usr/src/symlearn/resources
 
 RUN lein uberjar
