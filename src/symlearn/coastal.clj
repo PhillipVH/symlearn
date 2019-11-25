@@ -99,18 +99,19 @@
   "Compile the parsers installed in the Coastal system."
   []
   (let [coastal-dir (File. "coastal")
-        args (into-array ["./gradlew" "compileJava"])
+        args (into-array ["./gradlew" "compileJava" "--no-daemon"])
         builder (ProcessBuilder. ^"[Ljava.lang.String;" args)]
     (.directory builder coastal-dir)
     (let [compiler (.start builder)]
       (while (.isAlive compiler))
       ::ok)))
 
+
 (defn compile-equivalence-oracle!
   []
   (sh/with-sh-dir "eqv-coastal"
     ;; compile coastal
-    (println (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test")))
+    (println (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test" "--no-daemon")))
 
     ;; install coastal runner
     (println (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))))
@@ -237,10 +238,15 @@
 (defn stop!
   "Stop a Coastal process running in `coastal`."
   []
-  (when coastal-instance
-    (.destroyForcibly coastal-instance)
-    (while (.isAlive coastal-instance))
-    (alter-var-root #'coastal-instance (constantly nil)))
+  (let [coastal-pid (str/trim (:out (sh/sh "pgrep" "-f" "COASTAL")))]
+    (sh/sh "kill" "-9" coastal-pid))
+  (wcar* (car/flushall))
+  (if coastal-instance
+    (do
+      (.destroyForcibly coastal-instance)
+      (while (.isAlive coastal-instance))
+      (alter-var-root #'coastal-instance (constantly nil)))
+    (println "No coastal to stop"))
   ::ok)
 
 
@@ -255,12 +261,12 @@
    (let [path-in-docker (System/getenv "MEMBERSHIP_CONFIG_PATH")
          args-in (or path-in-docker (str (System/getProperty "user.dir") "/resources/Regex.xml"))
          _ (println args-in)
-         args (into-array ["./gradlew" "run" (str "--args=" args-in)])
+         args (into-array ["./gradlew" "run" (str "--args=" args-in) "--no-daemon"])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
-     (let [coastal-instance (.start builder)]
-       (alter-var-root #'coastal-instance (constantly coastal-instance))
+     (let [new-coastal-instance (.start builder)]
+       (alter-var-root #'coastal-instance (constantly new-coastal-instance))
        ::ok))))
 
 (defn install-parser!
@@ -302,7 +308,8 @@
   acceptance status."
   [string]
   (if-not coastal-instance
-    (install-parser! default-parser)) ;; default parser accepts nothing
+    (println "No coastal instance to query")
+    #_(install-parser! default-parser)) ;; default parser accepts nothing
   (let [[accepted path] (refine-string string)
         constraints (->> path
                          path->constraints
@@ -658,11 +665,24 @@
                                 (str "Parser: " @target-parser
                                      "\n" (tufte/format-pstats pstats)))))))
 
+
+(comment
+  "Steps to reproduce bug"
+  1. Run the jar once, note the two rogue Coastal procsses
+  2. Run the jar again, notice how they mess with the return values
+  for query.
+  )
+
 (defn -main
   [& args]
   (println (install-parser! "abc|g"))
   (println (query "abc"))
   (println (query "ggwp"))
+
+  (println (install-parser! "ggwp?"))
+  (println (query "abc"))
+  (println (query "ggwp"))
+
   (println (check-equivalence! {:depth 2
                                 :target "gz"
                                 :candidate (intervals/regex->sfa "g")}))
