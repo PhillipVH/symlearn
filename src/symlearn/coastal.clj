@@ -273,14 +273,13 @@
   [regex]
   (if coastal-instance
     (stop!))
-  
   (alter-var-root #'current-parser (constantly regex))
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
     (start!)
     (wcar* (car/flushall))
-    (refine-string "") ; flush the result from the first run
+    (println (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
     ::ok))
 
 (defn running?
