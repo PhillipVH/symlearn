@@ -680,7 +680,7 @@
                                 :target "gz"
                                 :candidate (intervals/regex->sfa "g")}))
 
-  (println (learn "[^\"]+"))
+  (println (learn "[^\"]+" 2))
   (stop!)
   (shutdown-agents))
 
