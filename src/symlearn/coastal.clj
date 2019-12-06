@@ -601,7 +601,7 @@
     (println sfa)
     (.createDotFile ^SFA sfa  "aut" "")
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
-    #_(sh/sh "xdg-open" "outfile.ps")))
+    (sh/sh "xdg-open" "outfile.ps")))
 
 (defn make-sfa*
   [table]
@@ -651,8 +651,8 @@
       (if (= table new-table)
         (do
           (println "Equivalent")
-          (show-dot new-table)
-          (pprint new-table))
+          #_(show-dot new-table)
+          new-table)
         (do
           (pprint new-table)
           (recur new-table))))))
@@ -665,14 +665,6 @@
                           (spit (str "result-" now)
                                 (str "Parser: " @target-parser
                                      "\n" (tufte/format-pstats pstats)))))))
-
-
-(comment
-  "Steps to reproduce bug"
-  1. Run the jar once, note the two rogue Coastal procsses
-  2. Run the jar again, notice how they mess with the return values
-  for query.
-  )
 
 (defn -main
   [& args]
@@ -687,6 +679,8 @@
   (println (check-equivalence! {:depth 2
                                 :target "gz"
                                 :candidate (intervals/regex->sfa "g")}))
+
+  (println (learn "[^\"]+"))
   (stop!)
   (shutdown-agents))
 
@@ -699,3 +693,17 @@
           (.minimize sfa solver))
         (catch UnsupportedOperationException e (str (.getMessage e)))))))
 
+(defn show-sfa
+  [^SFA sfa]
+  (.createDotFile sfa  "aut" "")
+  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
+  (sh/sh "xdg-open" "outfile.ps"))
+
+;; (doseq [bench (load-benchmark "regexlib-clean-20.re")]
+;;   (println bench)
+;;   (show-sfa bench))
+
+
+;; (def table (learn "[^\"]+" 2))
+
+;; (show-dot table)

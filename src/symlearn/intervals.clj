@@ -153,7 +153,7 @@
             (.append state)
             (.append ") {\n"))
 
-          (let [transitions-iter (.iterator (.getTransitionsFrom sfa state))]
+          (let [transitions-iter (.iterator (.getTransitionsFrom sfa ^Integer state))]
             (while (.hasNext transitions-iter)
               (let [transition (.next transitions-iter)
                     interval-size (.. transition guard intervals size)]
