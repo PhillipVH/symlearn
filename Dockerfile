@@ -35,6 +35,9 @@ RUN lein deps
 COPY src /usr/src/symlearn/src
 COPY resources /usr/src/symlearn/resources
 
+# Install the benchmark files
+COPY regexlib-clean-10.re /usr/src/symlearn/
+
 RUN lein uberjar
 
 # Fix path to file when the jar is run
