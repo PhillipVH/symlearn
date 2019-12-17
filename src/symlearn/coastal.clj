@@ -714,47 +714,22 @@
      :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
      :equivalence-queries eqv-queries}))
 
-;; (def results (map #(evaluate! {:target % :depth 2})
-;;                   (str/split-lines (slurp "regexlib-clean-10.re"))))
-
 (defn evaluate-benchmark
   [benchmark max-depth]
   (let [regexes (str/split-lines (slurp benchmark))]
     (loop [depth 1]
-      (let [results (map #(evaluate! {:target %
-                                      :depth depth})
-                         regexes)]
-        (prn results)))))
+      (let [results (doall (map #(evaluate! {:target %
+                                             :depth depth})
+                                regexes))
+            complete (filter :equivalent? results)
+            incomplete (filter (complement :equivalent?) results)]
+        results))))
 
 (comment
-  (evaluate-benchmark "regexlib-clean-10.re" 1)
+  (def results (evaluate-benchmark "regexlib-clean-10.re" 1))
+  (println "---")
+  (pprint (filter (complement :equivalent?) results))
   )
-
-;; (map (fn [{:keys [depth target equivalent? equivalence-queries walltime]}]
-;;        [target equivalent? equivalence-queries walltime depth])
-;;      results)
-;; "select the next batch to increment learning depth"
-;; (def harder (map #(evaluate! {:target % :depth 3})(map :target (filter #(not (:equivalent? %)) (map #(select-keys % [:target :equivalent? :depth :equivalence-queries]) results)))))
-
-;; (install-parser! (:target ))
-
-;; (def hardest (map #(evaluate! {:target % :depth 4})(map :target (filter #(not (:equivalent? %)) (map #(select-keys % [:target :equivalent? :depth :equivalence-queries]) harder)))))
-
-
-;; (def hardestest (map #(evaluate! {:target % :depth 5})(map :target (filter #(not (:equivalent? %)) (map #(select-keys % [:target :equivalent? :depth :equivalence-queries]) hardest)))))
-
-;; (defn evaluate-incomplete
-;;   [list-of-incomplete-results prev-depth]
-;;   (map #(evaluate! {:target % :depth (inc prev-depth)})(map :target (filter #(not (:equivalent? %)) (map #(select-keys % [:target :equivalent? :depth :equivalence-queries]) list-of-incomplete-results))))
-;;   )
-
-;; (def lol (evaluate-incomplete hardestest 7))
-
-;; (pprint lol)
-
-;; (let [{:keys [target candidate]} (nth results 5)]
-;;   (compare-graphically target candidate))
-
 
 (defn show-sfa
   [^SFA sfa]
