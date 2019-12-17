@@ -629,6 +629,10 @@
 
 (defonce target-parser (atom ""))
 
+(defn equivalent?
+  [^SFA target ^SFA candidate]
+  (.isEquivalentTo target candidate intervals/solver))
+
 (defn learn
   "Learn `target` to `depth`."
   [target depth-limit]
@@ -637,25 +641,30 @@
            (reset! target-parser target)
            (install-parser! target))
 
-  (loop [table (make-table)]
-    (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
-          ;; _ (show-dot table)
-          new-table (tufte/p ::check-equivalence!
-                             (loop [depth 1]
-                               (let [counter-example (check-equivalence! {:depth depth,
-                                                                          :target target
-                                                                          :candidate conjecture})]
-                                 (if counter-example
-                                   (tufte/p ::process-counter-example (process-counter-example table counter-example))
-                                   (if (< depth depth-limit) (recur (inc depth)) table)))))]
-      (if (= table new-table)
-        (do
-          (println "Equivalent")
-          #_(show-dot new-table)
-          new-table)
-        (do
-          (pprint new-table)
-          (recur new-table))))))
+  (let [target-sfa (intervals/regex->sfa target)
+        equivalence-queries (atom 0)
+        start (System/currentTimeMillis)]
+    (loop [table (make-table)]
+     (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
+           ;; _ (show-dot table)
+           new-table (tufte/p ::check-equivalence!
+                              (loop [depth 1]
+                                (let [counter-example (check-equivalence! {:depth depth,
+                                                                           :target target
+                                                                           :candidate conjecture})]
+                                  (if counter-example
+                                    (do
+                                      (swap! equivalence-queries inc)
+                                      (process-counter-example table counter-example))
+                                    (if (< depth depth-limit) (recur (inc depth)) table)))))]
+       (if (= table new-table)
+         (do
+           (println (str "Bounded equivalence to depth " depth-limit))
+           #_(show-dot new-table)
+           [new-table @equivalence-queries (- (System/currentTimeMillis) start)])
+         (do
+           (pprint new-table)
+           (recur new-table)))))))
 
 (def stats-accumulator
   (tufte/add-handler! :symlearn "*"
@@ -667,6 +676,7 @@
                                      "\n" (tufte/format-pstats pstats)))))))
 
 (defn -main
+  "This function is a collection of forms that test all integrations."
   [& args]
   (println (install-parser! "abc|g"))
   (println (query "abc"))
@@ -693,17 +703,66 @@
           (.minimize sfa solver))
         (catch UnsupportedOperationException e (str (.getMessage e)))))))
 
+(defn evaluate!
+  [{:keys [target depth]}]
+  (let [[bounded-candidate eqv-queries walltime] (learn target depth)
+        golden-target (intervals/regex->sfa target)]
+    {:target target
+     :candidate bounded-candidate
+     :depth depth
+     :walltime-s (/ walltime 1000)
+     :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
+     :equivalence-queries eqv-queries}))
+
+;; (def results (map #(evaluate! {:target % :depth 2})
+;;                   (str/split-lines (slurp "regexlib-clean-10.re"))))
+
+(defn evaluate-benchmark
+  [benchmark max-depth]
+  (let [regexes (str/split-lines (slurp benchmark))]
+    (loop [depth 1]
+      (let [results (map #(evaluate! {:target %
+                                      :depth depth})
+                         regexes)]
+        (prn results)))))
+
+(comment
+  (evaluate-benchmark "regexlib-clean-10.re" 1)
+  )
+
+;; (map (fn [{:keys [depth target equivalent? equivalence-queries walltime]}]
+;;        [target equivalent? equivalence-queries walltime depth])
+;;      results)
+;; "select the next batch to increment learning depth"
+;; (def harder (map #(evaluate! {:target % :depth 3})(map :target (filter #(not (:equivalent? %)) (map #(select-keys % [:target :equivalent? :depth :equivalence-queries]) results)))))
+
+;; (install-parser! (:target ))
+
+;; (def hardest (map #(evaluate! {:target % :depth 4})(map :target (filter #(not (:equivalent? %)) (map #(select-keys % [:target :equivalent? :depth :equivalence-queries]) harder)))))
+
+
+;; (def hardestest (map #(evaluate! {:target % :depth 5})(map :target (filter #(not (:equivalent? %)) (map #(select-keys % [:target :equivalent? :depth :equivalence-queries]) hardest)))))
+
+;; (defn evaluate-incomplete
+;;   [list-of-incomplete-results prev-depth]
+;;   (map #(evaluate! {:target % :depth (inc prev-depth)})(map :target (filter #(not (:equivalent? %)) (map #(select-keys % [:target :equivalent? :depth :equivalence-queries]) list-of-incomplete-results))))
+;;   )
+
+;; (def lol (evaluate-incomplete hardestest 7))
+
+;; (pprint lol)
+
+;; (let [{:keys [target candidate]} (nth results 5)]
+;;   (compare-graphically target candidate))
+
+
 (defn show-sfa
   [^SFA sfa]
   (.createDotFile sfa  "aut" "")
   (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
   (sh/sh "xdg-open" "outfile.ps"))
 
-;; (doseq [bench (load-benchmark "regexlib-clean-20.re")]
-;;   (println bench)
-;;   (show-sfa bench))
-
-
-;; (def table (learn "[^\"]+" 2))
-
-;; (show-dot table)
+(defn compare-graphically
+  [target candidate]
+  (show-sfa (intervals/regex->sfa target))
+  (show-sfa (make-sfa* candidate)))
