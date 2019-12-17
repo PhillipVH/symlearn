@@ -733,7 +733,7 @@
 (defn -main
    "This function is a collection of forms that test all integrations."
   [& args]
-  (pr (evaluate-benchmark! "regexlib-clean-10.re" 1))
+  (spit "results.edn" (pr-str (evaluate-benchmark! "regexlib-clean-10.re" 1)))
   (stop!)
   (shutdown-agents))
 
