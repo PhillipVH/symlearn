@@ -675,24 +675,7 @@
                                 (str "Parser: " @target-parser
                                      "\n" (tufte/format-pstats pstats)))))))
 
-(defn -main
-  "This function is a collection of forms that test all integrations."
-  [& args]
-  (println (install-parser! "abc|g"))
-  (println (query "abc"))
-  (println (query "ggwp"))
 
-  (println (install-parser! "ggwp?"))
-  (println (query "abc"))
-  (println (query "ggwp"))
-
-  (println (check-equivalence! {:depth 2
-                                :target "gz"
-                                :candidate (intervals/regex->sfa "g")}))
-
-  (println (learn "[^\"]+" 2))
-  (stop!)
-  (shutdown-agents))
 
 (defn load-benchmark
   [^String filename]
@@ -710,26 +693,49 @@
     {:target target
      :candidate bounded-candidate
      :depth depth
-     :walltime-s (/ walltime 1000)
+     :walltime-s (/ walltime 1000.00)
      :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
      :equivalence-queries eqv-queries}))
 
-(defn evaluate-benchmark
+(defn evaluate-benchmark!
   [benchmark max-depth]
   (let [regexes (str/split-lines (slurp benchmark))]
     (loop [depth 1]
-      (let [results (doall (map #(evaluate! {:target %
-                                             :depth depth})
-                                regexes))
-            complete (filter :equivalent? results)
-            incomplete (filter (complement :equivalent?) results)]
+      (let [results (map #(evaluate! {:target %
+                                      :depth depth})
+                         regexes)]
         results))))
 
 (comment
-  (def results (evaluate-benchmark "regexlib-clean-10.re" 1))
-  (println "---")
+  (def results (evaluate-benchmark! "regexlib-clean-10.re" 1))
+  (println (first results))
   (pprint (filter (complement :equivalent?) results))
+
+  (stop!)
   )
+
+(defn integration-tests
+  []
+  (println (install-parser! "abc|g"))
+  (println (query "abc"))
+  (println (query "ggwp"))
+
+  (println (install-parser! "ggwp?"))
+  (println (query "abc"))
+  (println (query "ggwp"))
+
+  (println (check-equivalence! {:depth 2
+                                :target "gz"
+                                :candidate (intervals/regex->sfa "g")}))
+
+  (println (learn "[^\"]+" 2)))
+
+(defn -main
+   "This function is a collection of forms that test all integrations."
+  [& args]
+  (pprint (evaluate-benchmark! "regexlib-clean-10.re" 1))
+  (stop!)
+  (shutdown-agents))
 
 (defn show-sfa
   [^SFA sfa]
