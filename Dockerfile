@@ -37,6 +37,8 @@ COPY resources /usr/src/symlearn/resources
 
 # Install the benchmark files
 COPY regexlib-clean-10.re /usr/src/symlearn/
+COPY regexlib-clean-20.re /usr/src/symlearn/
+COPY regexlib-clean-100.re /usr/src/symlearn/
 
 RUN lein uberjar
 
