@@ -734,6 +734,7 @@
    "This function is a collection of forms that test all integrations."
   [& args]
   (let [results (evaluate-benchmark! "regexlib-clean-10.re" 1)]
+    (println results)
     (spit "results.edn" (pr-str results)))
   (stop!)
   (shutdown-agents))
