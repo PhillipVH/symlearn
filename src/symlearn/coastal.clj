@@ -688,7 +688,7 @@
 
 (defn evaluate!
   [{:keys [target depth]}]
-  (let [golden-target (try (intervals/regex->sfa target) (catch NullPointerException e :unsupported-regex))
+  (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
         [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
                                                    (learn target depth)
                                                    )]
