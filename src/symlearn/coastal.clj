@@ -700,16 +700,23 @@
 (defn evaluate-benchmark!
   [benchmark max-depth]
   (let [regexes (str/split-lines (slurp benchmark))]
-    (loop [depth 1]
-      (let [results (map #(evaluate! {:target %
-                                      :depth depth})
-                         regexes)]
-        results))))
+    (loop [depth 1
+           complete []
+           incomplete regexes]
+      (let [results (doall (map #(evaluate! {:target %
+                                             :depth depth})
+                                incomplete))
+            equivalent (filter :equivalent? results)
+            not-equivalent (filter (complement :equivalent?) results)]
+        (if (= depth max-depth)
+          [(concat complete equivalent) not-equivalent]
+          (recur (inc depth) (concat complete equivalent) (map :target not-equivalent)))))))
 
 (comment
-  (def results (evaluate-benchmark! "regexlib-clean-10.re" 1))
-  (println (first results))
-  (pprint (filter (complement :equivalent?) results))
+  (def results (evaluate-benchmark! "regexlib-clean-single.re" 2))
+  (pprint  (second results))
+  (pprint (count (filter (complement :equivalent?) results)))
+  (pprint (filter :equivalent? results))
 
   (stop!)
   )
