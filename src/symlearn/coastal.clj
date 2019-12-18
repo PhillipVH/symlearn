@@ -688,14 +688,20 @@
 
 (defn evaluate!
   [{:keys [target depth]}]
-  (let [[bounded-candidate eqv-queries walltime] (learn target depth)
-        golden-target (intervals/regex->sfa target)]
-    {:target target
-     :candidate bounded-candidate
-     :depth depth
-     :walltime-s (/ walltime 1000.00)
-     :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
-     :equivalence-queries eqv-queries}))
+  (let [golden-target (try (intervals/regex->sfa target) (catch NullPointerException e :unsupported-regex))
+        [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
+                                                   (learn target depth)
+                                                   )]
+    (if (= :unsupported-regex golden-target)
+      {:target target
+       :equivalent? "Unsupported regex"}
+
+      {:target target
+       :candidate bounded-candidate
+       :depth depth
+       :walltime-s (/ walltime 1000.00)
+       :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
+       :equivalence-queries eqv-queries})))
 
 (defn evaluate-benchmark!
   [benchmark max-depth]
