@@ -686,22 +686,34 @@
           (.minimize sfa solver))
         (catch UnsupportedOperationException e (str (.getMessage e)))))))
 
+(defn timeout [timeout-ms callback]
+  (let [fut (future (callback))
+        ret (deref fut timeout-ms ::timed-out)]
+    (when (= ret ::timed-out)
+      (future-cancel fut)
+      (stop!))
+    ret))
+
 (defn evaluate!
   [{:keys [target depth]}]
-  (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
-        [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
-                                                   (learn target depth)
-                                                   )]
-    (if (= :unsupported-regex golden-target)
-      {:target target
-       :equivalent? "Unsupported regex"}
+  (let [?timed-out (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e :unsupported-regex)))]
+       (if (= ::timed-out ?timed-out)
+         {:target target
+          :equivalent? "Parser timed out"}
+         (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
+               [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
+                                                          (learn target depth)
+                                                          )]
+           (if (= :unsupported-regex golden-target)
+             {:target target
+              :equivalent? "Unsupported regex"}
 
-      {:target target
-       :candidate bounded-candidate
-       :depth depth
-       :walltime-s (/ walltime 1000.00)
-       :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
-       :equivalence-queries eqv-queries})))
+             {:target target
+              :candidate bounded-candidate
+              :depth depth
+              :walltime-s (/ walltime 1000.00)
+              :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
+              :equivalence-queries eqv-queries})))))
 
 (defn evaluate-benchmark!
   [benchmark max-depth]
@@ -717,15 +729,6 @@
         (if (= depth max-depth)
           [(concat complete equivalent) not-equivalent]
           (recur (inc depth) (concat complete equivalent) (map :target not-equivalent)))))))
-
-(comment
-  (def results (evaluate-benchmark! "regexlib-clean-single.re" 2))
-  (pprint  (second results))
-  (pprint (count (filter (complement :equivalent?) results)))
-  (pprint (filter :equivalent? results))
-
-  (stop!)
-  )
 
 (defn integration-tests
   []
@@ -746,7 +749,7 @@
 (defn -main
    "This function is a collection of forms that test all integrations."
   [& args]
-  (let [results (evaluate-benchmark! "regexlib-clean-10.re" 1)]
+  (let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
     (println results)
     (spit "results.edn" (pr-str results)))
   (stop!)
