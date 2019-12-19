@@ -702,18 +702,23 @@
           :equivalent? "Parser timed out"}
          (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
                [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
-                                                          (learn target depth)
-                                                          )]
+                                                          (let [learnt (timeout (* 1000 180) #(learn target depth))] ;; three minute timeoutr
+                                                            (if (= learnt ::timed-out)
+                                                              [::timed-out -1 -1]
+                                                              learnt)))]
            (if (= :unsupported-regex golden-target)
              {:target target
               :equivalent? "Unsupported regex"}
+             (if (= ::timed-out bounded-candidate)
+               {:target target
+                :equivalent? "Equivalence timeout"}
 
-             {:target target
-              :candidate bounded-candidate
-              :depth depth
-              :walltime-s (/ walltime 1000.00)
-              :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
-              :equivalence-queries eqv-queries})))))
+               {:target target
+                :candidate bounded-candidate
+                :depth depth
+                :walltime-s (/ walltime 1000.00)
+                :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
+                :equivalence-queries eqv-queries}))))))
 
 (defn evaluate-benchmark!
   [benchmark max-depth]
