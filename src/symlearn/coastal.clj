@@ -11,6 +11,7 @@
             [clojure.set :as set]
             [taoensso.carmine :as car]
             [taoensso.tufte :as tufte]
+            [taoensso.timbre :as log]
             [symlearn.intervals :as intervals]
             [symlearn.z3 :as z3]
             [cljstache.core :refer [render render-resource]])
@@ -111,10 +112,10 @@
   []
   (sh/with-sh-dir "eqv-coastal"
     ;; compile coastal
-    (println (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test" "--no-daemon")))
+    (log/info (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test" "--no-daemon")))
 
     ;; install coastal runner
-    (println (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))))
+    (log/info (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))))
 
 (defn- mk-input
   [n]
@@ -224,15 +225,16 @@
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
   (install-equivalence-oracle! candidate target depth)
-  (println "Starting equivalence check: depth " depth)
+  (log/info "Starting equivalence check: depth " depth)
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal/build/classes/java/examples"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
-    (println "Finished equivalence check...")
+    (log/info coastal-log)
+    (log/info "Finished equivalence check...")
 
     (when ce
       (let [counter-example ((comp second first) ce)
             ce-string (apply str (map str/trim (str/split counter-example #",")))]
-        (println "Found Counter Example: " ce-string)
+        (log/info "Found Counter Example: " ce-string)
         ce-string))))
 
 (defn stop!
@@ -246,7 +248,7 @@
       (.destroyForcibly coastal-instance)
       (while (.isAlive coastal-instance))
       (alter-var-root #'coastal-instance (constantly nil)))
-    (println "No coastal to stop"))
+    (log/info "No coastal to stop"))
   ::ok)
 
 
@@ -260,7 +262,7 @@
    ::start-coastal
    (let [path-in-docker (System/getenv "MEMBERSHIP_CONFIG_PATH")
          args-in (or path-in-docker (str (System/getProperty "user.dir") "/resources/Regex.xml"))
-         _ (println args-in)
+         _ (log/info args-in)
          args (into-array ["./gradlew" "run" (str "--args=" args-in) "--no-daemon"])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
@@ -279,7 +281,7 @@
     (compile-parsers!)
     (start!)
     (wcar* (car/flushall))
-    (println (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
+    (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
     ::ok))
 
 (defn running?
@@ -309,7 +311,7 @@
   acceptance status."
   [string]
   (if-not coastal-instance
-    (println "No coastal instance to query")
+    (log/info "No coastal instance to query")
     #_(install-parser! default-parser)) ;; default parser accepts nothing
   (let [[accepted path] (refine-string string)
         constraints (->> path
@@ -526,7 +528,7 @@
       (let [halted-state
             (reduce
              (fn [state ch]
-               (println (str "state " state ", looking at: " ch) )
+               (log/info (str "state " state ", looking at: " ch) )
                (let [transitions-from-state
                      (filter (fn [{:keys [from to guard-fn]}]
                                (and
@@ -598,7 +600,7 @@
 (defn show-dot
   [table]
   (let [sfa (make-sfa table {:minimize? true})]
-    (println sfa)
+    (log/info sfa)
     (.createDotFile ^SFA sfa  "aut" "")
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
     (sh/sh "xdg-open" "outfile.ps")))
@@ -659,7 +661,7 @@
                                     (if (< depth depth-limit) (recur (inc depth)) table)))))]
        (if (= table new-table)
          (do
-           (println (str "Bounded equivalence to depth " depth-limit))
+           (log/info (str "Bounded equivalence to depth " depth-limit))
            #_(show-dot new-table)
            [new-table @equivalence-queries (- (System/currentTimeMillis) start)])
          (do
@@ -702,7 +704,8 @@
           :equivalent? "Parser timed out"}
          (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
                [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
-                                                          (let [learnt (timeout (* 1000 180) #(learn target depth))] ;; three minute timeoutr
+                                                          (learn target depth)
+                                                          #_(let [learnt (timeout (* 1000 180) #(learn target depth))] ;; three minute timeoutr
                                                             (if (= learnt ::timed-out)
                                                               [::timed-out -1 -1]
                                                               learnt)))]
@@ -737,25 +740,25 @@
 
 (defn integration-tests
   []
-  (println (install-parser! "abc|g"))
-  (println (query "abc"))
-  (println (query "ggwp"))
+  (log/info (install-parser! "abc|g"))
+  (log/info (query "abc"))
+  (log/info (query "ggwp"))
 
-  (println (install-parser! "ggwp?"))
-  (println (query "abc"))
-  (println (query "ggwp"))
+  (log/info (install-parser! "ggwp?"))
+  (log/info (query "abc"))
+  (log/info (query "ggwp"))
 
-  (println (check-equivalence! {:depth 2
+  (log/info (check-equivalence! {:depth 2
                                 :target "gz"
                                 :candidate (intervals/regex->sfa "g")}))
 
-  (println (learn "[^\"]+" 2)))
+  (log/info (learn "[^\"]+" 2)))
 
 (defn -main
    "This function is a collection of forms that test all integrations."
   [& args]
   (let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
-    (println results)
+    (log/info results)
     (spit "results.edn" (pr-str results)))
   (stop!)
   (shutdown-agents))
@@ -770,3 +773,6 @@
   [target candidate]
   (show-sfa (intervals/regex->sfa target))
   (show-sfa (make-sfa* candidate)))
+
+(comment
+  (learn "^\\w+.*$" 1))
