@@ -1,0 +1,3 @@
+[submodule "eqv-coastal-new"]
+	path = eqv-coastal-new
+	url = git@github.com:DeepseaPlatform/coastal.git
