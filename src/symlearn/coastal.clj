@@ -760,7 +760,7 @@
   #_(let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
     (log/info results)
     (spit "results.edn" (pr-str results)))
-  (learn "^\\w+.*$" 3)
+  (log/info (learn "^\\w+.*$" 3))
   (stop!)
   (shutdown-agents))
 
@@ -776,4 +776,5 @@
   (show-sfa (make-sfa* candidate)))
 
 (comment
-  (learn "^\\w+.*$" 1))
+  (log/info (learn "^\\w+.*$" 3))
+  )
