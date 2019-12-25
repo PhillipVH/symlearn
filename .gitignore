@@ -10,6 +10,8 @@ coastal/.gradle/
 coastal/.idea/
 coastal/build/
 coastal/out/
+coastal/src/main/java/examples/tacas2017/Regex.java
+eqv-coastal/src/examples/java/learning/Example.java
 out/
 .idea/
 .attach_pid*

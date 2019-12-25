@@ -50,7 +50,7 @@ javadoc {
 	options.noQualifiers = [ 'java.lang.*', 'java.io.*', 'java.util.*', 'org.apache.*' ]
 }
 
-version = gitVersion()
+version = "frozen" // gitVersion()
 processResources {
     filesMatching('**/app.properties') { filter { it.replace('%VERSION%', version) } }
 }

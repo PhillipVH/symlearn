@@ -10,7 +10,8 @@
                  [com.taoensso/tufte "2.0.1"]
                  [cljstache "2.0.4"]
                  [com.rpl/specter "1.1.2"]
-                 
+                 [com.taoensso/timbre "4.10.0"]
+
                  ;; symbolic automata
                  [cs.wisc.edu/Parsers "1.0"]
                  [cs.wisc.edu/SVPAlib "1.0"]

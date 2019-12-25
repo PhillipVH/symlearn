@@ -1,1 +1,16 @@
-language: clojure
+language: generic
+services:
+  docker
+jobs:
+  include:
+    - stage: setup
+      name: "Setup Maven repository"
+      script: |
+        docker build -t lol .
+    # - stage: test
+    #   name : "Run tests with lein"
+    #   script: lein test
+
+stages:
+  - setup
+  # - test

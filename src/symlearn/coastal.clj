@@ -4,28 +4,27 @@
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
-            [taoensso.carmine :as car]
-            [taoensso.tufte :as tufte]
-            [clojure.walk :as walk]
-            [symlearn.paths :as paths]
-            [symlearn.intervals :as intervals]
-            [symlearn.ranges :as ranges]
-
-
-            [symlearn.table :as table]
-            [symlearn.z3 :as z3]
             [clojure.java.shell :as shell]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
+            [clojure.walk :as walk]
             [clojure.set :as set]
-            [cljstache.core :refer [render render-resource]]
-            [symlearn.sfa :as sfa])
-  (:import [java.io File]
+            [taoensso.carmine :as car]
+            [taoensso.tufte :as tufte]
+            [taoensso.timbre :as log]
+            [symlearn.intervals :as intervals]
+            [symlearn.z3 :as z3]
+            [cljstache.core :refer [render render-resource]])
+  (:import [java.io File FileReader]
+           [java.nio.file Paths Path]
+           [java.net URI]
            [java.util LinkedList Collection Iterator]
            [automata.sfa SFA SFAInputMove]
            [com.google.common.collect ImmutableList]
            [org.apache.commons.lang3.tuple ImmutablePair]
-           [theory.characters CharPred]))
+           [theory.characters CharPred]
+           [RegexParser RegexParserProvider]
+           [benchmark.regexconverter RegexConverter]))
 
 (set! *warn-on-reflection* true)
 
@@ -101,21 +100,22 @@
   "Compile the parsers installed in the Coastal system."
   []
   (let [coastal-dir (File. "coastal")
-        args (into-array ["./gradlew" "compileJava"])
+        args (into-array ["./gradlew" "compileJava" "--no-daemon"])
         builder (ProcessBuilder. ^"[Ljava.lang.String;" args)]
     (.directory builder coastal-dir)
     (let [compiler (.start builder)]
       (while (.isAlive compiler))
       ::ok)))
 
+
 (defn compile-equivalence-oracle!
   []
   (sh/with-sh-dir "eqv-coastal"
     ;; compile coastal
-    (println (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test")))
+    (log/info (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test" "--no-daemon")))
 
     ;; install coastal runner
-    (println (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))))
+    (log/info (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))))
 
 (defn- mk-input
   [n]
@@ -225,25 +225,33 @@
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
   (install-equivalence-oracle! candidate target depth)
-  (println "Starting equivalence check: depth " depth)
+  (log/info "Starting equivalence check: depth " depth)
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal/build/classes/java/examples"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
-    (println "Finished equivalence check...")
+    (log/info coastal-log)
+    (log/info "Finished equivalence check...")
 
     (when ce
       (let [counter-example ((comp second first) ce)
             ce-string (apply str (map str/trim (str/split counter-example #",")))]
-        (println "Found Counter Example: " ce-string)
+        (log/info "Found Counter Example: " ce-string)
         ce-string))))
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
   []
-  (when coastal-instance
-    (.destroyForcibly coastal-instance)
-    (while (.isAlive coastal-instance))
-    (alter-var-root #'coastal-instance (constantly nil)))
+  (let [coastal-pid (str/trim (:out (sh/sh "pgrep" "-f" "COASTAL")))]
+    (sh/sh "kill" "-9" coastal-pid))
+  (wcar* (car/flushall))
+  (if coastal-instance
+    (do
+      (.destroyForcibly coastal-instance)
+      (while (.isAlive coastal-instance))
+      (alter-var-root #'coastal-instance (constantly nil)))
+    (log/info "No coastal to stop"))
   ::ok)
+
+
 
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
@@ -252,13 +260,15 @@
     (stop!))
   (tufte/p
    ::start-coastal
-   (let [config (io/resource string-config)
-         args (into-array ["./gradlew" "run" (str "--args=" (.getPath config))])
+   (let [path-in-docker (System/getenv "MEMBERSHIP_CONFIG_PATH")
+         args-in (or path-in-docker (str (System/getProperty "user.dir") "/resources/Regex.xml"))
+         _ (log/info args-in)
+         args (into-array ["./gradlew" "run" (str "--args=" args-in) "--no-daemon"])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
-     (let [coastal-instance (.start builder)]
-       (alter-var-root #'coastal-instance (constantly coastal-instance))
+     (let [new-coastal-instance (.start builder)]
+       (alter-var-root #'coastal-instance (constantly new-coastal-instance))
        ::ok))))
 
 (defn install-parser!
@@ -270,7 +280,8 @@
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
     (start!)
-    (refine-string "") ; flush the result from the first run
+    (wcar* (car/flushall))
+    (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
     ::ok))
 
 (defn running?
@@ -300,7 +311,8 @@
   acceptance status."
   [string]
   (if-not coastal-instance
-    (install-parser! default-parser)) ;; default parser accepts nothing
+    (log/info "No coastal instance to query")
+    #_(install-parser! default-parser)) ;; default parser accepts nothing
   (let [[accepted path] (refine-string string)
         constraints (->> path
                          path->constraints
@@ -516,7 +528,7 @@
       (let [halted-state
             (reduce
              (fn [state ch]
-               (println (str "state " state ", looking at: " ch) )
+               (log/info (str "state " state ", looking at: " ch) )
                (let [transitions-from-state
                      (filter (fn [{:keys [from to guard-fn]}]
                                (and
@@ -588,7 +600,7 @@
 (defn show-dot
   [table]
   (let [sfa (make-sfa table {:minimize? true})]
-    (println sfa)
+    (log/info sfa)
     (.createDotFile ^SFA sfa  "aut" "")
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
     (sh/sh "xdg-open" "outfile.ps")))
@@ -619,6 +631,10 @@
 
 (defonce target-parser (atom ""))
 
+(defn equivalent?
+  [^SFA target ^SFA candidate]
+  (.isEquivalentTo target candidate intervals/solver))
+
 (defn learn
   "Learn `target` to `depth`."
   [target depth-limit]
@@ -627,25 +643,30 @@
            (reset! target-parser target)
            (install-parser! target))
 
-  (loop [table (make-table)]
-    (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
-          ;; _ (show-dot table)
-          new-table (tufte/p ::check-equivalence!
-                             (loop [depth 1]
-                               (let [counter-example (check-equivalence! {:depth depth,
-                                                                          :target target
-                                                                          :candidate conjecture})]
-                                 (if counter-example
-                                   (tufte/p ::process-counter-example (process-counter-example table counter-example))
-                                   (if (< depth depth-limit) (recur (inc depth)) table)))))]
-      (if (= table new-table)
-        (do
-          (println "Equivalent")
-          (show-dot new-table)
-          (pprint new-table))
-        (do
-          (pprint new-table)
-          (recur new-table))))))
+  (let [target-sfa (intervals/regex->sfa target)
+        equivalence-queries (atom 0)
+        start (System/currentTimeMillis)]
+    (loop [table (make-table)]
+     (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
+           ;; _ (show-dot table)
+           new-table (tufte/p ::check-equivalence!
+                              (loop [depth 1]
+                                (let [counter-example (check-equivalence! {:depth depth,
+                                                                           :target target
+                                                                           :candidate conjecture})]
+                                  (if counter-example
+                                    (do
+                                      (swap! equivalence-queries inc)
+                                      (process-counter-example table counter-example))
+                                    (if (< depth depth-limit) (recur (inc depth)) table)))))]
+       (if (= table new-table)
+         (do
+           (log/info (str "Bounded equivalence to depth " depth-limit))
+           #_(show-dot new-table)
+           [new-table @equivalence-queries (- (System/currentTimeMillis) start)])
+         (do
+           (pprint new-table)
+           (recur new-table)))))))
 
 (def stats-accumulator
   (tufte/add-handler! :symlearn "*"
@@ -656,19 +677,104 @@
                                 (str "Parser: " @target-parser
                                      "\n" (tufte/format-pstats pstats)))))))
 
-(comment
-  (tufte/add-basic-println-handler! {})
 
-  (tufte/profile
-   {}
-   (let [target "a"]
-     (learn target 1)))
-  )
+
+(defn load-benchmark
+  [^String filename]
+  (for [node (RegexParserProvider/parse (FileReader. filename))]
+    (let [solver intervals/solver]
+      (try
+        (let [sfa (RegexConverter/toSFA node solver)]
+          (.minimize sfa solver))
+        (catch UnsupportedOperationException e (str (.getMessage e)))))))
+
+(defn timeout [timeout-ms callback]
+  (let [fut (future (callback))
+        ret (deref fut timeout-ms ::timed-out)]
+    (when (= ret ::timed-out)
+      (future-cancel fut)
+      (stop!))
+    ret))
+
+(defn evaluate!
+  [{:keys [target depth]}]
+  (let [?timed-out (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e :unsupported-regex)))]
+       (if (= ::timed-out ?timed-out)
+         {:target target
+          :equivalent? "Parser timed out"}
+         (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
+               [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
+                                                          (learn target depth)
+                                                          #_(let [learnt (timeout (* 1000 180) #(learn target depth))] ;; three minute timeoutr
+                                                            (if (= learnt ::timed-out)
+                                                              [::timed-out -1 -1]
+                                                              learnt)))]
+           (if (= :unsupported-regex golden-target)
+             {:target target
+              :equivalent? "Unsupported regex"}
+             (if (= ::timed-out bounded-candidate)
+               {:target target
+                :equivalent? "Equivalence timeout"}
+
+               {:target target
+                :candidate bounded-candidate
+                :depth depth
+                :walltime-s (/ walltime 1000.00)
+                :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
+                :equivalence-queries eqv-queries}))))))
+
+(defn evaluate-benchmark!
+  [benchmark max-depth]
+  (let [regexes (str/split-lines (slurp benchmark))]
+    (loop [depth 1
+           complete []
+           incomplete regexes]
+      (let [results (doall (map #(evaluate! {:target %
+                                             :depth depth})
+                                incomplete))
+            equivalent (filter :equivalent? results)
+            not-equivalent (filter (complement :equivalent?) results)]
+        (if (= depth max-depth)
+          [(concat complete equivalent) not-equivalent]
+          (recur (inc depth) (concat complete equivalent) (map :target not-equivalent)))))))
+
+(defn integration-tests
+  []
+  (log/info (install-parser! "abc|g"))
+  (log/info (query "abc"))
+  (log/info (query "ggwp"))
+
+  (log/info (install-parser! "ggwp?"))
+  (log/info (query "abc"))
+  (log/info (query "ggwp"))
+
+  (log/info (check-equivalence! {:depth 2
+                                :target "gz"
+                                :candidate (intervals/regex->sfa "g")}))
+
+  (log/info (learn "[^\"]+" 2)))
 
 (defn -main
-  [args]
-  (let [target args]
-    (println "Learning " target)
-    (tufte/profile
-     {}
-     (learn target 4))))
+   "This function is a collection of forms that test all integrations."
+  [& args]
+  #_(let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
+    (log/info results)
+    (spit "results.edn" (pr-str results)))
+  (log/info (learn "^\\w+.*$" 3))
+  (stop!)
+  (shutdown-agents))
+
+(defn show-sfa
+  [^SFA sfa]
+  (.createDotFile sfa  "aut" "")
+  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
+  (sh/sh "xdg-open" "outfile.ps"))
+
+(defn compare-graphically
+  [target candidate]
+  (show-sfa (intervals/regex->sfa target))
+  (show-sfa (make-sfa* candidate)))
+
+(comment
+  (log/info (learn "^\\w+.*$" 3))
+  )
