@@ -757,9 +757,10 @@
 (defn -main
    "This function is a collection of forms that test all integrations."
   [& args]
-  (let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
+  #_(let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
     (log/info results)
     (spit "results.edn" (pr-str results)))
+  (learn "^\\w+.*$" 3)
   (stop!)
   (shutdown-agents))
 
