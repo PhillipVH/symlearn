@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE configuration PUBLIC "-//DEEPSEA//COASTAL configuration//EN" "https://deepseaplatform.github.io/coastal/coastal.dtd">
+<configuration>
+	<coastal>
+		<target>
+			<main>examples.parsing.csv.SimpleCSV</main>
+			<instrument>examples.parsing.csv</instrument>
+			<trigger>examples.parsing.csv.SimpleCSV.parseCSV(text:char[])</trigger>
+		</target>
+		<bounds>
+			<bound name="text" min="32" max="128"/>
+		</bounds>
+		<settings>
+			<time-limit>600</time-limit>
+		</settings>
+		<divers threads="1"/>
+		<surfers threads="0"/>
+		<observers>
+			<observer>za.ac.sun.cs.coastal.observers.PCReporterFactory</observer>
+		</observers>
+	</coastal>
+</configuration>

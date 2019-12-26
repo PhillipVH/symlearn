@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE configuration PUBLIC "-//DEEPSEA//COASTAL configuration//EN" "https://deepseaplatform.github.io/coastal/coastal.dtd">
+<configuration>
+	<coastal>
+		<target>
+			<main>examples.parsing.csv.SimpleMax</main>
+			<instrument>examples.parsing.csv</instrument>
+			<trigger>examples.parsing.csv.SimpleMax.max(A:int, B:int)</trigger>
+		</target>
+		<divers threads="8"/>
+		<surfers threads="0"/>
+		<observers>
+			<observer>za.ac.sun.cs.coastal.observers.PCReporterFactory</observer>
+			<observer>za.ac.sun.cs.coastal.observers.GUIFactory</observer>
+		</observers>
+	</coastal>
+</configuration>
