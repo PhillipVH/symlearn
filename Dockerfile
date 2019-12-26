@@ -18,6 +18,7 @@ RUN ./gradlew build -x test --no-daemon
 
 # Install equivalence-coastal
 COPY eqv-coastal-new /usr/src/symlearn/eqv-coastal-new
+RUN mkdir -p /usr/src/symlearn/eqv-coastal-new/src/main/java/learning
 WORKDIR /usr/src/symlearn/eqv-coastal-new
 RUN ./gradlew build installDist -x test
 
