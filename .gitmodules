@@ -1,0 +1,4 @@
+[submodule "eqv-coastal-new"]
+	path = eqv-coastal-new
+	url = git@github.com:PhillipVH/coastal.git
+	branch = feature/equivalence-oracle
