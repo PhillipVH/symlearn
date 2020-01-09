@@ -223,6 +223,8 @@
         (mk-equivalence-oracle candidate target depth))
   (compile-equivalence-oracle!))
 
+(re-seq #"<(.)>" "<2><3><5>")
+
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
   (install-equivalence-oracle! candidate target depth)
@@ -232,11 +234,20 @@
     (log/info coastal-log)
     (log/info "Finished equivalence check...")
 
+    ;; TODO Process multiple counter examples at once
     (when ce
-      (let [counter-example ((comp second first) ce)
-            ce-string (apply str (map str/trim (str/split counter-example #",")))]
+      (let [ce (map second ce)
+            chars (map #(str/split % #",") ce)]
+        (set (map #(apply str %)(map #(map str/trim %) chars))))
+
+      #_(let [counter-example (map #(comp second first) ce)
+            ce-string (map #(apply str (map str/trim (str/split counter-example #","))))]
         (log/info "Found Counter Example: " ce-string)
         ce-string))))
+
+
+
+
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
@@ -658,7 +669,10 @@
                                   (if counter-example
                                     (do
                                       (swap! equivalence-queries inc)
-                                      (process-counter-example table counter-example))
+                                      (reduce (fn [new-table ce] (process-counter-example new-table ce))
+                                              table
+                                              counter-example)
+                                      #_(process-counter-example table counter-example))
                                     (if (< depth depth-limit) (recur (inc depth)) table)))))]
        (if (= table new-table)
          (do
@@ -668,17 +682,6 @@
          (do
            (pprint new-table)
            (recur new-table)))))))
-
-#_(def stats-accumulator
-  (tufte/add-handler! :symlearn "*"
-                      (fn [{:keys [pstats]}]
-                        (let [now (System/currentTimeMillis)]
-                          (println (str "Result saved to result-" now))
-                          (spit (str "result-" now)
-                                (str "Parser: " @target-parser
-                                     "\n" (tufte/format-pstats pstats)))))))
-
-
 
 (defn load-benchmark
   [^String filename]
@@ -705,11 +708,7 @@
           :equivalent? "Parser timed out"}
          (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
                [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
-                                                          (learn target depth)
-                                                          #_(let [learnt (timeout (* 1000 180) #(learn target depth))] ;; three minute timeoutr
-                                                            (if (= learnt ::timed-out)
-                                                              [::timed-out -1 -1]
-                                                              learnt)))]
+                                                          (learn target depth))]
            (if (= :unsupported-regex golden-target)
              {:target target
               :equivalent? "Unsupported regex"}
@@ -753,7 +752,15 @@
                                 :target "gz"
                                 :candidate (intervals/regex->sfa "g")}))
 
-  (log/info (learn "[^\"]+" 2)))
+  (log/info (learn "[^\"]+" 2))
+
+  )
+
+(defn show-sfa
+  [^SFA sfa]
+  (.createDotFile sfa  "aut" "")
+  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
+  (sh/sh "xdg-open" "outfile.ps"))
 
 (defn -main
    "This function is a collection of forms that test all integrations."
@@ -765,17 +772,3 @@
   (stop!)
   (shutdown-agents))
 
-(defn show-sfa
-  [^SFA sfa]
-  (.createDotFile sfa  "aut" "")
-  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
-  (sh/sh "xdg-open" "outfile.ps"))
-
-(defn compare-graphically
-  [target candidate]
-  (show-sfa (intervals/regex->sfa target))
-  (show-sfa (make-sfa* candidate)))
-
-(comment
-  (log/info (learn "^\\w+.*$" 3))
-  )
