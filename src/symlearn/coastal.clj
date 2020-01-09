@@ -43,6 +43,7 @@
 (defn- refine-string
   "Returns [boolean list] of accepted? and path conditions"
   [string]
+  (log/info "Requesting refinement: " string)
   ;; enqueue the string for solving
   (let [exploded-string (map int (.toCharArray ^String string))
         strlen (count string)] ;; avoid "first byte is null" encoding issues
@@ -57,6 +58,7 @@
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
+    (log/info "Refinement received: " accepted)
     [(read-string accepted) path-condition]))
 
 (defn path->constraints
@@ -654,6 +656,7 @@
                                                                            :candidate conjecture})]
                                   (if counter-example
                                     (do
+                                      (log/info "Applying counter example(s):" counter-example)
                                       (swap! equivalence-queries inc)
                                       (reduce (fn [new-table ce] (process-counter-example new-table ce))
                                               table
