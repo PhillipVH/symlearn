@@ -112,7 +112,7 @@
   []
   (sh/with-sh-dir "eqv-coastal-new"
     ;; compile coastal
-    (log/info (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test" "--no-daemon")))
+    (log/info (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test" "-x" "distZip" "-x" "javadoc" "-x" "jar")))
 
     ;; install coastal runner
     (log/info (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/main/")))))
