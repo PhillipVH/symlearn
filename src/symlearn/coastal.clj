@@ -223,8 +223,6 @@
         (mk-equivalence-oracle candidate target depth))
   (compile-equivalence-oracle!))
 
-(re-seq #"<(.)>" "<2><3><5>")
-
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
   (install-equivalence-oracle! candidate target depth)
@@ -234,20 +232,10 @@
     (log/info coastal-log)
     (log/info "Finished equivalence check...")
 
-    ;; TODO Process multiple counter examples at once
     (when ce
       (let [ce (map second ce)
             chars (map #(str/split % #",") ce)]
-        (set (map #(apply str %)(map #(map str/trim %) chars))))
-
-      #_(let [counter-example (map #(comp second first) ce)
-            ce-string (map #(apply str (map str/trim (str/split counter-example #","))))]
-        (log/info "Found Counter Example: " ce-string)
-        ce-string))))
-
-
-
-
+        (set (map #(apply str %)(map #(map str/trim %) chars)))))))
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
@@ -262,8 +250,6 @@
       (alter-var-root #'coastal-instance (constantly nil)))
     (log/info "No coastal to stop"))
   ::ok)
-
-
 
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
@@ -671,8 +657,7 @@
                                       (swap! equivalence-queries inc)
                                       (reduce (fn [new-table ce] (process-counter-example new-table ce))
                                               table
-                                              counter-example)
-                                      #_(process-counter-example table counter-example))
+                                              counter-example))
                                     (if (< depth depth-limit) (recur (inc depth)) table)))))]
        (if (= table new-table)
          (do
