@@ -112,6 +112,7 @@
   []
   (sh/with-sh-dir "eqv-coastal-new"
     ;; compile coastal
+    (log/info "Compiling Equivalence Oracle")
     (log/info (:out (sh/sh "./gradlew" "classes" "assemble" #_"build" "compileJava" "installDist" "-x" "test" "-x" "javadoc" "-x" "distTar" "-x" "distZip" "-x" "javadocJar" "-x" "sourcesJar")))
 
     ;; install coastal runner
