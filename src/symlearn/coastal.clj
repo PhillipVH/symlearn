@@ -112,7 +112,7 @@
   []
   (sh/with-sh-dir "eqv-coastal-new"
     ;; compile coastal
-    (log/info (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test" "-x" "distZip" "-x" "javadoc")))
+    (log/info (:out (sh/sh "./gradlew" "classes" "assemble" #_"build" "compileJava" "installDist" "-x" "test" "-x" "javadoc" "-x" "distTar" "-x" "distZip" "-x" "javadocJar" "-x" "sourcesJar")))
 
     ;; install coastal runner
     (log/info (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/main/")))))
@@ -668,7 +668,7 @@
            (pprint new-table)
            (recur new-table)))))))
 
-(def stats-accumulator
+#_(def stats-accumulator
   (tufte/add-handler! :symlearn "*"
                       (fn [{:keys [pstats]}]
                         (let [now (System/currentTimeMillis)]
