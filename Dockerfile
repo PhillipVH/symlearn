@@ -17,9 +17,10 @@ WORKDIR /usr/src/symlearn/coastal
 RUN ./gradlew build -x test --no-daemon
 
 # Install equivalence-coastal
-COPY eqv-coastal /usr/src/symlearn/eqv-coastal
-WORKDIR /usr/src/symlearn/eqv-coastal
-RUN ./gradlew build installDist -x test --no-daemon
+COPY eqv-coastal-new /usr/src/symlearn/eqv-coastal-new
+RUN mkdir -p /usr/src/symlearn/eqv-coastal-new/src/main/java/learning
+WORKDIR /usr/src/symlearn/eqv-coastal-new
+RUN ./gradlew build installDist -x test
 
 # Install symbolicautomata into Maven
 WORKDIR /usr/src/symlearn

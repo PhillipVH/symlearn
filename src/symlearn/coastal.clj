@@ -110,12 +110,13 @@
 
 (defn compile-equivalence-oracle!
   []
-  (sh/with-sh-dir "eqv-coastal"
+  (sh/with-sh-dir "eqv-coastal-new"
     ;; compile coastal
-    (log/info (:out (sh/sh "./gradlew" "build" "installDist" "-x" "test" "--no-daemon")))
+    (log/info "Compiling Equivalence Oracle")
+    (log/info (:out (sh/sh "./gradlew" "classes" "assemble" #_"build" "compileJava" "installDist" "-x" "test" "-x" "javadoc" "-x" "distTar" "-x" "distZip" "-x" "javadocJar" "-x" "sourcesJar")))
 
     ;; install coastal runner
-    (log/info (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/examples/")))))
+    (log/info (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/main/")))))
 
 (defn- mk-input
   [n]
@@ -218,7 +219,7 @@
 
 (defn install-equivalence-oracle!
   [^SFA candidate target depth]
-  (spit "eqv-coastal/src/examples/java/learning/Example.java"
+  (spit "eqv-coastal-new/src/main/java/learning/Example.java"
         (mk-equivalence-oracle candidate target depth))
   (compile-equivalence-oracle!))
 
@@ -226,7 +227,7 @@
   [{:keys [depth target ^SFA candidate]}]
   (install-equivalence-oracle! candidate target depth)
   (log/info "Starting equivalence check: depth " depth)
-  (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal/build/classes/java/examples"))
+  (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
     (log/info coastal-log)
     (log/info "Finished equivalence check...")
@@ -668,7 +669,7 @@
            (pprint new-table)
            (recur new-table)))))))
 
-(def stats-accumulator
+#_(def stats-accumulator
   (tufte/add-handler! :symlearn "*"
                       (fn [{:keys [pstats]}]
                         (let [now (System/currentTimeMillis)]
