@@ -43,6 +43,7 @@
 (defn- refine-string
   "Returns [boolean list] of accepted? and path conditions"
   [string]
+  (log/info "Requesting refinement: " string)
   ;; enqueue the string for solving
   (let [exploded-string (map int (.toCharArray ^String string))
         strlen (count string)] ;; avoid "first byte is null" encoding issues
@@ -57,6 +58,7 @@
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
+    (log/info "Refinement received: " accepted)
     [(read-string accepted) path-condition]))
 
 (defn path->constraints
@@ -233,10 +235,9 @@
     (log/info "Finished equivalence check...")
 
     (when ce
-      (let [counter-example ((comp second first) ce)
-            ce-string (apply str (map str/trim (str/split counter-example #",")))]
-        (log/info "Found Counter Example: " ce-string)
-        ce-string))))
+      (let [ce (map second ce)
+            chars (map #(str/split % #",") ce)]
+        (set (map #(apply str %)(map #(map str/trim %) chars)))))))
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
@@ -251,8 +252,6 @@
       (alter-var-root #'coastal-instance (constantly nil)))
     (log/info "No coastal to stop"))
   ::ok)
-
-
 
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
@@ -657,8 +656,11 @@
                                                                            :candidate conjecture})]
                                   (if counter-example
                                     (do
+                                      (log/info "Applying counter example(s):" counter-example)
                                       (swap! equivalence-queries inc)
-                                      (process-counter-example table counter-example))
+                                      (reduce (fn [new-table ce] (process-counter-example new-table ce))
+                                              table
+                                              counter-example))
                                     (if (< depth depth-limit) (recur (inc depth)) table)))))]
        (if (= table new-table)
          (do
@@ -668,17 +670,6 @@
          (do
            (pprint new-table)
            (recur new-table)))))))
-
-#_(def stats-accumulator
-  (tufte/add-handler! :symlearn "*"
-                      (fn [{:keys [pstats]}]
-                        (let [now (System/currentTimeMillis)]
-                          (println (str "Result saved to result-" now))
-                          (spit (str "result-" now)
-                                (str "Parser: " @target-parser
-                                     "\n" (tufte/format-pstats pstats)))))))
-
-
 
 (defn load-benchmark
   [^String filename]
@@ -705,11 +696,7 @@
           :equivalent? "Parser timed out"}
          (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
                [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
-                                                          (learn target depth)
-                                                          #_(let [learnt (timeout (* 1000 180) #(learn target depth))] ;; three minute timeoutr
-                                                            (if (= learnt ::timed-out)
-                                                              [::timed-out -1 -1]
-                                                              learnt)))]
+                                                          (learn target depth))]
            (if (= :unsupported-regex golden-target)
              {:target target
               :equivalent? "Unsupported regex"}
@@ -753,7 +740,15 @@
                                 :target "gz"
                                 :candidate (intervals/regex->sfa "g")}))
 
-  (log/info (learn "[^\"]+" 2)))
+  (log/info (learn "[^\"]+" 2))
+
+  )
+
+(defn show-sfa
+  [^SFA sfa]
+  (.createDotFile sfa  "aut" "")
+  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
+  (sh/sh "xdg-open" "outfile.ps"))
 
 (defn -main
    "This function is a collection of forms that test all integrations."
@@ -765,17 +760,3 @@
   (stop!)
   (shutdown-agents))
 
-(defn show-sfa
-  [^SFA sfa]
-  (.createDotFile sfa  "aut" "")
-  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
-  (sh/sh "xdg-open" "outfile.ps"))
-
-(defn compare-graphically
-  [target candidate]
-  (show-sfa (intervals/regex->sfa target))
-  (show-sfa (make-sfa* candidate)))
-
-(comment
-  (log/info (learn "^\\w+.*$" 3))
-  )
