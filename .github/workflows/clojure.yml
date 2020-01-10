@@ -20,11 +20,3 @@ jobs:
       run: lein deps
     # - name: Run the tests with Lein
     #   run: lein test
-    - uses: HurricanKai/Publish-Docker-Github-Action@master
-      with:
-        name: mydocker/myrepo
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-        registry: docker.pkg.github.com
-        snapshot: true
-        tag_names: true
