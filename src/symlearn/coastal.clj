@@ -253,6 +253,24 @@
     (log/info "No coastal to stop"))
   ::ok)
 
+(defn check-equivalence-timed!
+  [{:keys [depth target ^SFA candidate timeout-ms]}]
+  (let [f (future (check-equivalence! {:depth depth
+                                       :target target
+                                       :candidate candidate}))
+        ce (deref f
+                  timeout-ms
+                  ::timeout)]
+    (if (= ce ::timeout)
+      (do
+        (log/warn "Equivalence Check for" target "timed out after" timeout-ms "ms")
+        (future-cancel f)
+        (kill-pid! (coastal-pid :eqv))
+        ::timeout)
+      (do
+        (log/info "Target" target "learnt successfully")
+        ce))))
+
 (defn coastal-pid
   "Argument can be :mem for membership or :eqv for equivalence"
   [mem-or-eqv]
@@ -749,7 +767,12 @@
 
   (log/info (check-equivalence! {:depth 2
                                 :target "gz"
-                                :candidate (intervals/regex->sfa "g")}))
+                                 :candidate (intervals/regex->sfa "g")}))
+
+  (log/info (check-equivalence-timed! {:depth 2
+                                       :target "g"
+                                       :candidate (intervals/regex->sfa "ga")
+                                       :timeout-ms (* 10 60 1000)}))
 
   (log/info (learn "[^\"]+" 2))
 
