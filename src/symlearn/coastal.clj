@@ -242,7 +242,7 @@
 (defn stop!
   "Stop a Coastal process running in `coastal`."
   []
-  (let [coastal-pid (str/trim (:out (sh/sh "pgrep" "-f" "COASTAL")))]
+  (let [coastal-pid (str/trim (:out (sh/sh "pgrep" "-f" "COASTAL.*Regex")))]
     (sh/sh "kill" "-9" coastal-pid))
   (wcar* (car/flushall))
   (if coastal-instance
@@ -252,6 +252,17 @@
       (alter-var-root #'coastal-instance (constantly nil)))
     (log/info "No coastal to stop"))
   ::ok)
+
+(defn coastal-pid
+  "Argument can be :mem for membership or :eqv for equivalence"
+  [mem-or-eqv]
+  (let [mem (= :mem mem-or-eqv)
+        ident (if mem "Regex" "Example")]
+    (str/trim (:out (sh/sh "pgrep" "-f" (str "COASTAL.*" ident))))))
+
+(defn kill-pid!
+  [pid]
+  (sh/sh "kill" "-9" pid))
 
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
