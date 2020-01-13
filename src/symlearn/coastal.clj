@@ -43,12 +43,11 @@
 (defn- refine-string
   "Returns [boolean list] of accepted? and path conditions"
   [string]
-  (log/info "Requesting refinement: " string)
+  (log/info "Requesting refinement:" string)
   ;; enqueue the string for solving
   (let [exploded-string (map int (.toCharArray ^String string))
         strlen (count string)] ;; avoid "first byte is null" encoding issues
-    (wcar* (car/del :refine)
-           (car/del :refined)
+    (wcar* (car/del :refined)
            (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))))
 
   ;; wait for a solved response
@@ -58,7 +57,7 @@
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
-    (log/info "Refinement received: " accepted)
+    (log/info "Refinement received:" accepted)
     [(read-string accepted) path-condition]))
 
 (defn path->constraints
@@ -253,6 +252,17 @@
     (log/info "No coastal to stop"))
   ::ok)
 
+(defn coastal-pid
+  "Argument can be :mem for membership or :eqv for equivalence"
+  [mem-or-eqv]
+  (let [mem (= :mem mem-or-eqv)
+        ident (if mem "Regex" "Example")]
+    (str/trim (:out (sh/sh "pgrep" "-f" (str "COASTAL.*" ident))))))
+
+(defn kill-pid!
+  [pid]
+  (sh/sh "kill" "-9" pid))
+
 (defn check-equivalence-timed!
   [{:keys [depth target ^SFA candidate timeout-ms]}]
   (let [f (future (check-equivalence! {:depth depth
@@ -270,17 +280,6 @@
       (do
         (log/info "Target" target "learnt successfully")
         ce))))
-
-(defn coastal-pid
-  "Argument can be :mem for membership or :eqv for equivalence"
-  [mem-or-eqv]
-  (let [mem (= :mem mem-or-eqv)
-        ident (if mem "Regex" "Example")]
-    (str/trim (:out (sh/sh "pgrep" "-f" (str "COASTAL.*" ident))))))
-
-(defn kill-pid!
-  [pid]
-  (sh/sh "kill" "-9" pid))
 
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
@@ -309,7 +308,9 @@
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
     (start!)
-    (wcar* (car/flushall))
+    #_(wcar* (car/flushall))
+    (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
+    (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
     (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
     ::ok))
 
@@ -655,7 +656,9 @@
               (if-not (contains? unique-evidence evidence)
                 (add-evidence table evidence)
                 table))
-            (add-path-condition table (query counter-example))
+            (do
+              (Thread/sleep 500)
+              (add-path-condition table (query counter-example)))
             (make-evidence counter-example))))
 
 (defonce target-parser (atom ""))
@@ -687,7 +690,9 @@
                                     (do
                                       (log/info "Applying counter example(s):" counter-example)
                                       (swap! equivalence-queries inc)
-                                      (reduce (fn [new-table ce] (process-counter-example new-table ce))
+                                      (reduce (fn [new-table ce]
+                                                (log/info "Applying" ce)
+                                                (process-counter-example new-table ce))
                                               table
                                               counter-example))
                                     (if (< depth depth-limit) (recur (inc depth)) table)))))]
@@ -758,6 +763,7 @@
 (defn integration-tests
   []
   (log/info (install-parser! "abc|g"))
+  ;; (Thread/sleep 1000)
   (log/info (query "abc"))
   (log/info (query "ggwp"))
 
@@ -790,7 +796,21 @@
   #_(let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
     (log/info results)
     (spit "results.edn" (pr-str results)))
-  (log/info (learn "^\\w+.*$" 3))
+  (log/info (def toughy (learn "^\\w+.*$" 2)))
   (stop!)
   (shutdown-agents))
 
+(for [i (range 1000)]
+  (query (str i)))
+
+(install-parser! "ggwp")
+(kill-mem-coastal!)
+
+
+(defn kill-mem-coastal!
+  []
+  (kill-pid! (coastal-pid :mem)))
+
+(defn kill-eqv-coastal!
+  []
+  (kill-pid! (coastal-pid :eqv)))
