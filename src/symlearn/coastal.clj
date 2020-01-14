@@ -291,7 +291,7 @@
    (let [path-in-docker (System/getenv "MEMBERSHIP_CONFIG_PATH")
          args-in (or path-in-docker (str (System/getProperty "user.dir") "/resources/Regex.xml"))
          _ (log/info args-in)
-         args (into-array ["./gradlew" "run" (str "--args=" args-in) "--no-daemon"])
+         args (into-array ["./gradlew" "run" (str "--args=" args-in)])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
@@ -800,12 +800,13 @@
   (stop!)
   (shutdown-agents))
 
-(for [i (range 1000)]
-  (query (str i)))
+;; (for [i (range 1000)]
+;;   (query (str i)))
 
-(install-parser! "ggwp")
-(kill-mem-coastal!)
 
+;; (query "gg")
+
+;; (install-parser!  "^\\w+.*$" )
 
 (defn kill-mem-coastal!
   []
