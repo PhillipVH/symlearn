@@ -43,7 +43,7 @@
 (defn- refine-string
   "Returns [boolean list] of accepted? and path conditions"
   [string]
-  (log/info "Requesting refinement:" string)
+  (log/trace "Requesting refinement:" string)
   ;; enqueue the string for solving
   (let [exploded-string (map int (.toCharArray ^String string))
         strlen (count string)] ;; avoid "first byte is null" encoding issues
@@ -57,7 +57,7 @@
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
-    (log/info "Refinement received:" accepted)
+    (log/trace "Refinement received:" accepted)
     [(read-string accepted) path-condition]))
 
 (defn path->constraints
@@ -113,8 +113,7 @@
   []
   (sh/with-sh-dir "eqv-coastal-new"
     ;; compile coastal
-    (log/info "Compiling Equivalence Oracle")
-    (log/info (:out (sh/sh "./gradlew" "classes" "assemble" #_"build" "compileJava" "installDist" "-x" "test" "-x" "javadoc" "-x" "distTar" "-x" "distZip" "-x" "javadocJar" "-x" "sourcesJar")))
+    (log/info (:out (sh/sh "./gradlew" "--build-cache" "compileJava" "installDist" "-x" "test")))
 
     ;; install coastal runner
     (log/info (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/main/")))))
@@ -222,6 +221,7 @@
   [^SFA candidate target depth]
   (spit "eqv-coastal-new/src/main/java/learning/Example.java"
         (mk-equivalence-oracle candidate target depth))
+  (log/info "Compiling Equivalence Oracle:" {:target target, :depth depth})
   (compile-equivalence-oracle!))
 
 (defn check-equivalence!
@@ -231,7 +231,7 @@
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
     (log/info coastal-log)
-    (log/info "Finished equivalence check...")
+    (log/info "Finished Equivalence Check:" {:target target, :depth depth})
 
     (when ce
       (let [ce (map second ce)
@@ -290,7 +290,6 @@
    ::start-coastal
    (let [path-in-docker (System/getenv "MEMBERSHIP_CONFIG_PATH")
          args-in (or path-in-docker (str (System/getProperty "user.dir") "/resources/Regex.xml"))
-         _ (log/info args-in)
          args (into-array ["./gradlew" "run" (str "--args=" args-in)])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
@@ -308,12 +307,8 @@
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
     (start!)
-    #_(wcar* (car/flushall))
     (dotimes [_ 3]
-      (refine-string ""))
-    ;; (log/info (str "Flush for " regex )) ; flush the result from the first run
-    ;; (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
-    ;; (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
+      (refine-string "")) ;; flush the default run from the membership oracle
     ::ok))
 
 (defn running?
@@ -343,8 +338,7 @@
   acceptance status."
   [string]
   (if-not coastal-instance
-    (log/info "No coastal instance to query")
-    #_(install-parser! default-parser)) ;; default parser accepts nothing
+    (log/warn "No membership oracle registered"))
   (let [[accepted path] (refine-string string)
         constraints (->> path
                          path->constraints
@@ -635,7 +629,8 @@
     (log/info sfa)
     (.createDotFile ^SFA sfa  "aut" "")
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
-    (sh/sh "xdg-open" "outfile.ps")))
+    (sh/sh "xdg-open" "outfile.ps")
+    (sh/sh "rm" "outfile.ps")))
 
 (defn make-sfa*
   [table]
@@ -680,7 +675,6 @@
         start (System/currentTimeMillis)]
     (loop [table (make-table)]
      (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
-           ;; _ (show-dot table)
            new-table (tufte/p ::check-equivalence!
                               (loop [depth 1]
                                 (let [counter-example (check-equivalence! {:depth depth,
@@ -696,14 +690,26 @@
                                               table
                                               counter-example))
                                     (if (< depth depth-limit) (recur (inc depth)) table)))))]
-       (if (= table new-table)
+
+       (cond
+         ;; the two SFAs are entirely equivalent
+         (equivalent? target-sfa (make-sfa* new-table))
          (do
-           (log/info (str "Bounded equivalence to depth " depth-limit))
-           #_(show-dot new-table)
+           (log/info "Total Equivalence")
            [new-table @equivalence-queries (- (System/currentTimeMillis) start)])
+
+         ;; the candidate SFA is equivalent to a bound
+         (= table new-table)
+         (do
+           (log/info "Bounded Equivalence: " {:depth depth-limit})
+           [new-table @equivalence-queries (- (System/currentTimeMillis) start)])
+
+         ;; continue learning
+         :else
          (do
            (pprint new-table)
-           (recur new-table)))))))
+           (recur new-table))
+         )))))
 
 (defn load-benchmark
   [^String filename]
@@ -760,32 +766,63 @@
           [(concat complete equivalent) not-equivalent]
           (recur (inc depth) (concat complete equivalent) (map :target not-equivalent)))))))
 
-(defn integration-tests
+(defn membership-integration-tests
+  "Test the integration between the learner and the membership oracle."
   []
-  (log/info (install-parser! "abc|g"))
-  (log/info (query "abc"))
-  (log/info (query "ggwp"))
+  (log/info "Testing Membership Oracle")
 
-  (log/info (install-parser! "ggwp?"))
-  (log/info (query "abc"))
-  (log/info (query "ggwp"))
+  (install-parser! "abc|g")
+  (let [should-accept (query "abc")
+        should-reject (query "ggwp")]
+    (assert (:accepted should-accept))
+    (assert (not (:accepted should-reject))))
 
-  (log/info "Querying 1-1000")
-  (for [i (range 1000)]
-    (query (str i)))
+  (install-parser! "ggwp?")
+  (let [should-reject (query "abc")
+        should-accept (query "ggwp")]
+    (assert (not (:accepted should-reject)))
+    (assert (:accepted should-accept)))
 
-  (log/info (check-equivalence! {:depth 2
+  (let [results (for [i (range 1000)]
+                  (query (str i)))]
+    (assert (= 1000 (count results)))))
+
+(defn equivalence-integration-tests
+  "Test the integration between the learner and the equivalence oracle."
+  []
+  (log/info "Testing Equivalence Oracle")
+  (let [ce (check-equivalence! {:depth 2
                                 :target "gz"
-                                 :candidate (intervals/regex->sfa "g")}))
+                                :candidate (intervals/regex->sfa "g")})]
+    (assert (= #{"gz"} ce)))
 
-  (log/info (check-equivalence-timed! {:depth 2
-                                       :target "g"
-                                       :candidate (intervals/regex->sfa "ga")
-                                       :timeout-ms (* 30 1000)}))
+  (let [ce (check-equivalence-timed! {:depth 2
+                                      :target "g"
+                                      :candidate (intervals/regex->sfa "ga")
+                                      :timeout-ms (* 30 1000)})]
+    (assert (= ::timeout ce))))
 
-  (log/info (learn "[^\"]+" 2))
+(defn learner-integration-tests
+  []
+  (log/info "Testing Learner")
+  (let [[table _] (learn "b|aa" 1)
+        conjecture (make-sfa* table)
+        target (intervals/regex->sfa "b")]
+    (assert (equivalent? target conjecture)))
 
-  )
+  (let [[table _] (learn "[^\"]+" 2)
+        target (intervals/regex->sfa "[^\"]+")
+        conjecture (make-sfa* table)]
+    (assert (equivalent? target conjecture))))
+
+(defn integration-tests
+  "Checks integration between the learner and the equivalence + membership oracles."
+  []
+  (log/info "Running Integration Tests")
+  (membership-integration-tests)
+  (equivalence-integration-tests)
+  (learner-integration-tests)
+  (log/info "All Integration Tests Pass"))
 
 (defn show-sfa
   [^SFA sfa]
