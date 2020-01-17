@@ -309,9 +309,11 @@
     (compile-parsers!)
     (start!)
     #_(wcar* (car/flushall))
-    (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
-    (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
-    (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
+    (dotimes [_ 3]
+      (refine-string ""))
+    ;; (log/info (str "Flush for " regex )) ; flush the result from the first run
+    ;; (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
+    ;; (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
     ::ok))
 
 (defn running?
@@ -656,9 +658,7 @@
               (if-not (contains? unique-evidence evidence)
                 (add-evidence table evidence)
                 table))
-            (do
-              (Thread/sleep 500)
-              (add-path-condition table (query counter-example)))
+            (add-path-condition table (query counter-example))
             (make-evidence counter-example))))
 
 (defonce target-parser (atom ""))
@@ -763,13 +763,16 @@
 (defn integration-tests
   []
   (log/info (install-parser! "abc|g"))
-  ;; (Thread/sleep 1000)
   (log/info (query "abc"))
   (log/info (query "ggwp"))
 
   (log/info (install-parser! "ggwp?"))
   (log/info (query "abc"))
   (log/info (query "ggwp"))
+
+  (log/info "Querying 1-1000")
+  (for [i (range 1000)]
+    (query (str i)))
 
   (log/info (check-equivalence! {:depth 2
                                 :target "gz"
@@ -778,7 +781,7 @@
   (log/info (check-equivalence-timed! {:depth 2
                                        :target "g"
                                        :candidate (intervals/regex->sfa "ga")
-                                       :timeout-ms (* 10 60 1000)}))
+                                       :timeout-ms (* 30 1000)}))
 
   (log/info (learn "[^\"]+" 2))
 
@@ -791,7 +794,6 @@
   (sh/sh "xdg-open" "outfile.ps"))
 
 (defn -main
-   "This function is a collection of forms that test all integrations."
   [& args]
   #_(let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
     (log/info results)
@@ -799,14 +801,6 @@
   (log/info (def toughy (learn "^\\w+.*$" 2)))
   (stop!)
   (shutdown-agents))
-
-;; (for [i (range 1000)]
-;;   (query (str i)))
-
-
-;; (query "gg")
-
-;; (install-parser!  "^\\w+.*$" )
 
 (defn kill-mem-coastal!
   []
