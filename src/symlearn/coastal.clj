@@ -224,7 +224,6 @@
 
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
-  (install-equivalence-oracle! candidate target depth)
   (log/info "Starting Equivalence Check:" {:target target, :depth depth})
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
@@ -263,6 +262,7 @@
 
 (defn check-equivalence-timed!
   [{:keys [depth target ^SFA candidate timeout-ms]}]
+  (install-equivalence-oracle! candidate target depth)
   (let [f (future (check-equivalence! {:depth depth
                                        :target target
                                        :candidate candidate}))
@@ -660,10 +660,16 @@
   [^SFA target ^SFA candidate]
   (.isEquivalentTo target candidate intervals/solver))
 
+(defn m->ms
+  "Returns `m` minutes in milliseconds."
+  [m]
+  (* 1000 60 m))
+
 (defn learn
   "Learn `target` to `depth`."
-  [target depth-limit]
+  [target depth-limit timeout-ms]
 
+  ;; install the membership oracle
   (tufte/p ::install-parser!
            (reset! target-parser target)
            (install-parser! target))
@@ -672,52 +678,71 @@
         equivalence-queries (atom 0)
         start (System/currentTimeMillis)]
     (loop [table (make-table)]
-     (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
-           new-table (tufte/p ::check-equivalence!
-                              (loop [depth 1]
-                                (let [counter-example (check-equivalence! {:depth depth,
-                                                                           :target target
-                                                                           :candidate conjecture})]
-                                  (if counter-example
-                                    (do
-                                      (log/info "Applying counter example(s):" counter-example)
-                                      (swap! equivalence-queries inc)
-                                      (reduce (fn [new-table ce]
-                                                (log/info "Applying" ce)
-                                                (process-counter-example new-table ce))
-                                              table
-                                              counter-example))
-                                    (if (< depth depth-limit) (recur (inc depth)) table)))))]
+      (let [conjecture (make-sfa* table)
+            new-table (loop [depth 1]
+                        (let [counter-example (check-equivalence-timed! {:depth depth,
+                                                                         :target target
+                                                                         :candidate conjecture
+                                                                         :timeout-ms timeout-ms})]
+                          (cond
+                            ;; no counter example, search deeper or yield table
+                            (nil? counter-example)
+                            (if (< depth depth-limit) (recur (inc depth)) table)
 
-       (cond
-         ;; the two SFAs are entirely equivalent
-         (equivalent? target-sfa (make-sfa* new-table))
-         (do
-           (log/info "Total Equivalence")
-           {:table new-table
-            :queries {:eqv @equivalence-queries
-                      :mem -1}
-            :time (- (System/currentTimeMillis) start)
-            :status :complete
-            :equivalence :total})
+                            ;; equivalence check timed out
+                            (= counter-example ::timeout)
+                            ::timeout
 
-         ;; the candidate SFA is equivalent to a bound
-         (= table new-table)
-         (do
-           (log/info "Bounded Equivalence:" {:depth depth-limit})
-           {:table new-table
-            :queries {:eqv @equivalence-queries
-                      :mem -1}
-            :time (- (System/currentTimeMillis) start)
-            :status :complete
-            :equivalence :bounded})
+                            ;; found a counter example, process and return new table
+                            :else
+                            (do
+                              (log/info "Applying counter example(s):" counter-example)
+                              (swap! equivalence-queries inc)
+                              (reduce (fn [new-table ce]
+                                        (log/trace "Applying" ce)
+                                        (process-counter-example new-table ce))
+                                      table
+                                      counter-example)))))]
 
-         ;; continue learning
-         :else
-         (do
-           (pprint new-table)
-           (recur new-table)))))))
+        (cond
+          ;; equivalence check timed out
+          (= ::timeout new-table)
+          (do
+            (log/info "Timeout")
+            {:table table
+             :queries {:eqv @equivalence-queries
+                       :mem -1}
+             :time (- (System/currentTimeMillis) start)
+             :status :incomplete
+             :equivalence :timeout})
 
+          ;; the two SFAs are entirely equivalent
+          (equivalent? target-sfa (make-sfa* new-table))
+          (do
+            (log/info "Total Equivalence")
+            {:table new-table
+             :queries {:eqv @equivalence-queries
+                       :mem -1}
+             :time (- (System/currentTimeMillis) start)
+             :status :complete
+             :equivalence :total})
+
+          ;; the candidate SFA is equivalent to a bound
+          (= table new-table)
+          (do
+            (log/info "Bounded Equivalence:" {:depth depth-limit})
+            {:table new-table
+             :queries {:eqv @equivalence-queries
+                       :mem -1}
+             :time (- (System/currentTimeMillis) start)
+             :status :complete
+             :equivalence :bounded})
+
+          ;; continue learning
+          :else
+          (do
+            (pprint new-table)
+            (recur new-table)))))))
 
 (defn load-benchmark
   [^String filename]
@@ -778,7 +803,6 @@
   "Test the integration between the learner and the membership oracle."
   []
   (log/info "Testing Membership Oracle")
-
   (install-parser! "abc|g")
   (let [should-accept (query "abc")
         should-reject (query "ggwp")]
@@ -819,13 +843,12 @@
                                       :target "g(z|a)"
                                       :candidate (intervals/regex->sfa "g")
                                       :timeout-ms (* 1000 60 3)})]
-    (assert (= #{"gz" "ga"} ce)))
-  )
+    (assert (= #{"gz" "ga"} ce))))
 
 (defn learner-integration-tests
   []
   (log/info "Testing Learner")
-  (let [{:keys [table queries time status equivalence]} (learn "b|aa" 1)
+  (let [{:keys [table queries time status equivalence]} (learn "b|aa" 1 (m->ms 30))
         conjecture (make-sfa* table)
         bounded-target (intervals/regex->sfa "b")
         total-target (intervals/regex->sfa "b|aa")]
@@ -834,12 +857,19 @@
     (assert (= :complete status))
     (assert (= :bounded equivalence)))
 
-  (let [{:keys [table queries time status equivalence]} (learn "[^\"]+" 2)
+  (let [{:keys [table queries time status equivalence]} (learn "[^\"]+" 2 (m->ms 30))
         target (intervals/regex->sfa "[^\"]+")
         conjecture (make-sfa* table)]
     (assert (equivalent? target conjecture))
     (assert (= :complete status))
-    (assert (= :total equivalence))))
+    (assert (= :total equivalence)))
+
+  (let [{:keys [table queries time status equivalence]} (learn "[^\"]+" 2 100)
+        target (intervals/regex->sfa "[^\"]+")
+        conjecture (make-sfa* table)]
+    (assert (not (equivalent? target conjecture)))
+    (assert (= :incomplete status))
+    (assert (= :timeout equivalence))))
 
 (defn integration-tests
   "Checks integration between the learner and the equivalence + membership oracles."
