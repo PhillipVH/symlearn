@@ -761,43 +761,53 @@
       (stop!))
     ret))
 
-(defn evaluate!
-  [{:keys [target depth]}]
-  (let [?timed-out (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e :unsupported-regex)))]
-       (if (= ::timed-out ?timed-out)
-         {:target target
-          :equivalent? "Parser timed out"}
-         (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
-               [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
-                                                          (learn target depth))]
-           (if (= :unsupported-regex golden-target)
-             {:target target
-              :equivalent? "Unsupported regex"}
-             (if (= ::timed-out bounded-candidate)
-               {:target target
-                :equivalent? "Equivalence timeout"}
+(defn regex->sfa*
+  "A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
+  the underlying parser, and timing out on parsers that take too long to construct."
+  [target]
+  (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
 
-               {:target target
-                :candidate bounded-candidate
-                :depth depth
-                :walltime-s (/ walltime 1000.00)
-                :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
-                :equivalence-queries eqv-queries}))))))
+(defn evaluate!-integration-tests
+  []
+  (evaluate! {:target "\\p{N}]"
+              :depth 1}))
+
+(defn evaluate!
+  "A wrapper around `learn` that insulates us from some of the harsh realities of
+  evaluation. If `target` causes the underlying `RegexParserProvider` to crash, or
+  the provider takes too long to produce a parser. Calls `learn` as the last step,
+  given no error state."
+  [{:keys [target depth timeout-ms]}]
+  (let [?sfa (regex->sfa* target)]
+    (cond
+      (= ::timed-out ?sfa)
+      {:target target
+       :equivalent? "Parser timed out"}
+
+      (= ::unsupported-regex ?sfa)
+      {:target target
+       :equivalent? "Regex is not supported"}
+
+      :else
+      (learn target depth timeout-ms))))
 
 (defn evaluate-benchmark!
-  [benchmark max-depth]
+  [benchmark max-depth timeout-ms]
   (let [regexes (str/split-lines (slurp benchmark))]
     (loop [depth 1
            complete []
            incomplete regexes]
       (let [results (doall (map #(evaluate! {:target %
-                                             :depth depth})
+                                             :depth depth
+                                             :timeout-ms timeout-ms})
                                 incomplete))
             equivalent (filter :equivalent? results)
             not-equivalent (filter (complement :equivalent?) results)]
         (if (= depth max-depth)
           [(concat complete equivalent) not-equivalent]
           (recur (inc depth) (concat complete equivalent) (map :target not-equivalent)))))))
+
+(comment (evaluate-benchmark! "regexlib-clean-10.re" (m->ms 2)))
 
 (defn membership-integration-tests
   "Test the integration between the learner and the membership oracle."
