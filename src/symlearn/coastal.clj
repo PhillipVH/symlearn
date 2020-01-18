@@ -224,6 +224,7 @@
 
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
+  (install-equivalence-oracle! candidate target depth)
   (log/info "Starting Equivalence Check:" {:target target, :depth depth})
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
@@ -262,7 +263,6 @@
 
 (defn check-equivalence-timed!
   [{:keys [depth target ^SFA candidate timeout-ms]}]
-  (install-equivalence-oracle! candidate target depth)
   (let [f (future (check-equivalence! {:depth depth
                                        :target target
                                        :candidate candidate}))
