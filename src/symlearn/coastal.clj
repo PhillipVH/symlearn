@@ -630,6 +630,12 @@
     (sh/sh "xdg-open" "outfile.ps")
     (sh/sh "rm" "outfile.ps")))
 
+(defn show-sfa
+  [^SFA sfa]
+  (.createDotFile sfa  "aut" "")
+  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
+  (sh/sh "xdg-open" "outfile.ps"))
+
 (defn make-sfa*
   [table]
   (let [sfa (make-sfa table)]
@@ -890,12 +896,6 @@
   (learner-integration-tests)
   (log/info "All Integration Tests Pass"))
 
-(defn show-sfa
-  [^SFA sfa]
-  (.createDotFile sfa  "aut" "")
-  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
-  (sh/sh "xdg-open" "outfile.ps"))
-
 (defn -main
   [& args]
   (let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
@@ -904,11 +904,3 @@
   #_(log/info (def toughy (learn "^\\w+.*$" 2)))
   (stop!)
   (shutdown-agents))
-
-(defn kill-mem-coastal!
-  []
-  (kill-pid! (coastal-pid :mem)))
-
-(defn kill-eqv-coastal!
-  []
-  (kill-pid! (coastal-pid :eqv)))
