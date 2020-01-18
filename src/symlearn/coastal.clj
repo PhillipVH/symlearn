@@ -149,7 +149,6 @@
                     zi-guard ^CharPred (.guard transition)
                     zi-intervals (.intervals zi-guard)
                     interval-size (.size zi-intervals)
-                    ;; interval-size (.. transition ^CharPred guard ^ImmutableList intervals size)
                     ]
                 (.append java-src "\t\t\t\tif (")
                 (doseq [id (range 0 interval-size)]
@@ -210,7 +209,6 @@
 
     (.toString java-src)))
 
-
 (defn mk-equivalence-oracle
   [^SFA candidate-sfa target depth]
   (render-resource "templates/Example.java" {:target-fn (sfa->java (intervals/regex->sfa target) "target")
@@ -227,7 +225,7 @@
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
   (install-equivalence-oracle! candidate target depth)
-  (log/info "Starting equivalence check: depth " depth)
+  (log/info "Starting Equivalence Check:" {:target target, :depth depth})
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
     (log/info coastal-log)
@@ -696,20 +694,30 @@
          (equivalent? target-sfa (make-sfa* new-table))
          (do
            (log/info "Total Equivalence")
-           [new-table @equivalence-queries (- (System/currentTimeMillis) start)])
+           {:table new-table
+            :queries {:eqv @equivalence-queries
+                      :mem -1}
+            :time (- (System/currentTimeMillis) start)
+            :status :complete
+            :equivalence :total})
 
          ;; the candidate SFA is equivalent to a bound
          (= table new-table)
          (do
-           (log/info "Bounded Equivalence: " {:depth depth-limit})
-           [new-table @equivalence-queries (- (System/currentTimeMillis) start)])
+           (log/info "Bounded Equivalence:" {:depth depth-limit})
+           {:table new-table
+            :queries {:eqv @equivalence-queries
+                      :mem -1}
+            :time (- (System/currentTimeMillis) start)
+            :status :complete
+            :equivalence :bounded})
 
          ;; continue learning
          :else
          (do
            (pprint new-table)
-           (recur new-table))
-         )))))
+           (recur new-table)))))))
+
 
 (defn load-benchmark
   [^String filename]
@@ -796,24 +804,42 @@
                                 :candidate (intervals/regex->sfa "g")})]
     (assert (= #{"gz"} ce)))
 
+  (let [ce (check-equivalence! {:depth 2
+                                :target "g(z|a)"
+                                :candidate (intervals/regex->sfa "g")})]
+    (assert (= #{"gz" "ga"} ce)))
+
   (let [ce (check-equivalence-timed! {:depth 2
                                       :target "g"
                                       :candidate (intervals/regex->sfa "ga")
                                       :timeout-ms (* 30 1000)})]
-    (assert (= ::timeout ce))))
+    (assert (= ::timeout ce)))
+
+  (let [ce (check-equivalence-timed! {:depth 2
+                                      :target "g(z|a)"
+                                      :candidate (intervals/regex->sfa "g")
+                                      :timeout-ms (* 1000 60 3)})]
+    (assert (= #{"gz" "ga"} ce)))
+  )
 
 (defn learner-integration-tests
   []
   (log/info "Testing Learner")
-  (let [[table _] (learn "b|aa" 1)
+  (let [{:keys [table queries time status equivalence]} (learn "b|aa" 1)
         conjecture (make-sfa* table)
-        target (intervals/regex->sfa "b")]
-    (assert (equivalent? target conjecture)))
+        bounded-target (intervals/regex->sfa "b")
+        total-target (intervals/regex->sfa "b|aa")]
+    (assert (equivalent? bounded-target conjecture))
+    (assert (not (equivalent? total-target conjecture)))
+    (assert (= :complete status))
+    (assert (= :bounded equivalence)))
 
-  (let [[table _] (learn "[^\"]+" 2)
+  (let [{:keys [table queries time status equivalence]} (learn "[^\"]+" 2)
         target (intervals/regex->sfa "[^\"]+")
         conjecture (make-sfa* table)]
-    (assert (equivalent? target conjecture))))
+    (assert (equivalent? target conjecture))
+    (assert (= :complete status))
+    (assert (= :total equivalence))))
 
 (defn integration-tests
   "Checks integration between the learner and the equivalence + membership oracles."
@@ -832,10 +858,10 @@
 
 (defn -main
   [& args]
-  #_(let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
+  (let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
     (log/info results)
     (spit "results.edn" (pr-str results)))
-  (log/info (def toughy (learn "^\\w+.*$" 2)))
+  #_(log/info (def toughy (learn "^\\w+.*$" 2)))
   (stop!)
   (shutdown-agents))
 
