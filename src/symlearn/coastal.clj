@@ -828,7 +828,8 @@
 
   (let [results (for [i (range 1000)]
                   (query (str i)))]
-    (assert (= 1000 (count results)))))
+    (assert (= 1000 (count results))))
+  (log/info "All Membership Tests Pass"))
 
 (defn equivalence-integration-tests
   "Test the integration between the learner and the equivalence oracle."
