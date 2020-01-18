@@ -43,12 +43,11 @@
 (defn- refine-string
   "Returns [boolean list] of accepted? and path conditions"
   [string]
-  (log/info "Requesting refinement: " string)
+  (log/trace "Requesting refinement:" string)
   ;; enqueue the string for solving
   (let [exploded-string (map int (.toCharArray ^String string))
         strlen (count string)] ;; avoid "first byte is null" encoding issues
-    (wcar* (car/del :refine)
-           (car/del :refined)
+    (wcar* (car/del :refined)
            (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))))
 
   ;; wait for a solved response
@@ -58,7 +57,7 @@
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
-    (log/info "Refinement received: " accepted)
+    (log/trace "Refinement received:" accepted)
     [(read-string accepted) path-condition]))
 
 (defn path->constraints
@@ -114,8 +113,7 @@
   []
   (sh/with-sh-dir "eqv-coastal-new"
     ;; compile coastal
-    (log/info "Compiling Equivalence Oracle")
-    (log/info (:out (sh/sh "./gradlew" "classes" "assemble" #_"build" "compileJava" "installDist" "-x" "test" "-x" "javadoc" "-x" "distTar" "-x" "distZip" "-x" "javadocJar" "-x" "sourcesJar")))
+    (log/info (:out (sh/sh "./gradlew" "--build-cache" "compileJava" "installDist" "-x" "test")))
 
     ;; install coastal runner
     (log/info (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/main/")))))
@@ -151,7 +149,6 @@
                     zi-guard ^CharPred (.guard transition)
                     zi-intervals (.intervals zi-guard)
                     interval-size (.size zi-intervals)
-                    ;; interval-size (.. transition ^CharPred guard ^ImmutableList intervals size)
                     ]
                 (.append java-src "\t\t\t\tif (")
                 (doseq [id (range 0 interval-size)]
@@ -212,7 +209,6 @@
 
     (.toString java-src)))
 
-
 (defn mk-equivalence-oracle
   [^SFA candidate-sfa target depth]
   (render-resource "templates/Example.java" {:target-fn (sfa->java (intervals/regex->sfa target) "target")
@@ -223,16 +219,17 @@
   [^SFA candidate target depth]
   (spit "eqv-coastal-new/src/main/java/learning/Example.java"
         (mk-equivalence-oracle candidate target depth))
+  (log/info "Compiling Equivalence Oracle:" {:target target, :depth depth})
   (compile-equivalence-oracle!))
 
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
   (install-equivalence-oracle! candidate target depth)
-  (log/info "Starting equivalence check: depth " depth)
+  (log/info "Starting Equivalence Check:" {:target target, :depth depth})
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
     (log/info coastal-log)
-    (log/info "Finished equivalence check...")
+    (log/info "Finished Equivalence Check:" {:target target, :depth depth})
 
     (when ce
       (let [ce (map second ce)
@@ -242,7 +239,7 @@
 (defn stop!
   "Stop a Coastal process running in `coastal`."
   []
-  (let [coastal-pid (str/trim (:out (sh/sh "pgrep" "-f" "COASTAL")))]
+  (let [coastal-pid (str/trim (:out (sh/sh "pgrep" "-f" "COASTAL.*Regex")))]
     (sh/sh "kill" "-9" coastal-pid))
   (wcar* (car/flushall))
   (if coastal-instance
@@ -253,6 +250,35 @@
     (log/info "No coastal to stop"))
   ::ok)
 
+(defn coastal-pid
+  "Argument can be :mem for membership or :eqv for equivalence"
+  [mem-or-eqv]
+  (let [mem (= :mem mem-or-eqv)
+        ident (if mem "Regex" "Example")]
+    (str/trim (:out (sh/sh "pgrep" "-f" (str "COASTAL.*" ident))))))
+
+(defn kill-pid!
+  [pid]
+  (sh/sh "kill" "-9" pid))
+
+(defn check-equivalence-timed!
+  [{:keys [depth target ^SFA candidate timeout-ms]}]
+  (let [f (future (check-equivalence! {:depth depth
+                                       :target target
+                                       :candidate candidate}))
+        ce (deref f
+                  timeout-ms
+                  ::timeout)]
+    (if (= ce ::timeout)
+      (do
+        (log/warn "Equivalence Check for" target "timed out after" timeout-ms "ms")
+        (future-cancel f)
+        (kill-pid! (coastal-pid :eqv))
+        ::timeout)
+      (do
+        (log/info "Target" target "learnt successfully")
+        ce))))
+
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
   []
@@ -262,8 +288,7 @@
    ::start-coastal
    (let [path-in-docker (System/getenv "MEMBERSHIP_CONFIG_PATH")
          args-in (or path-in-docker (str (System/getProperty "user.dir") "/resources/Regex.xml"))
-         _ (log/info args-in)
-         args (into-array ["./gradlew" "run" (str "--args=" args-in) "--no-daemon"])
+         args (into-array ["./gradlew" "run" (str "--args=" args-in)])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
          coastal-dir (File. "coastal")]
      (.directory builder coastal-dir)
@@ -280,8 +305,8 @@
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
     (start!)
-    (wcar* (car/flushall))
-    (log/info (str "Flush for " regex (refine-string ""))) ; flush the result from the first run
+    (dotimes [_ 3]
+      (refine-string "")) ;; flush the default run from the membership oracle
     ::ok))
 
 (defn running?
@@ -311,8 +336,7 @@
   acceptance status."
   [string]
   (if-not coastal-instance
-    (log/info "No coastal instance to query")
-    #_(install-parser! default-parser)) ;; default parser accepts nothing
+    (log/warn "No membership oracle registered"))
   (let [[accepted path] (refine-string string)
         constraints (->> path
                          path->constraints
@@ -603,7 +627,8 @@
     (log/info sfa)
     (.createDotFile ^SFA sfa  "aut" "")
     (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
-    (sh/sh "xdg-open" "outfile.ps")))
+    (sh/sh "xdg-open" "outfile.ps")
+    (sh/sh "rm" "outfile.ps")))
 
 (defn make-sfa*
   [table]
@@ -635,10 +660,16 @@
   [^SFA target ^SFA candidate]
   (.isEquivalentTo target candidate intervals/solver))
 
+(defn m->ms
+  "Returns `m` minutes in milliseconds."
+  [m]
+  (* 1000 60 m))
+
 (defn learn
   "Learn `target` to `depth`."
-  [target depth-limit]
+  [target depth-limit timeout-ms]
 
+  ;; install the membership oracle
   (tufte/p ::install-parser!
            (reset! target-parser target)
            (install-parser! target))
@@ -647,29 +678,71 @@
         equivalence-queries (atom 0)
         start (System/currentTimeMillis)]
     (loop [table (make-table)]
-     (let [conjecture (tufte/p ::make-sfa (make-sfa* table))
-           ;; _ (show-dot table)
-           new-table (tufte/p ::check-equivalence!
-                              (loop [depth 1]
-                                (let [counter-example (check-equivalence! {:depth depth,
-                                                                           :target target
-                                                                           :candidate conjecture})]
-                                  (if counter-example
-                                    (do
-                                      (log/info "Applying counter example(s):" counter-example)
-                                      (swap! equivalence-queries inc)
-                                      (reduce (fn [new-table ce] (process-counter-example new-table ce))
-                                              table
-                                              counter-example))
-                                    (if (< depth depth-limit) (recur (inc depth)) table)))))]
-       (if (= table new-table)
-         (do
-           (log/info (str "Bounded equivalence to depth " depth-limit))
-           #_(show-dot new-table)
-           [new-table @equivalence-queries (- (System/currentTimeMillis) start)])
-         (do
-           (pprint new-table)
-           (recur new-table)))))))
+      (let [conjecture (make-sfa* table)
+            new-table (loop [depth 1]
+                        (let [counter-example (check-equivalence-timed! {:depth depth,
+                                                                         :target target
+                                                                         :candidate conjecture
+                                                                         :timeout-ms timeout-ms})]
+                          (cond
+                            ;; no counter example, search deeper or yield table
+                            (nil? counter-example)
+                            (if (< depth depth-limit) (recur (inc depth)) table)
+
+                            ;; equivalence check timed out
+                            (= counter-example ::timeout)
+                            ::timeout
+
+                            ;; found a counter example, process and return new table
+                            :else
+                            (do
+                              (log/info "Applying counter example(s):" counter-example)
+                              (swap! equivalence-queries inc)
+                              (reduce (fn [new-table ce]
+                                        (log/trace "Applying" ce)
+                                        (process-counter-example new-table ce))
+                                      table
+                                      counter-example)))))]
+
+        (cond
+          ;; equivalence check timed out
+          (= ::timeout new-table)
+          (do
+            (log/info "Timeout")
+            {:table table
+             :queries {:eqv @equivalence-queries
+                       :mem -1}
+             :time (- (System/currentTimeMillis) start)
+             :status :incomplete
+             :equivalence :timeout})
+
+          ;; the two SFAs are entirely equivalent
+          (equivalent? target-sfa (make-sfa* new-table))
+          (do
+            (log/info "Total Equivalence")
+            {:table new-table
+             :queries {:eqv @equivalence-queries
+                       :mem -1}
+             :time (- (System/currentTimeMillis) start)
+             :status :complete
+             :equivalence :total})
+
+          ;; the candidate SFA is equivalent to a bound
+          (= table new-table)
+          (do
+            (log/info "Bounded Equivalence:" {:depth depth-limit})
+            {:table new-table
+             :queries {:eqv @equivalence-queries
+                       :mem -1}
+             :time (- (System/currentTimeMillis) start)
+             :status :complete
+             :equivalence :bounded})
+
+          ;; continue learning
+          :else
+          (do
+            (pprint new-table)
+            (recur new-table)))))))
 
 (defn load-benchmark
   [^String filename]
@@ -726,23 +799,86 @@
           [(concat complete equivalent) not-equivalent]
           (recur (inc depth) (concat complete equivalent) (map :target not-equivalent)))))))
 
-(defn integration-tests
+(defn membership-integration-tests
+  "Test the integration between the learner and the membership oracle."
   []
-  (log/info (install-parser! "abc|g"))
-  (log/info (query "abc"))
-  (log/info (query "ggwp"))
+  (log/info "Testing Membership Oracle")
+  (install-parser! "abc|g")
+  (let [should-accept (query "abc")
+        should-reject (query "ggwp")]
+    (assert (:accepted should-accept))
+    (assert (not (:accepted should-reject))))
 
-  (log/info (install-parser! "ggwp?"))
-  (log/info (query "abc"))
-  (log/info (query "ggwp"))
+  (install-parser! "ggwp?")
+  (let [should-reject (query "abc")
+        should-accept (query "ggwp")]
+    (assert (not (:accepted should-reject)))
+    (assert (:accepted should-accept)))
 
-  (log/info (check-equivalence! {:depth 2
+  (let [results (for [i (range 1000)]
+                  (query (str i)))]
+    (assert (= 1000 (count results)))))
+
+(defn equivalence-integration-tests
+  "Test the integration between the learner and the equivalence oracle."
+  []
+  (log/info "Testing Equivalence Oracle")
+  (let [ce (check-equivalence! {:depth 2
                                 :target "gz"
-                                :candidate (intervals/regex->sfa "g")}))
+                                :candidate (intervals/regex->sfa "g")})]
+    (assert (= #{"gz"} ce)))
 
-  (log/info (learn "[^\"]+" 2))
+  (let [ce (check-equivalence! {:depth 2
+                                :target "g(z|a)"
+                                :candidate (intervals/regex->sfa "g")})]
+    (assert (= #{"gz" "ga"} ce)))
 
-  )
+  (let [ce (check-equivalence-timed! {:depth 2
+                                      :target "g"
+                                      :candidate (intervals/regex->sfa "ga")
+                                      :timeout-ms (* 30 1000)})]
+    (assert (= ::timeout ce)))
+
+  (let [ce (check-equivalence-timed! {:depth 2
+                                      :target "g(z|a)"
+                                      :candidate (intervals/regex->sfa "g")
+                                      :timeout-ms (* 1000 60 3)})]
+    (assert (= #{"gz" "ga"} ce))))
+
+(defn learner-integration-tests
+  []
+  (log/info "Testing Learner")
+  (let [{:keys [table queries time status equivalence]} (learn "b|aa" 1 (m->ms 30))
+        conjecture (make-sfa* table)
+        bounded-target (intervals/regex->sfa "b")
+        total-target (intervals/regex->sfa "b|aa")]
+    (assert (equivalent? bounded-target conjecture))
+    (assert (not (equivalent? total-target conjecture)))
+    (assert (= :complete status))
+    (assert (= :bounded equivalence)))
+
+  (let [{:keys [table queries time status equivalence]} (learn "[^\"]+" 2 (m->ms 30))
+        target (intervals/regex->sfa "[^\"]+")
+        conjecture (make-sfa* table)]
+    (assert (equivalent? target conjecture))
+    (assert (= :complete status))
+    (assert (= :total equivalence)))
+
+  (let [{:keys [table queries time status equivalence]} (learn "[^\"]+" 2 100)
+        target (intervals/regex->sfa "[^\"]+")
+        conjecture (make-sfa* table)]
+    (assert (not (equivalent? target conjecture)))
+    (assert (= :incomplete status))
+    (assert (= :timeout equivalence))))
+
+(defn integration-tests
+  "Checks integration between the learner and the equivalence + membership oracles."
+  []
+  (log/info "Running Integration Tests")
+  (membership-integration-tests)
+  (equivalence-integration-tests)
+  (learner-integration-tests)
+  (log/info "All Integration Tests Pass"))
 
 (defn show-sfa
   [^SFA sfa]
@@ -751,12 +887,18 @@
   (sh/sh "xdg-open" "outfile.ps"))
 
 (defn -main
-   "This function is a collection of forms that test all integrations."
   [& args]
-  #_(let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
+  (let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
     (log/info results)
     (spit "results.edn" (pr-str results)))
-  (log/info (learn "^\\w+.*$" 3))
+  #_(log/info (def toughy (learn "^\\w+.*$" 2)))
   (stop!)
   (shutdown-agents))
 
+(defn kill-mem-coastal!
+  []
+  (kill-pid! (coastal-pid :mem)))
+
+(defn kill-eqv-coastal!
+  []
+  (kill-pid! (coastal-pid :eqv)))
