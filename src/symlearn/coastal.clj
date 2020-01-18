@@ -271,12 +271,12 @@
                   ::timeout)]
     (if (= ce ::timeout)
       (do
-        (log/warn "Equivalence Check for" target "timed out after" timeout-ms "ms")
+        (log/trace "Equivalence Check for" target "timed out after" timeout-ms "ms")
         (future-cancel f)
         (kill-pid! (coastal-pid :eqv))
         ::timeout)
       (do
-        (log/info "Target" target "learnt successfully")
+        (log/trace "Target" target "learnt successfully")
         ce))))
 
 (defn ^Process start!
@@ -674,6 +674,7 @@
 (defn learn
   "Learn `target` to `depth`."
   [target depth-limit timeout-ms]
+  (log/info "Learning" {:target target, :depth depth-limit, :timeout-ms timeout-ms})
 
   ;; install the membership oracle
   (tufte/p ::install-parser!
@@ -773,10 +774,6 @@
   [target]
   (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
 
-(defn evaluate!-integration-tests
-  []
-  (evaluate! {:target "\\p{N}]"
-              :depth 1}))
 
 (defn evaluate!
   "A wrapper around `learn` that insulates us from some of the harsh realities of
@@ -799,21 +796,19 @@
 
 (defn evaluate-benchmark!
   [benchmark max-depth timeout-ms]
-  (let [regexes (str/split-lines (slurp benchmark))]
-    (loop [depth 1
-           complete []
-           incomplete regexes]
-      (let [results (doall (map #(evaluate! {:target %
-                                             :depth depth
-                                             :timeout-ms timeout-ms})
-                                incomplete))
-            equivalent (filter :equivalent? results)
-            not-equivalent (filter (complement :equivalent?) results)]
-        (if (= depth max-depth)
-          [(concat complete equivalent) not-equivalent]
-          (recur (inc depth) (concat complete equivalent) (map :target not-equivalent)))))))
+  (let [regexes (str/split-lines (slurp benchmark))
+        results (reduce (fn [results target]
+                          (conj results (evaluate! {:target target
+                                                    :depth max-depth
+                                                    :timeout-ms timeout-ms}))
+                          (Thread/sleep 5000)) ;; rest a bit between experiments
+                        []
+                        regexes)]
+    results))
 
-(comment (evaluate-benchmark! "regexlib-clean-10.re" (m->ms 2)))
+(comment (pprint (evaluate-benchmark! "regexlib-clean-10.re" (m->ms 2))))
+
+;; integration tests
 
 (defn membership-integration-tests
   "Test the integration between the learner and the membership oracle."
@@ -887,6 +882,11 @@
     (assert (= :incomplete status))
     (assert (= :timeout equivalence))))
 
+(defn evaluate!-integration-tests
+  []
+  (evaluate! {:target "\\p{N}]" ;; TODO This one is an unsupported regex, need a timeout example
+              :depth 1}))
+
 (defn integration-tests
   "Checks integration between the learner and the equivalence + membership oracles."
   []
@@ -898,7 +898,7 @@
 
 (defn -main
   [& args]
-  (let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
+  (let [results (evaluate-benchmark! "regexlib-clean-100.re" 2 (m->ms 10))]
     (log/info results)
     (spit "results.edn" (pr-str results)))
   #_(log/info (def toughy (learn "^\\w+.*$" 2)))
