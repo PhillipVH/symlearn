@@ -224,7 +224,6 @@
 
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
-  (install-equivalence-oracle! candidate target depth)
   (log/info "Starting Equivalence Check:" {:target target, :depth depth})
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
@@ -263,6 +262,7 @@
 
 (defn check-equivalence-timed!
   [{:keys [depth target ^SFA candidate timeout-ms]}]
+  (install-equivalence-oracle! candidate target depth) ;; don't include compilation time
   (let [f (future (check-equivalence! {:depth depth
                                        :target target
                                        :candidate candidate}))
@@ -839,14 +839,16 @@
   "Test the integration between the learner and the equivalence oracle."
   []
   (log/info "Testing Equivalence Oracle")
-  (let [ce (check-equivalence! {:depth 2
-                                :target "gz"
-                                :candidate (intervals/regex->sfa "g")})]
+  (let [ce (check-equivalence-timed! {:depth 2
+                                      :target "gz"
+                                      :candidate (intervals/regex->sfa "g")
+                                      :timeout-ms (m->ms 4)})]
     (assert (= #{"gz"} ce)))
 
-  (let [ce (check-equivalence! {:depth 2
-                                :target "g(z|a)"
-                                :candidate (intervals/regex->sfa "g")})]
+  (let [ce (check-equivalence-timed! {:depth 2
+                                      :target "g(z|a)"
+                                      :candidate (intervals/regex->sfa "g")
+                                      :timeout-ms (m->ms 4)})]
     (assert (= #{"gz" "ga"} ce)))
 
   (let [ce (check-equivalence-timed! {:depth 2
@@ -859,7 +861,8 @@
                                       :target "g(z|a)"
                                       :candidate (intervals/regex->sfa "g")
                                       :timeout-ms (* 1000 60 3)})]
-    (assert (= #{"gz" "ga"} ce))))
+    (assert (= #{"gz" "ga"} ce)))
+  (log/info "All Equivalence Tests Pass"))
 
 (defn learner-integration-tests
   []
@@ -885,7 +888,8 @@
         conjecture (make-sfa* table)]
     (assert (not (equivalent? target conjecture)))
     (assert (= :incomplete status))
-    (assert (= :timeout equivalence))))
+    (assert (= :timeout equivalence)))
+  (log/info "All Learner Tests Pass"))
 
 (defn evaluate!-integration-tests
   []
