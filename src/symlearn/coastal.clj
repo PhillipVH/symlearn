@@ -792,21 +792,25 @@
        :equivalent? "Regex is not supported"}
 
       :else
-      (learn target depth timeout-ms))))
+      (-> (learn target depth timeout-ms)
+          (assoc :target target)))))
 
 (defn evaluate-benchmark!
+  "Evaluate a given benchmark file, learning to `max-depth`, with a timeout
+  on each equivalence check of `timeout-ms`."
   [benchmark max-depth timeout-ms]
   (let [regexes (str/split-lines (slurp benchmark))
         results (reduce (fn [results target]
-                          (conj results (evaluate! {:target target
-                                                    :depth max-depth
-                                                    :timeout-ms timeout-ms}))
-                          (Thread/sleep 5000)) ;; rest a bit between experiments
+                          (let [evaluation (evaluate! {:target target
+                                                       :depth max-depth
+                                                       :timeout-ms timeout-ms})]
+                            (Thread/sleep 5000) ;; rest a bit between experiments
+                            (conj results evaluation)))
                         []
                         regexes)]
     results))
 
-(comment (pprint (evaluate-benchmark! "regexlib-clean-10.re" (m->ms 2))))
+(comment (pprint (evaluate-benchmark! "regexlib-clean-10.re" 1 (m->ms 2))))
 
 ;; integration tests
 
@@ -890,6 +894,10 @@
                                           :depth 1})]
     (assert (= "Regex is not supported" equivalent?))))
 
+(defn pathological-regex
+  []
+  (learn "^\\w+.*$" 2))
+
 (defn integration-tests
   "Checks integration between the learner and the equivalence + membership oracles."
   []
@@ -905,6 +913,5 @@
   (let [results (evaluate-benchmark! "regexlib-clean-100.re" 2 (m->ms 10))]
     (log/info results)
     (spit "results.edn" (pr-str results)))
-  #_(log/info (def toughy (learn "^\\w+.*$" 2)))
   (stop!)
   (shutdown-agents))
