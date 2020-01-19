@@ -885,8 +885,10 @@
 
 (defn evaluate!-integration-tests
   []
-  (evaluate! {:target "\\p{N}]" ;; TODO This one is an unsupported regex, need a timeout example
-              :depth 1}))
+  ;; TODO This one is an unsupported regex, need a timeout example
+  (let [{:keys [equivalent?]} (evaluate! {:target "\\p{N}]"
+                                          :depth 1})]
+    (assert (= "Regex is not supported" equivalent?))))
 
 (defn integration-tests
   "Checks integration between the learner and the equivalence + membership oracles."
@@ -895,6 +897,7 @@
   (membership-integration-tests)
   (equivalence-integration-tests)
   (learner-integration-tests)
+  (evaluate!-integration-tests)
   (log/info "All Integration Tests Pass"))
 
 (defn -main
