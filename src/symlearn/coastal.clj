@@ -892,12 +892,12 @@
     (assert (= :timeout equivalence)))
   (log/info "All Learner Tests Pass"))
 
-(defn evaluate!-integration-tests
+(defn regex->sfa*-tests
   []
-  ;; TODO This one is an unsupported regex, need a timeout example
-  (let [{:keys [equivalent?]} (evaluate! {:target "\\p{N}]"
-                                          :depth 1})]
-    (assert (= "Regex is not supported" equivalent?))))
+  (assert (= ::timed-out (regex->sfa* "\\w{5,255}")))
+  (assert (= ::unsupported-regex (regex->sfa* "\\p{N}]")))
+  (assert (equivalent? (intervals/regex->sfa "b")
+                       (regex->sfa* "b"))))
 
 (defn pathological-regex
   []
