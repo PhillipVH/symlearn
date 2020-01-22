@@ -910,7 +910,7 @@
   (membership-integration-tests)
   (equivalence-integration-tests)
   (learner-integration-tests)
-  (evaluate!-integration-tests)
+  (regex->sfa*-tests)
   (log/info "All Integration Tests Pass"))
 
 (defn evaluate-regexlib
