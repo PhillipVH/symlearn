@@ -788,11 +788,11 @@
     (cond
       (= ::timed-out ?sfa)
       {:target target
-       :equivalent? "Parser timed out"}
+       :equivalence ::timed-out}
 
       (= ::unsupported-regex ?sfa)
       {:target target
-       :equivalent? "Regex is not supported"}
+       :equivalence ::unsupported-regex}
 
       :else
       (-> (learn target depth timeout-ms)
