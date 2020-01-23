@@ -113,6 +113,8 @@
   []
   (sh/with-sh-dir "eqv-coastal-new"
     ;; compile coastal
+    (let [clean-log (:out (sh/sh "./gradlew" "clean"))]
+      (log/info clean-log))
     (let [gradle-log (:out (sh/sh "./gradlew" "--build-cache" "compileJava" "installDist" "-x" "test"))]
       (log/info gradle-log))
 
