@@ -12,12 +12,11 @@ bash docker_build.sh
 ```
 
 ## Running Experiments
-To run the Docker images, run the following:
+To start the evaluation, run the following:
 ```
 bash docker_startall.sh
 ```
 
-Once the Docker container has started, you can start the evaluation with `lein run`.
 Results from a run are stored in a `results.edn` file in the `results/` folder in the root of the repository.
 The `symlearn-learner` container has access to this folder through a bind mount.
 
