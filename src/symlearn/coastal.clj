@@ -919,7 +919,7 @@
   [{:keys [depth eqv-timeout]}]
   (log/info "Starting regexlib Evaluation")
   (let [results (evaluate-benchmark! "regexlib-clean-100.re" depth eqv-timeout)]
-    (spit "results.edn" (pr-str results))
+    (spit "results/results.edn" (pr-str results))
     (log/info "Finished regexlib Evaluation")))
 
 (defn -main
