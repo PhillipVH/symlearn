@@ -49,5 +49,8 @@ ENV MEMBERSHIP_CONFIG_PATH /usr/src/symlearn/resources/Regex.xml
 # Compile the learner
 WORKDIR /usr/src/symlearn
 
-# Drop into a shell
-CMD ["bash"]
+# Run the integration tests + evaluation
+ENTRYPOINT lein run
+
+# Alternatively, drop into a bash shell
+# ENTRYPOINT /bin/bash
