@@ -1,2 +1,2 @@
 #!/bin/bash
-docker image build -t 18962378/symlearn .
+docker image build -t symlearn .

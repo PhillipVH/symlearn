@@ -113,7 +113,8 @@
 (defn ^SFA regex->sfa
   "Returns an SFA that accepts the language described by `regex`."
   [regex]
-  (let [nodes (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array [regex]))
+  (let [nodes (binding [*out* (java.io.StringWriter.)] ;; get rid of the "string to be parsed" message
+                (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array [regex])))
         root (.get nodes 0)
         sfa (RegexConverter/toSFA root solver)
         determinized (.determinize sfa solver)

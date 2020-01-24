@@ -113,7 +113,10 @@
   []
   (sh/with-sh-dir "eqv-coastal-new"
     ;; compile coastal
-    (log/info (:out (sh/sh "./gradlew" "--build-cache" "compileJava" "installDist" "-x" "test")))
+    (let [clean-log (:out (sh/sh "./gradlew" "clean"))]
+      (log/info clean-log))
+    (let [gradle-log (:out (sh/sh "./gradlew" "--build-cache" "compileJava" "installDist" "-x" "test"))]
+      (log/info gradle-log))
 
     ;; install coastal runner
     (log/info (:out (sh/sh "cp" "-r" "build/install/coastal/" "build/classes/java/main/")))))
@@ -224,7 +227,6 @@
 
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
-  (install-equivalence-oracle! candidate target depth)
   (log/info "Starting Equivalence Check:" {:target target, :depth depth})
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
@@ -263,6 +265,7 @@
 
 (defn check-equivalence-timed!
   [{:keys [depth target ^SFA candidate timeout-ms]}]
+  (install-equivalence-oracle! candidate target depth) ;; don't include compilation time
   (let [f (future (check-equivalence! {:depth depth
                                        :target target
                                        :candidate candidate}))
@@ -271,12 +274,12 @@
                   ::timeout)]
     (if (= ce ::timeout)
       (do
-        (log/warn "Equivalence Check for" target "timed out after" timeout-ms "ms")
+        (log/trace "Equivalence Check for" target "timed out after" timeout-ms "ms")
         (future-cancel f)
         (kill-pid! (coastal-pid :eqv))
         ::timeout)
       (do
-        (log/info "Target" target "learnt successfully")
+        (log/trace "Target" target "learnt successfully")
         ce))))
 
 (defn ^Process start!
@@ -630,6 +633,12 @@
     (sh/sh "xdg-open" "outfile.ps")
     (sh/sh "rm" "outfile.ps")))
 
+(defn show-sfa
+  [^SFA sfa]
+  (.createDotFile sfa  "aut" "")
+  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
+  (sh/sh "xdg-open" "outfile.ps"))
+
 (defn make-sfa*
   [table]
   (let [sfa (make-sfa table)]
@@ -668,6 +677,7 @@
 (defn learn
   "Learn `target` to `depth`."
   [target depth-limit timeout-ms]
+  (log/info "Learning" {:target target, :depth depth-limit, :timeout-ms timeout-ms})
 
   ;; install the membership oracle
   (tufte/p ::install-parser!
@@ -761,43 +771,51 @@
       (stop!))
     ret))
 
-(defn evaluate!
-  [{:keys [target depth]}]
-  (let [?timed-out (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e :unsupported-regex)))]
-       (if (= ::timed-out ?timed-out)
-         {:target target
-          :equivalent? "Parser timed out"}
-         (let [golden-target (try (intervals/regex->sfa target) (catch Exception e :unsupported-regex))
-               [bounded-candidate eqv-queries walltime] (when (not= :unsupported-regex golden-target)
-                                                          (learn target depth))]
-           (if (= :unsupported-regex golden-target)
-             {:target target
-              :equivalent? "Unsupported regex"}
-             (if (= ::timed-out bounded-candidate)
-               {:target target
-                :equivalent? "Equivalence timeout"}
+(defn regex->sfa*
+  "A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
+  the underlying parser, and timing out on parsers that take too long to construct."
+  [target]
+  (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
 
-               {:target target
-                :candidate bounded-candidate
-                :depth depth
-                :walltime-s (/ walltime 1000.00)
-                :equivalent? (equivalent? (make-sfa* bounded-candidate) golden-target)
-                :equivalence-queries eqv-queries}))))))
+
+(defn evaluate!
+  "A wrapper around `learn` that insulates us from some of the harsh realities of
+  evaluation. If `target` causes the underlying `RegexParserProvider` to crash, or
+  the provider takes too long to produce a parser. Calls `learn` as the last step,
+  given no error state."
+  [{:keys [target depth timeout-ms]}]
+  (let [?sfa (regex->sfa* target)]
+    (cond
+      (= ::timed-out ?sfa)
+      {:target target
+       :equivalence ::timed-out}
+
+      (= ::unsupported-regex ?sfa)
+      {:target target
+       :equivalence ::unsupported-regex}
+
+      :else
+      (-> (learn target depth timeout-ms)
+          (assoc :target target)))))
 
 (defn evaluate-benchmark!
-  [benchmark max-depth]
-  (let [regexes (str/split-lines (slurp benchmark))]
-    (loop [depth 1
-           complete []
-           incomplete regexes]
-      (let [results (doall (map #(evaluate! {:target %
-                                             :depth depth})
-                                incomplete))
-            equivalent (filter :equivalent? results)
-            not-equivalent (filter (complement :equivalent?) results)]
-        (if (= depth max-depth)
-          [(concat complete equivalent) not-equivalent]
-          (recur (inc depth) (concat complete equivalent) (map :target not-equivalent)))))))
+  "Evaluate a given benchmark file, learning to `max-depth`, with a timeout
+  on each equivalence check of `timeout-ms`."
+  [benchmark max-depth timeout-ms]
+  (let [regexes (str/split-lines (slurp benchmark))
+        results (reduce (fn [results target]
+                          (let [evaluation (evaluate! {:target target
+                                                       :depth max-depth
+                                                       :timeout-ms timeout-ms})]
+                            (Thread/sleep 5000) ;; rest a bit between experiments
+                            (conj results evaluation)))
+                        []
+                        regexes)]
+    results))
+
+(comment (pprint (evaluate-benchmark! "regexlib-clean-10.re" 1 (m->ms 2))))
+
+;; integration tests
 
 (defn membership-integration-tests
   "Test the integration between the learner and the membership oracle."
@@ -817,33 +835,37 @@
 
   (let [results (for [i (range 1000)]
                   (query (str i)))]
-    (assert (= 1000 (count results)))))
+    (assert (= 1000 (count results))))
+  (log/info "All Membership Tests Pass"))
 
 (defn equivalence-integration-tests
   "Test the integration between the learner and the equivalence oracle."
   []
   (log/info "Testing Equivalence Oracle")
-  (let [ce (check-equivalence! {:depth 2
-                                :target "gz"
-                                :candidate (intervals/regex->sfa "g")})]
+  (let [ce (check-equivalence-timed! {:depth 2
+                                      :target "gz"
+                                      :candidate (intervals/regex->sfa "g")
+                                      :timeout-ms (m->ms 4)})]
     (assert (= #{"gz"} ce)))
 
-  (let [ce (check-equivalence! {:depth 2
-                                :target "g(z|a)"
-                                :candidate (intervals/regex->sfa "g")})]
+  (let [ce (check-equivalence-timed! {:depth 2
+                                      :target "g(z|a)"
+                                      :candidate (intervals/regex->sfa "g")
+                                      :timeout-ms (m->ms 4)})]
     (assert (= #{"gz" "ga"} ce)))
 
   (let [ce (check-equivalence-timed! {:depth 2
                                       :target "g"
                                       :candidate (intervals/regex->sfa "ga")
-                                      :timeout-ms (* 30 1000)})]
+                                      :timeout-ms (* 1000 2)})]
     (assert (= ::timeout ce)))
 
   (let [ce (check-equivalence-timed! {:depth 2
                                       :target "g(z|a)"
                                       :candidate (intervals/regex->sfa "g")
-                                      :timeout-ms (* 1000 60 3)})]
-    (assert (= #{"gz" "ga"} ce))))
+                                      :timeout-ms (m->ms 4)})]
+    (assert (= #{"gz" "ga"} ce)))
+  (log/info "All Equivalence Tests Pass"))
 
 (defn learner-integration-tests
   []
@@ -869,7 +891,19 @@
         conjecture (make-sfa* table)]
     (assert (not (equivalent? target conjecture)))
     (assert (= :incomplete status))
-    (assert (= :timeout equivalence))))
+    (assert (= :timeout equivalence)))
+  (log/info "All Learner Tests Pass"))
+
+(defn regex->sfa*-tests
+  []
+  (assert (= ::timed-out (regex->sfa* "\\w{5,255}")))
+  (assert (= ::unsupported-regex (regex->sfa* "\\p{N}]")))
+  (assert (equivalent? (intervals/regex->sfa "b")
+                       (regex->sfa* "b"))))
+
+(defn pathological-regex
+  []
+  (learn "^\\w+.*$" 2))
 
 (defn integration-tests
   "Checks integration between the learner and the equivalence + membership oracles."
@@ -878,27 +912,20 @@
   (membership-integration-tests)
   (equivalence-integration-tests)
   (learner-integration-tests)
+  (regex->sfa*-tests)
   (log/info "All Integration Tests Pass"))
 
-(defn show-sfa
-  [^SFA sfa]
-  (.createDotFile sfa  "aut" "")
-  (sh/sh "dot" "-Tps" "aut.dot" "-o" "outfile.ps")
-  (sh/sh "xdg-open" "outfile.ps"))
+(defn evaluate-regexlib
+  [{:keys [depth eqv-timeout]}]
+  (log/info "Starting regexlib Evaluation")
+  (let [results (evaluate-benchmark! "regexlib-clean-100.re" depth eqv-timeout)]
+    (sh/sh "mkdir" "-p" "results")
+    (spit "results/results.edn" (pr-str results))
+    (log/info "Finished regexlib Evaluation")))
 
 (defn -main
   [& args]
-  (let [results (evaluate-benchmark! "regexlib-clean-100.re" 1)]
-    (log/info results)
-    (spit "results.edn" (pr-str results)))
-  #_(log/info (def toughy (learn "^\\w+.*$" 2)))
+  (integration-tests)
+  (evaluate-regexlib {:depth 3, :eqv-timeout (m->ms 10)})
   (stop!)
   (shutdown-agents))
-
-(defn kill-mem-coastal!
-  []
-  (kill-pid! (coastal-pid :mem)))
-
-(defn kill-eqv-coastal!
-  []
-  (kill-pid! (coastal-pid :eqv)))
