@@ -863,7 +863,7 @@
   (let [ce (check-equivalence-timed! {:depth 2
                                       :target "g(z|a)"
                                       :candidate (intervals/regex->sfa "g")
-                                      :timeout-ms (* 1000 2)})]
+                                      :timeout-ms (m->ms 4)})]
     (assert (= #{"gz" "ga"} ce)))
   (log/info "All Equivalence Tests Pass"))
 
