@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# Create the results folder, unless it already exists
+mkdir -p results/
+
+# Run the learner, binding the results folder, and connecting to redis over a link
 docker run -it \
            --rm \
            --name symlearn-learner \

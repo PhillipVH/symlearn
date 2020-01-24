@@ -857,13 +857,13 @@
   (let [ce (check-equivalence-timed! {:depth 2
                                       :target "g"
                                       :candidate (intervals/regex->sfa "ga")
-                                      :timeout-ms (* 30 1000)})]
+                                      :timeout-ms (* 1000 2)})]
     (assert (= ::timeout ce)))
 
   (let [ce (check-equivalence-timed! {:depth 2
                                       :target "g(z|a)"
                                       :candidate (intervals/regex->sfa "g")
-                                      :timeout-ms (* 1000 60 3)})]
+                                      :timeout-ms (* 1000 2)})]
     (assert (= #{"gz" "ga"} ce)))
   (log/info "All Equivalence Tests Pass"))
 
@@ -919,11 +919,13 @@
   [{:keys [depth eqv-timeout]}]
   (log/info "Starting regexlib Evaluation")
   (let [results (evaluate-benchmark! "regexlib-clean-100.re" depth eqv-timeout)]
+    (sh/sh "mkdir" "-p" "results")
     (spit "results/results.edn" (pr-str results))
     (log/info "Finished regexlib Evaluation")))
 
 (defn -main
   [& args]
+  (integration-tests)
   (evaluate-regexlib {:depth 3, :eqv-timeout (m->ms 10)})
   (stop!)
   (shutdown-agents))
