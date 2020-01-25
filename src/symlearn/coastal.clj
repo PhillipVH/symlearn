@@ -236,7 +236,7 @@
     (when ce
       (let [ce (map second ce)
             chars (map #(str/split % #",") ce)]
-        (set (map #(apply str %)(map #(map str/trim %) chars)))))))
+        (set (map #(apply str %) (map #(map identity #_str/trim %) chars)))))))
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
