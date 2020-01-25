@@ -14,7 +14,14 @@ public class Example {
 		boolean candidateResult = candidate(input);
 		boolean targetResult = target(input);
 		if (candidateResult != targetResult) {
-			Symbolic.mark("<<Counter Example: " + Arrays.toString(input) + ">>");
+        String ce = "[";
+        for (char ch : input) {
+            ce += ch + ",";
+        }
+        ce += "]";
+
+			Symbolic.mark("<<Counter Example: " + ce + ">>");
+
 			return false;
 		} else {
 			return true;

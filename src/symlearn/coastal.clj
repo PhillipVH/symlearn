@@ -334,12 +334,15 @@
   (prefixes [this]
     (map query (map #(str/join (map char %)) (map z3/witness (prefixes* (:constraints this)))))))
 
+(def mem-queries (atom 0))
+
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's
   acceptance status."
   [string]
   (if-not coastal-instance
     (log/warn "No membership oracle registered"))
+  (swap! mem-queries inc)
   (let [[accepted path] (refine-string string)
         constraints (->> path
                          path->constraints
@@ -682,10 +685,11 @@
   ;; install the membership oracle
   (tufte/p ::install-parser!
            (reset! target-parser target)
+           (reset! mem-queries 0)
            (install-parser! target))
 
   (let [target-sfa (intervals/regex->sfa target)
-        equivalence-queries (atom 0)
+        equivalence-queries (atom 1)
         start (System/currentTimeMillis)]
     (loop [table (make-table)]
       (let [conjecture (make-sfa* table)
@@ -721,7 +725,7 @@
             (log/info "Timeout")
             {:table table
              :queries {:eqv @equivalence-queries
-                       :mem -1}
+                       :mem @mem-queries}
              :time (- (System/currentTimeMillis) start)
              :status :incomplete
              :equivalence :timeout})
@@ -732,7 +736,7 @@
             (log/info "Total Equivalence")
             {:table new-table
              :queries {:eqv @equivalence-queries
-                       :mem -1}
+                       :mem @mem-queries}
              :time (- (System/currentTimeMillis) start)
              :status :complete
              :equivalence :total})
@@ -743,7 +747,7 @@
             (log/info "Bounded Equivalence:" {:depth depth-limit})
             {:table new-table
              :queries {:eqv @equivalence-queries
-                       :mem -1}
+                       :mem @mem-queries}
              :time (- (System/currentTimeMillis) start)
              :status :complete
              :equivalence :bounded})
@@ -807,6 +811,7 @@
                           (let [evaluation (evaluate! {:target target
                                                        :depth max-depth
                                                        :timeout-ms timeout-ms})]
+                            (pprint evaluation)
                             (Thread/sleep 5000) ;; rest a bit between experiments
                             (conj results evaluation)))
                         []
