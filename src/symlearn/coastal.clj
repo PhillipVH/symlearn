@@ -903,7 +903,7 @@
 
 (defn pathological-regex
   []
-  (learn "^\\w+.*$" 2))
+  (def badbad (learn "^\\w+.*$" 3 (m->ms 10))))
 
 (defn integration-tests
   "Checks integration between the learner and the equivalence + membership oracles."
