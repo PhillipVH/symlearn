@@ -537,7 +537,7 @@
                                        guard-fn (constraint-set->fn (first guard))]
                                    {:from prefix-row
                                     :guard guard
-                                    :guard-fn guard-fn
+                                    ;; :guard-fn guard-fn
                                     :to row})) follow))
                     transitions))
                 []
@@ -560,10 +560,11 @@
              (fn [state ch]
                (log/info (str "state " state ", looking at: " ch) )
                (let [transitions-from-state
-                     (filter (fn [{:keys [from to guard-fn]}]
-                               (and
-                                (= state from)
-                                (guard-fn (int ch))))
+                     (filter (fn [{:keys [from to guard #_guard-fn]}]
+                               (let [guard-fn (constraint-set->fn (first guard))]
+                                 (and
+                                  (= state from)
+                                  (guard-fn (int ch)))))
                              transitions)
                      n-transitions (count transitions-from-state)]
                  (cond
@@ -607,7 +608,7 @@
 (defn make-sfa
   [table & [{:keys [minimize?]}]]
   (let [state-map (state-map table)
-        transitions (compute-transitions table)
+        transitions (set (compute-transitions table))
         relabeled (map (fn [{:keys [from guard to]}]
                          {:from (get state-map from)
                           :to (get state-map to)
@@ -659,12 +660,19 @@
   "Table -> String -> Table"
   [table counter-example]
   (let [unique-evidence (set (:E table))]
-    (reduce (fn [table evidence]
-              (if-not (contains? unique-evidence evidence)
-                (add-evidence table evidence)
-                table))
-            (add-path-condition table (query counter-example))
-            (make-evidence counter-example))))
+    (let [new-table (add-path-condition table (query counter-example))
+          old-sfa ^SFA (make-sfa* table)
+          new-sfa ^SFA (make-sfa* new-table)]
+      (if (< (.stateCount new-sfa) (.stateCount old-sfa))
+        (do
+          (log/info "skipping" counter-example)
+          table) ;; ignore this CE
+        (reduce (fn [table evidence]
+                  (if-not (contains? unique-evidence evidence)
+                    (add-evidence table evidence)
+                    table))
+                new-table
+                (make-evidence counter-example))))))
 
 (defonce target-parser (atom ""))
 
@@ -677,6 +685,15 @@
   [m]
   (* 1000 60 m))
 
+(defn rank-counter-examples
+  [counter-examples]
+  counter-examples
+  #_(set (take 1 counter-examples))
+  #_(let [path-conditions (map query counter-examples)
+        unique-paths (group-by constraints path-conditions)
+        witnesses (map witness (mapcat #(take 1 %) (vals unique-paths)))]
+      witnesses))
+
 (defn learn
   "Learn `target` to `depth`."
   [target depth-limit timeout-ms]
@@ -688,7 +705,7 @@
            (reset! mem-queries 0)
            (install-parser! target))
 
-  (let [target-sfa (intervals/regex->sfa target)
+  (let [target-sfa (.minimize (intervals/regex->sfa target) intervals/solver)
         equivalence-queries (atom 1)
         start (System/currentTimeMillis)]
     (loop [table (make-table)]
@@ -711,12 +728,13 @@
                             :else
                             (do
                               (log/info "Applying counter example(s):" counter-example)
+                              (log/info "Filtered counter example(s):" (rank-counter-examples counter-example))
                               (swap! equivalence-queries inc)
                               (reduce (fn [new-table ce]
                                         (log/trace "Applying" ce)
                                         (process-counter-example new-table ce))
                                       table
-                                      counter-example)))))]
+                                      (rank-counter-examples counter-example))))))]
 
         (cond
           ;; equivalence check timed out
@@ -919,7 +937,7 @@
 (defn evaluate-regexlib
   [{:keys [depth eqv-timeout]}]
   (log/info "Starting regexlib Evaluation")
-  (let [results (evaluate-benchmark! "regexlib-filtered-sorted-.re" depth eqv-timeout)]
+  (let [results (evaluate-benchmark! "regexlib-clean-100.re" depth eqv-timeout)]
     (sh/sh "mkdir" "-p" "results")
     (spit "results/results.edn" (pr-str results))
     (log/info "Finished regexlib Evaluation")))
@@ -952,21 +970,30 @@
                               "Model.TransitionCount"
                               "Memb.Queries"
                               "Equiv.CE"
+                              "Learner.Type"
                               "TargetRegex"
                               "\n"])]
     (reduce (fn [csv benchmark]
-              (if (= ::timed-out (:equivalence benchmark))
+              (if (or (= ::timed-out (:equivalence benchmark))
+                      (= "Regex is not supported" (:equivalent? benchmark))
+                      (nil? (:table benchmark)))
                 (str csv (:target-id benchmark) ",Timeout\n")
-                (let [candidate (make-sfa* (:table benchmark))
+                (let [candidate ^SFA (make-sfa (:table benchmark))
                       state-count (.stateCount candidate)
                       target (:target benchmark)
                       transition-count (.getTransitionCount candidate)
                       target-id (:target-id benchmark)
                       {:keys [mem eqv]} (:queries benchmark)
-                      line (str/join "," [target-id state-count transition-count mem eqv ])]
+                      line (str/join "," [target-id
+                                          state-count
+                                          transition-count
+                                          mem
+                                          eqv
+                                          (:equivalence benchmark)
+                                          (escape-string target)])]
                   (str csv line "\n"))))
             header
-            benchmarks)))
+            indexed)))
 
 (comment (spit "benchmark.csv" (benchmarks->csv bench)))
-(comment (def bench (read-string (slurp "results/results-depth3.edn"))))
+(comment (def bench (read-string (slurp "results/results-depth4.edn"))))
