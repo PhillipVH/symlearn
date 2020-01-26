@@ -906,24 +906,20 @@
   (assert (equivalent? (intervals/regex->sfa "b")
                        (regex->sfa* "b"))))
 
-(defn pathological-regex
-  []
-  (def badbad (learn "^\\w+.*$" 3 (m->ms 10))))
-
-(defn integration-tests
-  "Checks integration between the learner and the equivalence + membership oracles."
-  []
-  (log/info "Running Integration Tests")
-  (membership-integration-tests)
-  (equivalence-integration-tests)
-  (learner-integration-tests)
-  (regex->sfa*-tests)
-  (log/info "All Integration Tests Pass"))
+ (defn integration-tests
+   "Checks integration between the learner and the equivalence + membership oracles."
+   []
+   (log/info "Running Integration Tests")
+   (membership-integration-tests)
+   (equivalence-integration-tests)
+   (learner-integration-tests)
+   (regex->sfa*-tests)
+   (log/info "All Integration Tests Pass"))
 
 (defn evaluate-regexlib
   [{:keys [depth eqv-timeout]}]
   (log/info "Starting regexlib Evaluation")
-  (let [results (evaluate-benchmark! "regexlib-clean-100.re" depth eqv-timeout)]
+  (let [results (evaluate-benchmark! "regexlib-filtered-sorted-.re" depth eqv-timeout)]
     (sh/sh "mkdir" "-p" "results")
     (spit "results/results.edn" (pr-str results))
     (log/info "Finished regexlib Evaluation")))
@@ -934,3 +930,43 @@
   (evaluate-regexlib {:depth 3, :eqv-timeout (m->ms 10)})
   (stop!)
   (shutdown-agents))
+
+(defn escape-string
+  [string]
+  (let [escapes (map char-escape-string string)
+        chars (str/split string #"")]
+    (reduce (fn [string idx]
+              (if (nth escapes idx)
+                (str string (nth escapes idx))
+                (str string (nth chars idx))))
+            ""
+            (range (count string)))))
+
+(defn benchmarks->csv
+  [benchmarks]
+  (let [indexed (map-indexed (fn [idx benchmark]
+                               (assoc benchmark :target-id idx))
+                             benchmarks)
+        header (str/join "," ["TargetID"
+                              "Model.StateCount"
+                              "Model.TransitionCount"
+                              "Memb.Queries"
+                              "Equiv.CE"
+                              "TargetRegex"
+                              "\n"])]
+    (reduce (fn [csv benchmark]
+              (if (= ::timed-out (:equivalence benchmark))
+                (str csv (:target-id benchmark) ",Timeout\n")
+                (let [candidate (make-sfa* (:table benchmark))
+                      state-count (.stateCount candidate)
+                      target (:target benchmark)
+                      transition-count (.getTransitionCount candidate)
+                      target-id (:target-id benchmark)
+                      {:keys [mem eqv]} (:queries benchmark)
+                      line (str/join "," [target-id state-count transition-count mem eqv ])]
+                  (str csv line "\n"))))
+            header
+            benchmarks)))
+
+(comment (spit "benchmark.csv" (benchmarks->csv bench)))
+(comment (def bench (read-string (slurp "results/results-depth3.edn"))))
