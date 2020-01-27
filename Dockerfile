@@ -40,6 +40,7 @@ COPY resources /usr/src/symlearn/resources
 COPY regexlib-clean-10.re /usr/src/symlearn/
 COPY regexlib-clean-20.re /usr/src/symlearn/
 COPY regexlib-clean-100.re /usr/src/symlearn/
+COPY regexlib-filtered-sorted-100.re /usr/src/symlearn
 
 RUN lein uberjar
 
