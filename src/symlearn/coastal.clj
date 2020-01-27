@@ -661,6 +661,14 @@
   [table counter-example]
   (let [unique-evidence (set (:E table))]
     (let [new-table (add-path-condition table (query counter-example))
+          table-with-evidence (reduce (fn [table evidence]
+                                        (if-not (contains? unique-evidence evidence)
+                                          (add-evidence table evidence)
+                                          table))
+                                      new-table
+                                      (make-evidence counter-example))]
+      table-with-evidence)
+    #_(let [new-table (add-path-condition table (query counter-example))
           old-sfa ^SFA (make-sfa* table)
           new-sfa ^SFA (make-sfa* new-table)]
       (if (< (.stateCount new-sfa) (.stateCount old-sfa))
