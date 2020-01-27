@@ -637,20 +637,7 @@
                                           table))
                                       new-table
                                       (make-evidence counter-example))]
-      table-with-evidence)
-    #_(let [new-table (add-path-condition table (query counter-example))
-          old-sfa ^SFA (make-sfa* table)
-          new-sfa ^SFA (make-sfa* new-table)]
-      (if (< (.stateCount new-sfa) (.stateCount old-sfa))
-        (do
-          (log/info "skipping" counter-example)
-          table) ;; ignore this CE
-        (reduce (fn [table evidence]
-                  (if-not (contains? unique-evidence evidence)
-                    (add-evidence table evidence)
-                    table))
-                new-table
-                (make-evidence counter-example))))))
+      table-with-evidence)))
 
 (defonce target-parser (atom ""))
 
@@ -685,10 +672,15 @@
 
   (let [target-sfa (.minimize (intervals/regex->sfa target) intervals/solver)
         equivalence-queries (atom 1)
-        start (System/currentTimeMillis)]
+        start (System/currentTimeMillis)
+        max-depth (atom 1)]
     (loop [table (make-table)]
       (let [conjecture (make-sfa* table)
             new-table (loop [depth 1]
+                        (swap! max-depth (fn [max]
+                                           (if (> depth max)
+                                             depth
+                                             max)))
                         (let [counter-example (check-equivalence-timed! {:depth depth,
                                                                          :target target
                                                                          :candidate conjecture
@@ -696,7 +688,9 @@
                           (cond
                             ;; no counter example, search deeper or yield table
                             (nil? counter-example)
-                            (if (< depth depth-limit) (recur (inc depth)) table)
+                            (if (< depth depth-limit)
+                              (recur (inc depth))
+                              table)
 
                             ;; equivalence check timed out
                             (= counter-example ::timeout)
@@ -721,7 +715,8 @@
             (log/info "Timeout")
             {:table table
              :queries {:eqv @equivalence-queries
-                       :mem @mem-queries}
+                       :mem @mem-queries
+                       :max-eqv-depth @max-depth}
              :time (- (System/currentTimeMillis) start)
              :status :incomplete
              :equivalence :timeout})
@@ -732,7 +727,8 @@
             (log/info "Total Equivalence")
             {:table new-table
              :queries {:eqv @equivalence-queries
-                       :mem @mem-queries}
+                       :mem @mem-queries
+                       :max-eqv-depth @max-depth}
              :time (- (System/currentTimeMillis) start)
              :status :complete
              :equivalence :total})
@@ -743,7 +739,8 @@
             (log/info "Bounded Equivalence:" {:depth depth-limit})
             {:table new-table
              :queries {:eqv @equivalence-queries
-                       :mem @mem-queries}
+                       :mem @mem-queries
+                       :max-eqv-depth @max-depth}
              :time (- (System/currentTimeMillis) start)
              :status :complete
              :equivalence :bounded})
@@ -973,5 +970,5 @@
             header
             indexed)))
 
-(comment (spit "benchmark.csv" (benchmarks->csv bench)))
 (comment (def bench (read-string (slurp "results/results-depth4.edn"))))
+(comment (spit "benchmark.csv" (benchmarks->csv bench)))

@@ -1,4 +1,4 @@
 #!/bin/bash
 
-bash start_redis.sh
-bash start_learner.sh
+bash docker_start_redis.sh "$1"
+bash docker_start_learner.sh "$1"
