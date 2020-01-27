@@ -550,36 +550,6 @@
   (let [[[path row]] (filter (fn [[path row]] (= 0 (length path))) S)]
     row))
 
-(defn table->sfa
-  "Table -> (String -> Maybe Boolean)"
-  [table]
-  (let [transitions (compute-transitions table)]
-    (fn [input]
-      (let [halted-state
-            (reduce
-             (fn [state ch]
-               (log/info (str "state " state ", looking at: " ch) )
-               (let [transitions-from-state
-                     (filter (fn [{:keys [from to guard #_guard-fn]}]
-                               (let [guard-fn (constraint-set->fn (first guard))]
-                                 (and
-                                  (= state from)
-                                  (guard-fn (int ch)))))
-                             transitions)
-                     n-transitions (count transitions-from-state)]
-                 (cond
-                   (= 0 n-transitions) state ;; self loop
-                   (= 1 n-transitions) (:to (first transitions-from-state)) ;; jump as per transitions
-                   (>= 2 n-transitions) (let [targets (map :to transitions-from-state)
-                                              unique-targets (set targets)]
-                                          (if (= 1 (count unique-targets)) ;; jump to the one state possible
-                                            (first unique-targets)
-                                            (reduced [[::non-det (vec transitions-from-state)]])))
-                   :default state)))
-             (initial-state table)
-             input)]
-        (first halted-state)))))
-
 (defn states
   [{:keys [S]}]
   (set (vals S)))
@@ -609,11 +579,11 @@
   [table & [{:keys [minimize?]}]]
   (let [state-map (state-map table)
         transitions (set (compute-transitions table))
-        relabeled (map (fn [{:keys [from guard to]}]
-                         {:from (get state-map from)
-                          :to (get state-map to)
-                          :guard (intervals/constraint-set->CharPred guard)})
-                       transitions)
+        relabeled (set (map (fn [{:keys [from guard to]}]
+                          {:from (get state-map from)
+                           :to (get state-map to)
+                           :guard (intervals/constraint-set->CharPred guard)})
+                        transitions))
         transitions (map transition->SFAInputMove relabeled)
         initial-state (get state-map (initial-state table))
         final-states (final-states table)
