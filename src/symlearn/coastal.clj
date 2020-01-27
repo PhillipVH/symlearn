@@ -922,7 +922,7 @@
 
 (defn -main
   [& args]
-  (integration-tests)
+  #_(integration-tests)
   (evaluate-regexlib {:depth 5, :eqv-timeout (m->ms 10)})
   (stop!)
   (shutdown-agents))
