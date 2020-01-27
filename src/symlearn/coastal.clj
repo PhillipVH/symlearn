@@ -912,7 +912,10 @@
 (defn evaluate-regexlib
   [{:keys [depth eqv-timeout]}]
   (log/info "Starting regexlib Evaluation")
-  (let [results (evaluate-benchmark! "regexlib-filtered-sorted-100.re" depth eqv-timeout)]
+  (let [[depth timeout-ms] (str/split-lines (slurp "results/benchmark.spec"))
+        results (evaluate-benchmark! "results/benchmark.re"
+                                     (Integer/parseInt depth)
+                                     (Integer/parseInt eqv-timeout))]
     (sh/sh "mkdir" "-p" "results")
     (spit "results/results.edn" (pr-str results))
     (log/info "Finished regexlib Evaluation")))
