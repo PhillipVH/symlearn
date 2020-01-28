@@ -15,7 +15,7 @@ For more information, see `./symlearn.py -h`.
 To start the evaluation, run the following:
 ```
 $ ./symlearn.py evaluate -h
-usage: symlearn.py deploy [-h] [--dry] name benchmark_file depth_limit timeout
+usage: symlearn.py evaluate [-h] [--dry] name benchmark_file depth_limit timeout
 
 $ ./symlearn.py evaluate foo regexlib-clean-single.re 10 10
 ```
