@@ -2,22 +2,23 @@
 
 [![Build Status](https://travis-ci.com/PhillipVH/symlearn.svg?token=v9TxturJsxPzarfynxN2&branch=master)](https://travis-ci.com/PhillipVH/symlearn)
 
-## Installation (Docker)
-To clone the repository and build the Docker image, run the following:
+## Getting Started
+The `symlearn.py` script provides facilities for building the Docker images, running benchmarks, and aggregating results.
+Python 3 is required.
 ```
-git clone https://github.com/PhillipVH/symlearn.git
-git submodule init
-git submodule update
-bash docker_build.sh
+$ git clone https://github.com/PhillipVH/symlearn.git
+$ ./symlearn.py init
 ```
 
 ## Running Experiments
 To start the evaluation, run the following:
 ```
-bash docker_startall.sh
+$ ./symlearn.py evaluate -h
+usage: symlearn.py deploy [-h] [--dry] name benchmark_file depth_limit timeout
+
+$ ./symlearn.py evaluate foo regexlib-clean-single.re 10 10
 ```
+This will begin an evaluation of the `regexlib-clean-single.re` file, with a equivalence check depth limit of 10, and a
+timeout of 10 minutes.
 
-Results from a run are stored in a `results.edn` file in the `results/` folder in the root of the repository.
-The `symlearn-learner` container has access to this folder through a bind mount.
-
-Once the experiments are completed, you can clean up the Docker containers by running `bash docker_killall.sh`.
+Results from a run are stored in a `results.edn` file in the `results/[name]/` folder in the root of the repository.

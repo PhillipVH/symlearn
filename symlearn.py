@@ -5,7 +5,7 @@ import subprocess
 import uuid
 
 
-def deploy(args):
+def evaluate(args):
     subprocess.run(['mkdir', 'results/' + args.name])  # fails if the folder exists, sanity check for the lazy
     subprocess.run(['cp', args.benchmark_file, 'results/' + args.name + '/benchmark.re'])
 
@@ -33,15 +33,15 @@ parser = argparse.ArgumentParser()
 subparsers = parser.add_subparsers()
 
 # Create the parser for the deploy command
-parser_deploy = subparsers.add_parser('deploy')
-parser_deploy.add_argument('name', type=str, help='human-readable label for the deployment')
-parser_deploy.add_argument('benchmark_file', type=str, help='file containing newline delimited regular expressions')
-parser_deploy.add_argument('depth_limit', type=int, help='depth limit for symbolic equivalence queries')
-parser_deploy.add_argument('timeout', type=int, help='timeout for each symbolic equivalence query in minutes')
+parser_evaluate = subparsers.add_parser('evaluate')
+parser_evaluate.add_argument('name', type=str, help='human-readable label for the evaluation')
+parser_evaluate.add_argument('benchmark_file', type=str, help='file containing newline delimited regular expressions')
+parser_evaluate.add_argument('depth_limit', type=int, help='depth limit for symbolic equivalence queries')
+parser_evaluate.add_argument('timeout', type=int, help='timeout for each symbolic equivalence query in minutes')
 
-parser_deploy.add_argument('--dry', action='store_true', help='do not start the docker containers')
+parser_evaluate.add_argument('--dry', action='store_true', help='do not start the Docker containers')
 
-parser_deploy.set_defaults(func=deploy)
+parser_evaluate.set_defaults(func=evaluate)
 
 # Create the parser for the logs command
 parser_logs = subparsers.add_parser('logs')
