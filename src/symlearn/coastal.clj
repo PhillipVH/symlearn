@@ -659,6 +659,13 @@
         witnesses (map witness (mapcat #(take 1 %) (vals unique-paths)))]
       witnesses))
 
+(defn check-equivalence-perfect
+  [^SFA target ^SFA candidate]
+  (let [check (SFA/areEquivalentPlusWitness target candidate intervals/solver (m->ms 10))
+        equivalent? (.getFirst check)]
+    (when-not equivalent?
+      #{(str/join "" (.getSecond check))})))
+
 (defn learn
   "Learn `target` to `depth`."
   [target depth-limit timeout-ms]
@@ -681,7 +688,8 @@
                                            (if (> depth max)
                                              depth
                                              max)))
-                        (let [counter-example (check-equivalence-timed! {:depth depth,
+                        (let [counter-example (check-equivalence-perfect target-sfa conjecture)
+                              #_counter-example #_(check-equivalence-timed! {:depth depth,
                                                                          :target target
                                                                          :candidate conjecture
                                                                          :timeout-ms timeout-ms})]
