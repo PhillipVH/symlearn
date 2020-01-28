@@ -10,6 +10,7 @@ $ git clone https://github.com/PhillipVH/symlearn.git
 $ ./symlearn.py init
 ```
 
+For more information, see `./symlearn.py -h`.
 ## Running Experiments
 To start the evaluation, run the following:
 ```
@@ -22,3 +23,5 @@ This will begin an evaluation of the `regexlib-clean-single.re` file, with a equ
 timeout of 10 minutes.
 
 Results from a run are stored in a `results.edn` file in the `results/[name]/` folder in the root of the repository.
+
+To check in on a set of running experiments, you can get the logs with `./symlearn.py logs [name]`.
