@@ -910,12 +910,12 @@
    (log/info "All Integration Tests Pass"))
 
 (defn evaluate-regexlib
-  [{:keys [depth eqv-timeout]}]
+  []
   (log/info "Starting regexlib Evaluation")
   (let [[depth timeout-ms] (str/split-lines (slurp "results/benchmark.spec"))
         results (evaluate-benchmark! "results/benchmark.re"
-                                     (Integer/parseInt depth)
-                                     (Integer/parseInt eqv-timeout))]
+                                     (read-string depth)
+                                     (read-string timeout-ms))]
     (sh/sh "mkdir" "-p" "results")
     (spit "results/results.edn" (pr-str results))
     (log/info "Finished regexlib Evaluation")))
@@ -923,7 +923,7 @@
 (defn -main
   [& args]
   #_(integration-tests)
-  (evaluate-regexlib {:depth 5, :eqv-timeout (m->ms 10)})
+  (evaluate-regexlib)
   (stop!)
   (shutdown-agents))
 
