@@ -668,7 +668,7 @@
 
 (defn learn
   "Learn `target` to `depth`."
-  [target depth-limit timeout-ms]
+  [{:keys [target depth-limit timeout-ms oracle] :or {oracle :coastal}}]
   (log/info "Learning" {:target target, :depth depth-limit, :timeout-ms timeout-ms})
 
   ;; install the membership oracle
@@ -688,11 +688,12 @@
                                            (if (> depth max)
                                              depth
                                              max)))
-                        (let [#_counter-example #_(check-equivalence-perfect target-sfa conjecture)
-                              counter-example (check-equivalence-timed! {:depth depth,
-                                                                         :target target
-                                                                         :candidate conjecture
-                                                                         :timeout-ms timeout-ms})]
+                        (let [counter-example (if (= :perfect oracle)
+                                                (check-equivalence-perfect target-sfa conjecture)
+                                                (check-equivalence-timed! {:depth depth,
+                                                                          :target target
+                                                                          :candidate conjecture
+                                                                          :timeout-ms timeout-ms}))]
                           (cond
                             ;; no counter example, search deeper or yield table
                             (nil? counter-example)
@@ -813,7 +814,9 @@
        :equivalence ::unsupported-regex}
 
       :else
-      (-> (learn target depth timeout-ms)
+      (-> (learn {:target target,
+                  :depth-limit depth
+                  :timeout-ms timeout-ms})
           (assoc :target target)))))
 
 (defn evaluate-benchmark!
@@ -889,7 +892,9 @@
 (defn learner-integration-tests
   []
   (log/info "Testing Learner")
-  (let [{:keys [table queries time status equivalence]} (learn "b|aa" 1 (m->ms 30))
+  (let [{:keys [table queries time status equivalence]} (learn {:target "b|aa"
+                                                                :depth-limit 1
+                                                                :timeout-ms (m->ms 30)})
         conjecture (make-sfa* table)
         bounded-target (intervals/regex->sfa "b")
         total-target (intervals/regex->sfa "b|aa")]
@@ -898,14 +903,18 @@
     (assert (= :complete status))
     (assert (= :bounded equivalence)))
 
-  (let [{:keys [table queries time status equivalence]} (learn "[^\"]+" 2 (m->ms 30))
+  (let [{:keys [table queries time status equivalence]} (learn {:target "[^\"]+"
+                                                                :depth-limit 2
+                                                                :timeout-ms (m->ms 30)})
         target (intervals/regex->sfa "[^\"]+")
         conjecture (make-sfa* table)]
     (assert (equivalent? target conjecture))
     (assert (= :complete status))
     (assert (= :total equivalence)))
 
-  (let [{:keys [table queries time status equivalence]} (learn "[^\"]+" 2 100)
+  (let [{:keys [table queries time status equivalence]} (learn {:target "[^\"]+"
+                                                                :depth-limit 2
+                                                                :timeout-ms  100})
         target (intervals/regex->sfa "[^\"]+")
         conjecture (make-sfa* table)]
     (assert (not (equivalent? target conjecture)))
@@ -931,15 +940,27 @@
    (log/info "All Integration Tests Pass"))
 
 (defn evaluate-regexlib
-  []
-  (log/info "Starting regexlib Evaluation")
-  (let [[depth timeout-ms] (str/split-lines (slurp "results/benchmark.spec"))
-        results (evaluate-benchmark! "results/benchmark.re"
-                                     (read-string depth)
-                                     (read-string timeout-ms))]
-    (sh/sh "mkdir" "-p" "results")
-    (spit "results/results.edn" (pr-str results))
-    (log/info "Finished regexlib Evaluation")))
+  ([]
+   (do
+     (log/info "Starting regexlib Evaluation")
+     (let [[depth timeout-ms] (str/split-lines (slurp "results/benchmark.spec"))
+           results (evaluate-benchmark! "results/benchmark.re"
+                                        (read-string depth)
+                                        (read-string timeout-ms))]
+       (sh/sh "mkdir" "-p" "results")
+       (spit "results/results.edn" (pr-str results))
+       (log/info "Finished regexlib Evaluation"))))
+  ([file depth timeout-ms]
+   (do
+     (log/info "Starting regexlib Evaluation")
+     (let [results (evaluate-benchmark! file
+                                        depth
+                                        timeout-ms)]
+       (sh/sh "mkdir" "-p" "results")
+       (spit "results/results.edn" (pr-str results))
+       (log/info "Finished regexlib Evaluation")))))
+
+(evaluate-regexlib "regexlib-clean-single.re" 30 10)
 
 (defn -main
   [& args]
