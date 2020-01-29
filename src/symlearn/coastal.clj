@@ -678,7 +678,7 @@
            (install-parser! target))
 
   (let [target-sfa (.minimize (intervals/regex->sfa target) intervals/solver)
-        equivalence-queries (atom 1)
+        equivalence-queries (atom 0)
         start (System/currentTimeMillis)
         max-depth (atom 1)]
     (loop [table (make-table)]
@@ -688,8 +688,8 @@
                                            (if (> depth max)
                                              depth
                                              max)))
-                        (let [counter-example (check-equivalence-perfect target-sfa conjecture)
-                              #_counter-example #_(check-equivalence-timed! {:depth depth,
+                        (let [#_counter-example #_(check-equivalence-perfect target-sfa conjecture)
+                              counter-example (check-equivalence-timed! {:depth depth,
                                                                          :target target
                                                                          :candidate conjecture
                                                                          :timeout-ms timeout-ms})]
@@ -708,7 +708,6 @@
                             :else
                             (do
                               (log/info "Applying counter example(s):" counter-example)
-                              (log/info "Filtered counter example(s):" (rank-counter-examples counter-example))
                               (swap! equivalence-queries inc)
                               (reduce (fn [new-table ce]
                                         (log/trace "Applying" ce)
@@ -755,9 +754,23 @@
 
           ;; continue learning
           :else
-          (do
-            (pprint new-table)
-            (recur new-table)))))))
+          (let [now (System/currentTimeMillis)
+                diff (- now start)
+                minutes (/ diff 60000)]
+            (if (> minutes 10)
+              (do
+                (log/info "Timeout (Global)")
+                {:table table
+                 :queries {:eqv @equivalence-queries
+                           :mem @mem-queries
+                           :max-eqv-depth @max-depth}
+                 :time (- (System/currentTimeMillis) start)
+                 :status :incomplete
+                 :equivalence :timeout})
+              (do
+                (log/info "Beginning next learning cycle (time left:" (- 10 minutes)"minutes)")
+                #_(pprint new-table)
+                (recur new-table)))))))))
 
 (defn load-benchmark
   [^String filename]
@@ -983,3 +996,27 @@
 
 (comment (def bench (read-string (slurp "results/results-depth4.edn"))))
 (comment (spit "benchmark.csv" (benchmarks->csv bench)))
+
+;; (def subjects (str/split-lines (slurp "regexlib-filtered-sorted.re")))
+
+;; (def smaller-subjects (take 200 subjects))
+
+;; (def automata (map (fn [target]
+;;                      (let [sfa (regex->sfa* target)]
+;;                        (when-not (or (= ::unsupported-regex sfa)
+;;                                      (= ::timed-out sfa)
+;;                                      (= 1 (.stateCount sfa)))
+;;                          {:target target
+;;                           :state-count (.stateCount sfa)
+;;                           :transition-count (.getTransitionCount sfa)})))
+;;                    subjects))
+
+;; (def sorted (sort-by :state-count (remove nil? automata)))
+
+
+;; (println "done")
+
+;; (spit "regexlib-stratified.re" (str/join "\n" (map (fn [{:keys [target state-count transition-count]}]
+;;                                                      target
+;;                                                      #_(str/join "," [(escape-string target) state-count transition-count]))
+;;                                                    (take 200 (take-nth 10 sorted)))))
