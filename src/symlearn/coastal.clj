@@ -960,8 +960,6 @@
        (spit "results/results.edn" (pr-str results))
        (log/info "Finished regexlib Evaluation")))))
 
-(evaluate-regexlib "regexlib-clean-single.re" 30 10)
-
 (defn -main
   [& args]
   #_(integration-tests)
@@ -1020,7 +1018,9 @@
 
 ;; (def subjects (str/split-lines (slurp "regexlib-filtered-sorted.re")))
 
-;; (def smaller-subjects (take 200 subjects))
+;; (nth subjects 2100)
+
+;; ;; (def smaller-subjects (take 200 subjects))
 
 ;; (def automata (map (fn [target]
 ;;                      (let [sfa (regex->sfa* target)]
@@ -1034,10 +1034,19 @@
 
 ;; (def sorted (sort-by :state-count (remove nil? automata)))
 
+;; (count (take-nth 10 sorted))
 
-;; (println "done")
 
-;; (spit "regexlib-stratified.re" (str/join "\n" (map (fn [{:keys [target state-count transition-count]}]
+;; (+)
+;; ;; (take 200 (take-nth 9 sorted))
+
+;; ;; ;; (println "done")
+;; (spit "regexlib-stratified.re" (str/join "\n" (map-indexed (fn [idx {:keys [target state-count transition-count]}]
+;;                                                                      target
+;;                                                                      #_(str/join "," [idx state-count transition-count target]))
+;;                                                                    (take 200 (take-nth 10 sorted)))))
+
+;; (spit "regexlib-stratified-counts.csv" (str/join "\n" (map-indexed (fn [idx {:keys [target state-count transition-count]}]
 ;;                                                      target
-;;                                                      #_(str/join "," [(escape-string target) state-count transition-count]))
+;;                                                      (str/join "," [idx state-count transition-count target]))
 ;;                                                    (take 200 (take-nth 10 sorted)))))
