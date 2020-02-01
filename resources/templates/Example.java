@@ -14,11 +14,11 @@ public class Example {
 		boolean candidateResult = candidate(input);
 		boolean targetResult = target(input);
 		if (candidateResult != targetResult) {
-        String ce = "[";
+        String ce = "";
         for (char ch : input) {
-            ce += ch + ",";
+            ce += ch;
         }
-        ce += "]";
+        // ce += "]";
 
 			Symbolic.mark("<<Counter Example: " + ce + ">>");
 

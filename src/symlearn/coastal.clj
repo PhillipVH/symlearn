@@ -229,14 +229,16 @@
   [{:keys [depth target ^SFA candidate]}]
   (log/info "Starting Equivalence Check:" {:target target, :depth depth})
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
-        ce (re-seq #"<<Counter Example: \[(.*)\]>>" coastal-log)]
+        ce (re-seq #"<<Counter Example: (.*)>>" coastal-log)]
     (log/info coastal-log)
     (log/info "Finished Equivalence Check:" {:target target, :depth depth})
 
     (when ce
       (let [ce (map second ce)
-            chars (map #(str/split % #",") ce)]
-        (set (map #(apply str %) (map #(map identity #_str/trim %) chars)))))))
+
+            #_chars #_(map #(str/split % #",") ce)]
+        #_(set (map #(apply str %) (map #(map identity #_str/trim %) chars)))
+        (set ce)))))
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
@@ -447,31 +449,31 @@
 
 ;; adding new information to the table
 
-(defn add-path-condition
-  "Table -> PathCondition -> Table"
-  [table {:keys [accepted] :as path}]
-  (let [prefixes (prefixes path)
-        table-with-ce (update table :R #(assoc % path [accepted]))
-        table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
-                                      (update table* :R #(assoc % path [accepted])))
-                                    table-with-ce
-                                    prefixes)
-        filled-table (fill table-with-prefixes)]
-    (loop [table filled-table]
-      (if (closed? table)
-        table
-        (recur (close table))))))
+;; (defn add-path-condition
+;;   "Table -> PathCondition -> Table"
+;;   [table {:keys [accepted] :as path}]
+;;   (let [prefixes (prefixes path)
+;;         table-with-ce (update table :R #(assoc % path [accepted]))
+;;         table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
+;;                                       (update table* :R #(assoc % path [accepted])))
+;;                                     table-with-ce
+;;                                     prefixes)
+;;         filled-table (fill table-with-prefixes)]
+;;     (loop [table filled-table]
+;;       (if (closed? table)
+;;         table
+;;         (recur (close table))))))
 
-(defn add-evidence
-  "Table -> Evidence -> Table"
-  [table evidence]
-  (let [new-table (-> table
-                      (update :E #(conj % evidence))
-                      fill)]
-    (loop [table new-table]
-      (if (closed? table)
-        table
-        (recur (close table))))))
+;; (defn add-evidence
+;;   "Table -> Evidence -> Table"
+;;   [table evidence]
+;;   (let [new-table (-> table
+;;                       (update :E #(conj % evidence))
+;;                       fill)]
+;;     (loop [table new-table]
+;;       (if (closed? table)
+;;         table
+;;         (recur (close table))))))
 
 ;; make an sfa from a table
 
@@ -626,13 +628,26 @@
 
 (comment (make-evidence "abc"))
 
+(defn ce->pred
+  [ce]
+  (let [path-condition (constraints (query ce))]
+    (map intervals/constraint-set->CharPred path-condition)))
+
 (defn process-counter-example
   "Table -> String -> Table"
   [table counter-example]
-  (let [unique-evidence (set (:E table))]
+  (let [unique-evidence (set (:E table))
+        paths (map (comp constraints query) (:E table))
+        unique-paths (set (map #(map intervals/constraint-set->CharPred %) paths))]
     (let [new-table (add-path-condition table (query counter-example))
           table-with-evidence (reduce (fn [table evidence]
-                                        (if-not (contains? unique-evidence evidence)
+                                        #_(let [with-evidence (add-evidence table evidence)]
+                                          (if-not (closed? with-evidence)
+                                            (close with-evidence)
+                                            table))
+                                        (if-not (contains? unique-paths
+                                                           (ce->pred evidence))
+                                            #_(contains? unique-evidence evidence)
                                           (add-evidence table evidence)
                                           table))
                                       new-table
@@ -770,7 +785,7 @@
                  :equivalence :timeout})
               (do
                 (log/info "Beginning next learning cycle (time left:" (- 10 minutes)"minutes)")
-                #_(pprint new-table)
+                (pprint new-table)
                 (recur new-table)))))))))
 
 (defn load-benchmark
@@ -827,10 +842,12 @@
         results (reduce (fn [results target]
                           (let [evaluation (evaluate! {:target target
                                                        :depth max-depth
-                                                       :timeout-ms timeout-ms})]
+                                                       :timeout-ms timeout-ms})
+                                new-results (conj results evaluation)]
                             (pprint evaluation)
                             (Thread/sleep 5000) ;; rest a bit between experiments
-                            (conj results evaluation)))
+                            (spit "results/results.edn" (pr-str new-results))
+                            new-results))
                         []
                         regexes)]
     results))
@@ -1015,38 +1032,3 @@
 
 (comment (def bench (read-string (slurp "results/results-depth4.edn"))))
 (comment (spit "benchmark.csv" (benchmarks->csv bench)))
-
-;; (def subjects (str/split-lines (slurp "regexlib-filtered-sorted.re")))
-
-;; (nth subjects 2100)
-
-;; ;; (def smaller-subjects (take 200 subjects))
-
-;; (def automata (map (fn [target]
-;;                      (let [sfa (regex->sfa* target)]
-;;                        (when-not (or (= ::unsupported-regex sfa)
-;;                                      (= ::timed-out sfa)
-;;                                      (= 1 (.stateCount sfa)))
-;;                          {:target target
-;;                           :state-count (.stateCount sfa)
-;;                           :transition-count (.getTransitionCount sfa)})))
-;;                    subjects))
-
-;; (def sorted (sort-by :state-count (remove nil? automata)))
-
-;; (count (take-nth 10 sorted))
-
-
-;; (+)
-;; ;; (take 200 (take-nth 9 sorted))
-
-;; ;; ;; (println "done")
-;; (spit "regexlib-stratified.re" (str/join "\n" (map-indexed (fn [idx {:keys [target state-count transition-count]}]
-;;                                                                      target
-;;                                                                      #_(str/join "," [idx state-count transition-count target]))
-;;                                                                    (take 200 (take-nth 10 sorted)))))
-
-;; (spit "regexlib-stratified-counts.csv" (str/join "\n" (map-indexed (fn [idx {:keys [target state-count transition-count]}]
-;;                                                      target
-;;                                                      (str/join "," [idx state-count transition-count target]))
-;;                                                    (take 200 (take-nth 10 sorted)))))

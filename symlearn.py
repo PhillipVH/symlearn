@@ -15,17 +15,17 @@ def evaluate(args):
     spec_file.close()
 
     if not args.dry:
-        subprocess.run(['bash', 'docker_start_pod.sh', args.name])
+        subprocess.run(['bash', 'docker/docker_start_pod.sh', args.name])
 
 
 def logs(args):
-    subprocess.run(['bash', 'docker_pod_logs.sh', args.name])
+    subprocess.run(['bash', 'docker/docker_pod_logs.sh', args.name])
 
 
 def init(args):
     subprocess.run(['git', 'submodule', 'init'])
     subprocess.run(['git', 'submodule', 'update'])
-    subprocess.run(['bash', 'docker_build_image.sh'])
+    subprocess.run(['bash', 'docker/docker_build_image.sh'])
 
 
 # Create the top-level argument parser
