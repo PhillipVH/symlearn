@@ -663,6 +663,7 @@
 (defn check-equivalence-timed!
   [{:keys [depth target ^SFA candidate timeout-ms]}]
   (install-equivalence-oracle! candidate target depth) ;; don't include compilation time
+  (log/info "Minutes for this check:" (ms->m timeout-ms))
   (let [f (future (check-equivalence! {:depth depth
                                        :target target
                                        :candidate candidate}))
@@ -691,15 +692,31 @@
   [^SFA target ^SFA candidate]
   (.isEquivalentTo target candidate intervals/solver))
 
+(defn ms-to-timeout
+  "Returns the number of milliseconds left"
+  [start now]
+  (let [diff (- now start)
+        minutes (float (/ diff 60000))]
+    (if (>= minutes 10)
+      0
+      (m->ms (- 10 minutes)))))
+
+(defn ms->m
+  [ms]
+  (/ ms 60000))
+
+(defn coastal-emergency-stop
+  []
+  (map kill-pid! (map coastal-pid #{:mem :eqv})))
+
 (defn learn
   "Learn `target` to `depth`."
   [{:keys [target depth-limit timeout-ms oracle] :or {oracle :coastal}}]
   (log/info "Learning" {:target target, :depth depth-limit, :timeout-ms timeout-ms})
 
   ;; install the membership oracle
-  (tufte/p ::install-parser!
-           (reset! mem-queries 0)
-           (install-parser! target))
+  (reset! mem-queries 0)
+  (install-parser! target)
 
   (let [target-sfa (.minimize (intervals/regex->sfa target) intervals/solver)
         equivalence-queries (atom 0)
@@ -714,12 +731,15 @@
                                            (if (> depth max)
                                              depth
                                              max)))
-                        (let [counter-example (if (= :perfect oracle)
-                                                (check-equivalence-perfect target-sfa conjecture)
-                                                (check-equivalence-timed! {:depth depth,
-                                                                          :target target
-                                                                          :candidate conjecture
-                                                                          :timeout-ms timeout-ms}))]
+                        (let [counter-example
+                              (if (= :perfect oracle)
+                                (check-equivalence-perfect target-sfa conjecture)
+                                (check-equivalence-timed!
+                                 {:depth depth,
+                                  :target target
+                                  :candidate conjecture
+                                  :timeout-ms (ms-to-timeout start
+                                                              (System/currentTimeMillis))}))]
                           (cond
                             ;; no counter example, search deeper or yield table
                             (nil? counter-example)
@@ -865,7 +885,8 @@
      (let [[depth timeout-ms] (str/split-lines (slurp "results/benchmark.spec"))
            results (evaluate-benchmark! "results/benchmark.re"
                                         (read-string depth)
-                                        (read-string timeout-ms))]
+                                        (read-string timeout-ms)
+                                        :coastal)]
        (sh/sh "mkdir" "-p" "results")
        (spit "results/results.edn" (pr-str results))
        (log/info "Finished regexlib Evaluation"))))
@@ -904,7 +925,7 @@
   (let [indexed (map-indexed (fn [idx benchmark]
                                (assoc benchmark :target-id idx))
                              benchmarks)
-        header (str/join "," ["TargetID"
+        header (str/join \, ["TargetID"
                               "Model.StateCount"
                               "Model.TransitionCount"
                               "Memb.Queries"
@@ -923,7 +944,7 @@
                       transition-count (.getTransitionCount candidate)
                       target-id (:target-id benchmark)
                       {:keys [mem eqv]} (:queries benchmark)
-                      line (str/join "," [target-id
+                      line (str/join \, [target-id
                                           state-count
                                           transition-count
                                           mem
@@ -944,24 +965,27 @@
 
   (def bench (load-benchmark "regexlib-stratified.re"))
 
+  (nth bench 104)
+
   (def evaluation (future
                     (evaluate! {:target (nth bench 8)
                                 :depth 30
-                                :timeout-ms (m->ms 10)
+                                :timeout-ms (m->ms 2)
                                 :oracle :perfect})))
 
   (future-done? evaluation)
   (future-cancel evaluation)
+  (map kill-pid! (map coastal-pid #{:mem :eqv}))
 
   (pprint evaluation)
 
   (show-sfa (regex->sfa* (nth bench 9)))
   (show-sfa (make-sfa* (:table @evaluation)))
 
-  (map kill-pid! (map coastal-pid #{:mem :eqv}))
+  (coastal-emergency-stop)
 
   (def eval-fullset (future (evaluate-regexlib "regexlib-stratified.re" 30 (m->ms 10) :perfect)))
 
   (def eval-partial-last (future (evaluate-regexlib "rest.re" 30 (m->ms 10) :perfect)))
 
-  (java.util.Collections/binarySearch [0 1 2 3] 8))
+  (java.util.Collections/binarySearch [0 1 2 8] 8 compare))
