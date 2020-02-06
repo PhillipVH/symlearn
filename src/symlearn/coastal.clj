@@ -634,13 +634,15 @@
         paths (map (comp constraints query) (:E table))
         unique-paths (set (map #(map intervals/constraint-set->CharPred %) paths))]
     (let [new-table (add-path-condition table (query counter-example :count))]
-      (if-not (deterministic? new-table)
-        (do
-          (log/info "Table has non-deterministic transitions, applying evidence.")
-          (add-evidence* new-table counter-example))
-        (do
-          (log/info "Table is deterministic, not applying evidence.")
-          new-table)))))
+      (if (= 1 (count unique-evidence))
+        (add-evidence* new-table counter-example)
+        (if-not (deterministic? new-table)
+          (do
+            (log/info "Table has non-deterministic transitions, applying evidence.")
+            (add-evidence* new-table counter-example))
+          (do
+            (log/info "Table is deterministic, not applying evidence.")
+            new-table))))))
 
 ;; evaluation
 
@@ -940,7 +942,7 @@
   (def bench (load-benchmark "regexlib-stratified.re"))
 
   (def evaluation (future
-                    (evaluate! {:target (nth bench 9)
+                    (evaluate! {:target (nth bench 22)
                                 :depth 30
                                 :timeout-ms (m->ms 10)
                                 :oracle :perfect})))
