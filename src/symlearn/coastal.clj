@@ -2,6 +2,7 @@
   (:gen-class)
   (:require [clojure.string :as str]
             [clojure.pprint :refer [pprint]]
+            [clojure.test :refer :all]
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [clojure.java.shell :as shell]
@@ -29,10 +30,13 @@
 (set! *warn-on-reflection* true)
 
 (defonce ^Process coastal-instance nil)
-(defonce current-parser nil)
 
-(def string-config "Regex.xml")
-(def default-parser "")
+(defn m->ms
+  "Returns `m` minutes in milliseconds."
+  [m]
+  (* 1000 60 m))
+
+;; coastal integration
 
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
@@ -97,9 +101,13 @@
   (suffixes [this] "Return the path conditions that are suffixes of `this`. Exludes `this` and epsilon.")
   (prefixes [this] "Return the path conditions that are prefixes of `this`. Exludes `this` and epsilon."))
 
+;; code generation and compilation
+
 (defn compile-parsers!
   "Compile the parsers installed in the Coastal system."
   []
+  (sh/with-sh-dir "coastal"
+    (sh/sh "./gradlew" "clean"))
   (let [coastal-dir (File. "coastal")
         args (into-array ["./gradlew" "compileJava" "--no-daemon"])
         builder (ProcessBuilder. ^"[Ljava.lang.String;" args)]
@@ -107,7 +115,6 @@
     (let [compiler (.start builder)]
       (while (.isAlive compiler))
       ::ok)))
-
 
 (defn compile-equivalence-oracle!
   []
@@ -151,8 +158,7 @@
               (let [transition ^SFAInputMove (.next transitions-iter)
                     zi-guard ^CharPred (.guard transition)
                     zi-intervals (.intervals zi-guard)
-                    interval-size (.size zi-intervals)
-                    ]
+                    interval-size (.size zi-intervals)]
                 (.append java-src "\t\t\t\tif (")
                 (doseq [id (range 0 interval-size)]
                   (let [
@@ -225,20 +231,7 @@
   (log/info "Compiling Equivalence Oracle:" {:target target, :depth depth})
   (compile-equivalence-oracle!))
 
-(defn check-equivalence!
-  [{:keys [depth target ^SFA candidate]}]
-  (log/info "Starting Equivalence Check:" {:target target, :depth depth})
-  (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
-        ce (re-seq #"<<Counter Example: (.*)>>" coastal-log)]
-    (log/info coastal-log)
-    (log/info "Finished Equivalence Check:" {:target target, :depth depth})
-
-    (when ce
-      (let [ce (map second ce)
-
-            #_chars #_(map #(str/split % #",") ce)]
-        #_(set (map #(apply str %) (map #(map identity #_str/trim %) chars)))
-        (set ce)))))
+;; process management
 
 (defn stop!
   "Stop a Coastal process running in `coastal`."
@@ -265,25 +258,6 @@
   [pid]
   (sh/sh "kill" "-9" pid))
 
-(defn check-equivalence-timed!
-  [{:keys [depth target ^SFA candidate timeout-ms]}]
-  (install-equivalence-oracle! candidate target depth) ;; don't include compilation time
-  (let [f (future (check-equivalence! {:depth depth
-                                       :target target
-                                       :candidate candidate}))
-        ce (deref f
-                  timeout-ms
-                  ::timeout)]
-    (if (= ce ::timeout)
-      (do
-        (log/trace "Equivalence Check for" target "timed out after" timeout-ms "ms")
-        (future-cancel f)
-        (kill-pid! (coastal-pid :eqv))
-        ::timeout)
-      (do
-        (log/trace "Target" target "learnt successfully")
-        ce))))
-
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
   []
@@ -305,7 +279,6 @@
   [regex]
   (if coastal-instance
     (stop!))
-  (alter-var-root #'current-parser (constantly regex))
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (compile-parsers!)
@@ -314,14 +287,7 @@
       (refine-string "")) ;; flush the default run from the membership oracle
     ::ok))
 
-(defn running?
-  []
-  (and coastal-instance
-       (.isAlive coastal-instance)))
-
-(defn active-parser
-  []
-  current-parser)
+;; table manipulation
 
 (declare query)
 
@@ -337,27 +303,27 @@
     (map query (map #(str/join (map char %)) (map z3/witness (prefixes* (:constraints this)))))))
 
 (def mem-queries (atom 0))
+(def newest-table (atom nil))
 
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's
   acceptance status."
-  [string]
-  (if-not coastal-instance
-    (log/warn "No membership oracle registered"))
-  (swap! mem-queries inc)
-  (let [[accepted path] (refine-string string)
-        constraints (->> path
-                         path->constraints
-                         (map (fn [[idx op guard]]
-                                [(Integer/parseInt idx) op (Integer/parseInt guard)]))
-                         (sort-by first)
-                         (partition-by first)
-                         (map (fn [constraints] (vec (map #(vec (drop 1 %)) constraints))))
-                         (map set)
-                         (vec))]
-    (->PathCondition accepted constraints)))
-
-;; create and fill the table
+  ([string count?]
+   (when count
+     (swap! mem-queries inc))
+   (query string))
+  ([string]
+   (let [[accepted path] (refine-string string)
+         constraints (->> path
+                          path->constraints
+                          (map (fn [[idx op guard]]
+                                 [(Integer/parseInt idx) op (Integer/parseInt guard)]))
+                          (sort-by first)
+                          (partition-by first)
+                          (map (fn [constraints] (vec (map #(vec (drop 1 %)) constraints))))
+                          (map set)
+                          (vec))]
+     (->PathCondition accepted constraints))))
 
 (defn make-table
   "Table"
@@ -374,7 +340,7 @@
     (if (= row-length evidence-count)
       row
       (let [new-row (reduce (fn [row e]
-                              (conj row (accepted? (query (str (witness path) e)))))
+                              (conj row (accepted? (query (str (witness path) e) :count))))
                             row
                             (drop row-length evidence))]
         new-row))))
@@ -390,8 +356,6 @@
         (assoc :R (reduce
                    (fn [new-r [path row]] (assoc new-r path (fill-row [path row] E)))
                    {}, R)))))
-
-;; closing the table
 
 (defn open-entries
   "Return a entries from R in `table` that do not appear in S. Return nil
@@ -421,20 +385,33 @@
           (update :S #(assoc % promotee row))))
     table))
 
+(defn close-totally
+  "Keep closing a table until it is closed."
+  [table]
+  (loop [table table]
+    (if (closed? table)
+      table
+      (recur (close table)))))
+
 (defn add-path-condition
   "Table -> PathCondition -> Table"
   [table {:keys [accepted] :as path}]
-  (let [prefixes (prefixes path)
-        table-with-ce (update table :R #(assoc % path [accepted]))
-        table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
-                                      (update table* :R #(assoc % path [accepted])))
-                                    table-with-ce
-                                    prefixes)
-        filled-table (fill table-with-prefixes)]
-    (loop [table filled-table]
-      (if (closed? table)
-        table
-        (recur (close table))))))
+  (if (get table path)
+    (log/error "Duplicate entry to table:" path)
+    (let [prefixes (prefixes path)
+          table-with-ce (update table :R #(assoc % path [accepted]))
+          table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
+                                        (update table* :R #(assoc % path [accepted])))
+                                      table-with-ce
+                                      prefixes)
+          filled-table (fill table-with-prefixes)]
+      (close-totally filled-table))))
+
+(defn make-evidence
+  "String -> [String]"
+  [word]
+  (let [ns (range 0 (count word))]
+    (map #(apply str (drop % word)) ns)))
 
 (defn add-evidence
   "Table -> Evidence -> Table"
@@ -442,40 +419,17 @@
   (let [new-table (-> table
                       (update :E #(conj % evidence))
                       fill)]
-    (loop [table new-table]
-      (if (closed? table)
-        table
-        (recur (close table))))))
+    (close-totally new-table)))
 
-;; adding new information to the table
+(defn add-evidence*
+  "Like `add-evidence`, but adds all the suffixes to E" ;; TODO Better suffix selection
+  [table counter-example]
+  (reduce (fn [table evidence]
+            (add-evidence table evidence))
+          table
+          (make-evidence counter-example)))
 
-;; (defn add-path-condition
-;;   "Table -> PathCondition -> Table"
-;;   [table {:keys [accepted] :as path}]
-;;   (let [prefixes (prefixes path)
-;;         table-with-ce (update table :R #(assoc % path [accepted]))
-;;         table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
-;;                                       (update table* :R #(assoc % path [accepted])))
-;;                                     table-with-ce
-;;                                     prefixes)
-;;         filled-table (fill table-with-prefixes)]
-;;     (loop [table filled-table]
-;;       (if (closed? table)
-;;         table
-;;         (recur (close table))))))
-
-;; (defn add-evidence
-;;   "Table -> Evidence -> Table"
-;;   [table evidence]
-;;   (let [new-table (-> table
-;;                       (update :E #(conj % evidence))
-;;                       fill)]
-;;     (loop [table new-table]
-;;       (if (closed? table)
-;;         table
-;;         (recur (close table))))))
-
-;; make an sfa from a table
+;; sfa creation
 
 (defn constraint-set->fn
   "[Constraint] -> (Char -> Boolean)"
@@ -618,20 +572,60 @@
 (defn make-sfa*
   [table]
   (let [sfa (make-sfa table)]
-    (.minimize ^SFA sfa intervals/solver)))
-
-(defn make-evidence
-  "String -> [String]"
-  [word]
-  (let [ns (range 0 (count word))]
-    (map #(apply str (drop % word)) ns)))
-
-(comment (make-evidence "abc"))
+    (.minimize ^SFA sfa intervals/solver))) ;; TODO This can throw org.sat4j.specs.TimeoutException
 
 (defn ce->pred
   [ce]
   (let [path-condition (constraints (query ce))]
     (map intervals/constraint-set->CharPred path-condition)))
+
+(defn predicate-transitions
+  [table]
+  (let [state-map (state-map table)
+        transitions (set (compute-transitions table))
+        relabeled (set (map (fn [{:keys [from guard to]}]
+                              {:from (get state-map from)
+                               :to (get state-map to)
+                               :guard (intervals/constraint-set->CharPred guard)})
+                           transitions))]
+    relabeled))
+
+(defn intersection-of-transitions
+  [transitions]
+  (let [guards (map :guard transitions)
+        empty-intersection (CharPred/of (ImmutableList/of))
+        intersections (for [guard guards] ;; for every transition out of q_i
+                        (flatten (map (fn [other-guard]
+                                        (if (identical? guard other-guard)
+                                          empty-intersection
+                                          (intervals/intersection guard other-guard)))
+                                      guards)))
+        all (set (flatten intersections))]
+    (reduce (fn [pred intersection]
+              (intervals/union pred intersection))
+            empty-intersection
+            all)))
+
+(deftest intersections
+  (let [transitions [{:guard (intervals/make-interval \a \b)}
+                     {:guard (intervals/make-interval \b \c)}]
+
+        empty-intersection (CharPred/of (ImmutableList/of))
+        intersection (intersection-of-transitions transitions)]
+    (is (= (intervals/make-interval \b \b) intersection))
+    (is (= empty-intersection (intersection-of-transitions [{:guard (intervals/make-interval \a \b)}])))
+    (is (= empty-intersection (intersection-of-transitions [])))))
+
+(defn deterministic?
+  "Check for any outgoing transitions that have non-empty intersection."
+  [table]
+  (let [grouped-transitions (group-by :from (predicate-transitions table))
+        empty-intersection (CharPred/of (ImmutableList/of))
+        intersection-per-state (map (fn [[_ transitions]]
+                                      (intersection-of-transitions transitions))
+                                    grouped-transitions)
+        non-empty (filter #(not= % empty-intersection) intersection-per-state)]
+    (= 0 (count non-empty))))
 
 (defn process-counter-example
   "Table -> String -> Table"
@@ -639,47 +633,58 @@
   (let [unique-evidence (set (:E table))
         paths (map (comp constraints query) (:E table))
         unique-paths (set (map #(map intervals/constraint-set->CharPred %) paths))]
-    (let [new-table (add-path-condition table (query counter-example))
-          table-with-evidence (reduce (fn [table evidence]
-                                        #_(let [with-evidence (add-evidence table evidence)]
-                                          (if-not (closed? with-evidence)
-                                            (close with-evidence)
-                                            table))
-                                        (if-not (contains? unique-paths
-                                                           (ce->pred evidence))
-                                            #_(contains? unique-evidence evidence)
-                                          (add-evidence table evidence)
-                                          table))
-                                      new-table
-                                      (make-evidence counter-example))]
-      table-with-evidence)))
+    (let [new-table (add-path-condition table (query counter-example :count))]
+      (if-not (deterministic? new-table)
+        (do
+          (log/info "Table has non-deterministic transitions, applying evidence.")
+          (add-evidence* new-table counter-example))
+        (do
+          (log/info "Table is deterministic, not applying evidence.")
+          new-table)))))
 
-(defonce target-parser (atom ""))
+;; evaluation
 
-(defn equivalent?
-  [^SFA target ^SFA candidate]
-  (.isEquivalentTo target candidate intervals/solver))
+(defn check-equivalence!
+  [{:keys [depth target ^SFA candidate]}]
+  (log/info "Starting Equivalence Check:" {:target target, :depth depth})
+  (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
+        ce (re-seq #"<<Counter Example: (.*)>>" coastal-log)]
+    (log/info coastal-log)
+    (log/info "Finished Equivalence Check:" {:target target, :depth depth})
+    (when ce
+      (let [ce (map second ce)]
+        (set ce)))))
 
-(defn m->ms
-  "Returns `m` minutes in milliseconds."
-  [m]
-  (* 1000 60 m))
-
-(defn rank-counter-examples
-  [counter-examples]
-  counter-examples
-  #_(set (take 1 counter-examples))
-  #_(let [path-conditions (map query counter-examples)
-        unique-paths (group-by constraints path-conditions)
-        witnesses (map witness (mapcat #(take 1 %) (vals unique-paths)))]
-      witnesses))
+(defn check-equivalence-timed!
+  [{:keys [depth target ^SFA candidate timeout-ms]}]
+  (install-equivalence-oracle! candidate target depth) ;; don't include compilation time
+  (let [f (future (check-equivalence! {:depth depth
+                                       :target target
+                                       :candidate candidate}))
+        ce (deref f
+                  timeout-ms
+                  ::timeout)]
+    (if (= ce ::timeout)
+      (do
+        (log/trace "Equivalence Check for" target "timed out after" timeout-ms "ms")
+        (future-cancel f)
+        (kill-pid! (coastal-pid :eqv))
+        ::timeout)
+      (do
+        (log/trace "Target" target "learnt successfully")
+        ce))))
 
 (defn check-equivalence-perfect
+  "Use symbolicautomata to check our candidate against a perfect target."
   [^SFA target ^SFA candidate]
   (let [check (SFA/areEquivalentPlusWitness target candidate intervals/solver (m->ms 10))
         equivalent? (.getFirst check)]
     (when-not equivalent?
       #{(str/join "" (.getSecond check))})))
+
+(defn equivalent?
+  [^SFA target ^SFA candidate]
+  (.isEquivalentTo target candidate intervals/solver))
 
 (defn learn
   "Learn `target` to `depth`."
@@ -688,17 +693,18 @@
 
   ;; install the membership oracle
   (tufte/p ::install-parser!
-           (reset! target-parser target)
            (reset! mem-queries 0)
            (install-parser! target))
 
   (let [target-sfa (.minimize (intervals/regex->sfa target) intervals/solver)
         equivalence-queries (atom 0)
         start (System/currentTimeMillis)
-        max-depth (atom 1)]
+        max-depth (atom 1)
+        cached-ces (atom #{})]
     (loop [table (make-table)]
       (let [conjecture (make-sfa* table)
             new-table (loop [depth 1]
+                        ;; update the max depth
                         (swap! max-depth (fn [max]
                                            (if (> depth max)
                                              depth
@@ -723,14 +729,15 @@
                             ;; found a counter example, process and return new table
                             :else
                             (do
-                              (log/info "Applying counter example(s):" counter-example)
+                              (log/info "Got counter example(s):" counter-example)
                               (swap! equivalence-queries inc)
                               (reduce (fn [new-table ce]
-                                        (log/trace "Applying" ce)
+                                        (if (contains? @cached-ces (ce->pred ce))
+                                          (log/error "Duplicate CE:" ce)
+                                          (swap! cached-ces conj (ce->pred ce)))
                                         (process-counter-example new-table ce))
                                       table
-                                      (rank-counter-examples counter-example))))))]
-
+                                      counter-example)))))]
         (cond
           ;; equivalence check timed out
           (= ::timeout new-table)
@@ -756,7 +763,7 @@
              :status :complete
              :equivalence :total})
 
-          ;; the candidate SFA is equivalent to a bound
+          ;; the candidate SFA is equivalent to a bounded
           (= table new-table)
           (do
             (log/info "Bounded Equivalence:" {:depth depth-limit})
@@ -784,20 +791,11 @@
                  :status :incomplete
                  :equivalence :timeout})
               (do
-                (log/info "Beginning next learning cycle (time left:" (- 10 minutes)"minutes)")
-                (pprint new-table)
+                (log/info "Beginning next learning cycle (time left:" (float (- 10 minutes))"minutes)")
                 (recur new-table)))))))))
 
-(defn load-benchmark
-  [^String filename]
-  (for [node (RegexParserProvider/parse (FileReader. filename))]
-    (let [solver intervals/solver]
-      (try
-        (let [sfa (RegexConverter/toSFA node solver)]
-          (.minimize sfa solver))
-        (catch UnsupportedOperationException e (str (.getMessage e)))))))
-
-(defn timeout [timeout-ms callback]
+(defn timeout
+  [timeout-ms callback]
   (let [fut (future (callback))
         ret (deref fut timeout-ms ::timed-out)]
     (when (= ret ::timed-out)
@@ -811,13 +809,14 @@
   [target]
   (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
 
+;; evaluation
 
 (defn evaluate!
   "A wrapper around `learn` that insulates us from some of the harsh realities of
   evaluation. If `target` causes the underlying `RegexParserProvider` to crash, or
   the provider takes too long to produce a parser. Calls `learn` as the last step,
   given no error state."
-  [{:keys [target depth timeout-ms]}]
+  [{:keys [target depth timeout-ms oracle] :or {oracle :coastal}}]
   (let [?sfa (regex->sfa* target)]
     (cond
       (= ::timed-out ?sfa)
@@ -831,18 +830,20 @@
       :else
       (-> (learn {:target target,
                   :depth-limit depth
-                  :timeout-ms timeout-ms})
+                  :timeout-ms timeout-ms
+                  :oracle oracle})
           (assoc :target target)))))
 
 (defn evaluate-benchmark!
   "Evaluate a given benchmark file, learning to `max-depth`, with a timeout
   on each equivalence check of `timeout-ms`."
-  [benchmark max-depth timeout-ms]
+  [benchmark max-depth timeout-ms oracle]
   (let [regexes (str/split-lines (slurp benchmark))
         results (reduce (fn [results target]
                           (let [evaluation (evaluate! {:target target
                                                        :depth max-depth
-                                                       :timeout-ms timeout-ms})
+                                                       :timeout-ms timeout-ms
+                                                       :oracle oracle})
                                 new-results (conj results evaluation)]
                             (pprint evaluation)
                             (Thread/sleep 5000) ;; rest a bit between experiments
@@ -851,110 +852,6 @@
                         []
                         regexes)]
     results))
-
-(comment (pprint (evaluate-benchmark! "regexlib-clean-10.re" 1 (m->ms 2))))
-
-;; integration tests
-
-(defn membership-integration-tests
-  "Test the integration between the learner and the membership oracle."
-  []
-  (log/info "Testing Membership Oracle")
-  (install-parser! "abc|g")
-  (let [should-accept (query "abc")
-        should-reject (query "ggwp")]
-    (assert (:accepted should-accept))
-    (assert (not (:accepted should-reject))))
-
-  (install-parser! "ggwp?")
-  (let [should-reject (query "abc")
-        should-accept (query "ggwp")]
-    (assert (not (:accepted should-reject)))
-    (assert (:accepted should-accept)))
-
-  (let [results (for [i (range 1000)]
-                  (query (str i)))]
-    (assert (= 1000 (count results))))
-  (log/info "All Membership Tests Pass"))
-
-(defn equivalence-integration-tests
-  "Test the integration between the learner and the equivalence oracle."
-  []
-  (log/info "Testing Equivalence Oracle")
-  (let [ce (check-equivalence-timed! {:depth 2
-                                      :target "gz"
-                                      :candidate (intervals/regex->sfa "g")
-                                      :timeout-ms (m->ms 4)})]
-    (assert (= #{"gz"} ce)))
-
-  (let [ce (check-equivalence-timed! {:depth 2
-                                      :target "g(z|a)"
-                                      :candidate (intervals/regex->sfa "g")
-                                      :timeout-ms (m->ms 4)})]
-    (assert (= #{"gz" "ga"} ce)))
-
-  (let [ce (check-equivalence-timed! {:depth 2
-                                      :target "g"
-                                      :candidate (intervals/regex->sfa "ga")
-                                      :timeout-ms (* 1000 2)})]
-    (assert (= ::timeout ce)))
-
-  (let [ce (check-equivalence-timed! {:depth 2
-                                      :target "g(z|a)"
-                                      :candidate (intervals/regex->sfa "g")
-                                      :timeout-ms (m->ms 4)})]
-    (assert (= #{"gz" "ga"} ce)))
-  (log/info "All Equivalence Tests Pass"))
-
-(defn learner-integration-tests
-  []
-  (log/info "Testing Learner")
-  (let [{:keys [table queries time status equivalence]} (learn {:target "b|aa"
-                                                                :depth-limit 1
-                                                                :timeout-ms (m->ms 30)})
-        conjecture (make-sfa* table)
-        bounded-target (intervals/regex->sfa "b")
-        total-target (intervals/regex->sfa "b|aa")]
-    (assert (equivalent? bounded-target conjecture))
-    (assert (not (equivalent? total-target conjecture)))
-    (assert (= :complete status))
-    (assert (= :bounded equivalence)))
-
-  (let [{:keys [table queries time status equivalence]} (learn {:target "[^\"]+"
-                                                                :depth-limit 2
-                                                                :timeout-ms (m->ms 30)})
-        target (intervals/regex->sfa "[^\"]+")
-        conjecture (make-sfa* table)]
-    (assert (equivalent? target conjecture))
-    (assert (= :complete status))
-    (assert (= :total equivalence)))
-
-  (let [{:keys [table queries time status equivalence]} (learn {:target "[^\"]+"
-                                                                :depth-limit 2
-                                                                :timeout-ms  100})
-        target (intervals/regex->sfa "[^\"]+")
-        conjecture (make-sfa* table)]
-    (assert (not (equivalent? target conjecture)))
-    (assert (= :incomplete status))
-    (assert (= :timeout equivalence)))
-  (log/info "All Learner Tests Pass"))
-
-(defn regex->sfa*-tests
-  []
-  (assert (= ::timed-out (regex->sfa* "\\w{5,255}")))
-  (assert (= ::unsupported-regex (regex->sfa* "\\p{N}]")))
-  (assert (equivalent? (intervals/regex->sfa "b")
-                       (regex->sfa* "b"))))
-
- (defn integration-tests
-   "Checks integration between the learner and the equivalence + membership oracles."
-   []
-   (log/info "Running Integration Tests")
-   (membership-integration-tests)
-   (equivalence-integration-tests)
-   (learner-integration-tests)
-   (regex->sfa*-tests)
-   (log/info "All Integration Tests Pass"))
 
 (defn evaluate-regexlib
   ([]
@@ -967,22 +864,18 @@
        (sh/sh "mkdir" "-p" "results")
        (spit "results/results.edn" (pr-str results))
        (log/info "Finished regexlib Evaluation"))))
-  ([file depth timeout-ms]
+  ([file depth timeout-ms oracle]
    (do
      (log/info "Starting regexlib Evaluation")
      (let [results (evaluate-benchmark! file
                                         depth
-                                        timeout-ms)]
+                                        timeout-ms
+                                        oracle)]
        (sh/sh "mkdir" "-p" "results")
        (spit "results/results.edn" (pr-str results))
        (log/info "Finished regexlib Evaluation")))))
 
-(defn -main
-  [& args]
-  #_(integration-tests)
-  (evaluate-regexlib)
-  (stop!)
-  (shutdown-agents))
+;; reporting
 
 (defn escape-string
   [string]
@@ -994,6 +887,12 @@
                 (str string (nth chars idx))))
             ""
             (range (count string)))))
+
+(defn load-benchmark
+  [filename]
+  (-> filename
+      slurp
+      str/split-lines))
 
 (defn benchmarks->csv
   [benchmarks]
@@ -1030,5 +929,31 @@
             header
             indexed)))
 
-(comment (def bench (read-string (slurp "results/results-depth4.edn"))))
-(comment (spit "benchmark.csv" (benchmarks->csv bench)))
+(defn -main
+  [& args]
+  (evaluate-regexlib)
+  (stop!)
+  (shutdown-agents))
+
+(comment
+
+  (def bench (load-benchmark "regexlib-stratified.re"))
+
+  (def evaluation (future
+                    (evaluate! {:target (nth bench 9)
+                                :depth 30
+                                :timeout-ms (m->ms 10)
+                                :oracle :perfect})))
+
+  (pprint evaluation)
+
+  (show-sfa (regex->sfa* (nth bench 9)))
+  (show-sfa (make-sfa* (:table @evaluation)))
+
+  (map kill-pid! (map coastal-pid #{:mem :eqv}))
+
+  (def eval-fullset (future (evaluate-regexlib "regexlib-stratified.re" 30 (m->ms 10) :perfect)))
+
+  (def eval-partial-last (future (evaluate-regexlib "rest.re" 30 (m->ms 10) :perfect)))
+
+  (java.util.Collections/binarySearch [0 1 2 3] 8))
