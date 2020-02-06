@@ -30,10 +30,25 @@
 
 (defonce ^Process coastal-instance nil)
 
+;; time utilities
+
 (defn m->ms
   "Returns `m` minutes in milliseconds."
   [m]
   (* 1000 60 m))
+
+(defn ms->m
+  [ms]
+  (/ ms 60000))
+
+(defn ms-to-timeout
+  "Returns the number of milliseconds left"
+  [start now]
+  (let [diff (- now start)
+        minutes (float (/ diff 60000))]
+    (if (>= minutes 10)
+      0
+      (m->ms (- 10 minutes)))))
 
 ;; coastal integration
 
@@ -62,6 +77,7 @@
     (wcar* (car/del :refined))
     (log/trace "Refinement received:" accepted)
     [(read-string accepted) path-condition]))
+
 
 (defn path->constraints
   "Return a seq of constraints extracted from `path-condition`, each of
@@ -256,6 +272,10 @@
 (defn kill-pid!
   [pid]
   (sh/sh "kill" "-9" pid))
+
+(defn coastal-emergency-stop
+  []
+  (map kill-pid! (map coastal-pid #{:mem :eqv})))
 
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
@@ -692,22 +712,7 @@
   [^SFA target ^SFA candidate]
   (.isEquivalentTo target candidate intervals/solver))
 
-(defn ms-to-timeout
-  "Returns the number of milliseconds left"
-  [start now]
-  (let [diff (- now start)
-        minutes (float (/ diff 60000))]
-    (if (>= minutes 10)
-      0
-      (m->ms (- 10 minutes)))))
 
-(defn ms->m
-  [ms]
-  (/ ms 60000))
-
-(defn coastal-emergency-stop
-  []
-  (map kill-pid! (map coastal-pid #{:mem :eqv})))
 
 (defn learn
   "Learn `target` to `depth`."
