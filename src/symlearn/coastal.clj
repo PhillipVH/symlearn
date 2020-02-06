@@ -8,7 +8,6 @@
             [clojure.java.shell :as shell]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
-            [clojure.walk :as walk]
             [clojure.set :as set]
             [taoensso.carmine :as car]
             [taoensso.tufte :as tufte]
@@ -493,7 +492,6 @@
                                        guard-fn (constraint-set->fn (first guard))]
                                    {:from prefix-row
                                     :guard guard
-                                    ;; :guard-fn guard-fn
                                     :to row})) follow))
                     transitions))
                 []
@@ -579,7 +577,7 @@
   (let [path-condition (constraints (query ce))]
     (map intervals/constraint-set->CharPred path-condition)))
 
-(defn predicate-transitions
+(defn- predicate-transitions
   [table]
   (let [state-map (state-map table)
         transitions (set (compute-transitions table))
@@ -590,7 +588,7 @@
                            transitions))]
     relabeled))
 
-(defn intersection-of-transitions
+(defn- intersection-of-transitions
   [transitions]
   (let [guards (map :guard transitions)
         empty-intersection (CharPred/of (ImmutableList/of))
@@ -612,9 +610,12 @@
 
         empty-intersection (CharPred/of (ImmutableList/of))
         intersection (intersection-of-transitions transitions)]
-    (is (= (intervals/make-interval \b \b) intersection))
-    (is (= empty-intersection (intersection-of-transitions [{:guard (intervals/make-interval \a \b)}])))
-    (is (= empty-intersection (intersection-of-transitions [])))))
+    (is (= (intervals/make-interval \b \b)
+           intersection))
+    (is (= empty-intersection
+           (intersection-of-transitions [{:guard (intervals/make-interval \a \b)}])))
+    (is (= empty-intersection
+           (intersection-of-transitions [])))))
 
 (defn deterministic?
   "Check for any outgoing transitions that have non-empty intersection."
@@ -649,7 +650,9 @@
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
   (log/info "Starting Equivalence Check:" {:target target, :depth depth})
-  (let [coastal-log (:out (sh/sh "./coastal/bin/coastal" "learning/Example.properties" :dir "eqv-coastal-new/build/classes/java/main"))
+  (let [coastal-log (:out (sh/sh "./coastal/bin/coastal"
+                                 "learning/Example.properties"
+                                 :dir "eqv-coastal-new/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: (.*)>>" coastal-log)]
     (log/info coastal-log)
     (log/info "Finished Equivalence Check:" {:target target, :depth depth})
@@ -942,10 +945,13 @@
   (def bench (load-benchmark "regexlib-stratified.re"))
 
   (def evaluation (future
-                    (evaluate! {:target (nth bench 22)
+                    (evaluate! {:target (nth bench 8)
                                 :depth 30
                                 :timeout-ms (m->ms 10)
                                 :oracle :perfect})))
+
+  (future-done? evaluation)
+  (future-cancel evaluation)
 
   (pprint evaluation)
 

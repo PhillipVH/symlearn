@@ -32,4 +32,5 @@
                    "symbolicautomata/SVPABenchmark-0.0.1-SNAPSHOT.jar"
                    "symbolicautomata/Parsers-1.0.jar"
                    "symbolicautomata/javacup-11c.jar"]
+  :jvm-opts ["-Xms4g" "-Xmx8g"]
   :profiles {:uberjar {:aot :all}})
