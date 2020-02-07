@@ -824,7 +824,7 @@
           (let [now (System/currentTimeMillis)
                 diff (- now start)
                 minutes (/ diff 60000)]
-            (if (> minutes 10)
+            (if (> minutes (ms->m timeout-ms))
               (do
                 (log/info "Timeout (Global)")
                 {:table table
@@ -835,7 +835,7 @@
                  :status :incomplete
                  :equivalence :timeout})
               (do
-                (log/info "Beginning next learning cycle (time left:" (float (- 10 minutes))"minutes)")
+                (log/info "Beginning next learning cycle (time left:" (float (- (ms->m timeout-ms) minutes))"minutes)")
                 (recur new-table)))))))))
 
 
