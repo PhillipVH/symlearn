@@ -42,13 +42,13 @@
   (/ ms 60000))
 
 (defn ms-to-timeout
-  "Returns the number of milliseconds left"
-  [start now]
+  "Returns the number of milliseconds left between `now` and `minutes-limit`."
+  [start now minutes-limit]
   (let [diff (- now start)
         minutes (float (/ diff 60000))]
-    (if (>= minutes 10)
+    (if (>= minutes minutes-limit)
       0
-      (m->ms (- 10 minutes)))))
+      (m->ms (- minutes-limit minutes)))))
 
 ;; coastal integration
 
@@ -757,7 +757,8 @@
                                   :target target
                                   :candidate conjecture
                                   :timeout-ms (ms-to-timeout start
-                                                             (System/currentTimeMillis))}))]
+                                                             (System/currentTimeMillis)
+                                                             (ms->m timeout-ms))}))]
                           (cond
                             ;; no counter example, search deeper or yield table
                             (nil? counter-example)
