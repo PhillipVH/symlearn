@@ -726,8 +726,6 @@
   [^SFA target ^SFA candidate]
   (.isEquivalentTo target candidate intervals/solver))
 
-
-
 (defn learn
   "Learn `target` to `depth`."
   [{:keys [target depth-limit timeout-ms oracle] :or {oracle :coastal}}]
@@ -735,69 +733,99 @@
 
   ;; install the membership oracle
   (reset! mem-queries 0)
+  (install-parser! target)
 
-  (let [installed? (timeout (* 1000 30) #(install-parser! target))]
-    (if (= ::timed-out installed?)
-      ;; parser not installed, return a timeout
-      (do
-        (log/error "Parser Installation Timed Out")
-        (coastal-emergency-stop)
-        (Thread/sleep 5000)
-        {:target target
-         :status :incomplete
-         :equivalence :parser-timeout})
+  ;; parser installed, begin learning
+  (let [target-sfa (.minimize (intervals/regex->sfa target) intervals/solver)
+        equivalence-queries (atom 0)
+        start (System/currentTimeMillis)
+        max-depth (atom 1)
+        cached-ces (atom #{})]
+    (loop [table (make-table)]
+      (let [conjecture (make-sfa* table)
+            new-table (loop [depth 1]
+                        ;; update the max depth
+                        (swap! max-depth (fn [max]
+                                           (if (> depth max)
+                                             depth
+                                             max)))
+                        (let [counter-example
+                              (if (= :perfect oracle)
+                                (check-equivalence-perfect target-sfa conjecture)
+                                (check-equivalence-timed!
+                                 {:depth depth,
+                                  :target target
+                                  :candidate conjecture
+                                  :timeout-ms (ms-to-timeout start
+                                                             (System/currentTimeMillis))}))]
+                          (cond
+                            ;; no counter example, search deeper or yield table
+                            (nil? counter-example)
+                            (if (< depth depth-limit)
+                              (recur (inc depth))
+                              table)
 
-      ;; parser installed, begin learning
-      (let [target-sfa (.minimize (intervals/regex->sfa target) intervals/solver)
-            equivalence-queries (atom 0)
-            start (System/currentTimeMillis)
-            max-depth (atom 1)
-            cached-ces (atom #{})]
-        (loop [table (make-table)]
-          (let [conjecture (make-sfa* table)
-                new-table (loop [depth 1]
-                            ;; update the max depth
-                            (swap! max-depth (fn [max]
-                                               (if (> depth max)
-                                                 depth
-                                                 max)))
-                            (let [counter-example
-                                  (if (= :perfect oracle)
-                                    (check-equivalence-perfect target-sfa conjecture)
-                                    (check-equivalence-timed!
-                                     {:depth depth,
-                                      :target target
-                                      :candidate conjecture
-                                      :timeout-ms (ms-to-timeout start
-                                                                 (System/currentTimeMillis))}))]
-                              (cond
-                                ;; no counter example, search deeper or yield table
-                                (nil? counter-example)
-                                (if (< depth depth-limit)
-                                  (recur (inc depth))
-                                  table)
+                            ;; equivalence check timed out
+                            (= counter-example ::timeout)
+                            ::timeout
 
-                                ;; equivalence check timed out
-                                (= counter-example ::timeout)
-                                ::timeout
+                            ;; found a counter example, process and return new table
+                            :else
+                            (do
+                              (log/info "Got counter example(s):" counter-example)
+                              (swap! equivalence-queries inc)
+                              (reduce (fn [new-table ce]
+                                        (if (contains? @cached-ces (ce->pred ce))
+                                          (log/error "Duplicate CE:" ce)
+                                          (swap! cached-ces conj (ce->pred ce)))
+                                        (process-counter-example new-table ce))
+                                      table
+                                      counter-example)))))]
+        (cond
+          ;; equivalence check timed out
+          (= ::timeout new-table)
+          (do
+            (log/info "Timeout")
+            {:table table
+             :queries {:eqv @equivalence-queries
+                       :mem @mem-queries
+                       :max-eqv-depth @max-depth}
+             :time (- (System/currentTimeMillis) start)
+             :status :incomplete
+             :equivalence :timeout})
 
-                                ;; found a counter example, process and return new table
-                                :else
-                                (do
-                                  (log/info "Got counter example(s):" counter-example)
-                                  (swap! equivalence-queries inc)
-                                  (reduce (fn [new-table ce]
-                                            (if (contains? @cached-ces (ce->pred ce))
-                                              (log/error "Duplicate CE:" ce)
-                                              (swap! cached-ces conj (ce->pred ce)))
-                                            (process-counter-example new-table ce))
-                                          table
-                                          counter-example)))))]
-            (cond
-              ;; equivalence check timed out
-              (= ::timeout new-table)
+          ;; the two SFAs are entirely equivalent
+          (equivalent? target-sfa (make-sfa* new-table))
+          (do
+            (log/info "Total Equivalence")
+            {:table new-table
+             :queries {:eqv @equivalence-queries
+                       :mem @mem-queries
+                       :max-eqv-depth @max-depth}
+             :time (- (System/currentTimeMillis) start)
+             :status :complete
+             :equivalence :total})
+
+          ;; the candidate SFA is equivalent to a bounded
+          (= table new-table)
+          (do
+            (log/info "Bounded Equivalence:" {:depth depth-limit})
+            {:table new-table
+             :queries {:eqv @equivalence-queries
+                       :mem @mem-queries
+                       :max-eqv-depth @max-depth}
+             :time (- (System/currentTimeMillis) start)
+             :status :complete
+             :equivalence :bounded})
+
+          ;; continue learning
+          :else
+          (let [now (System/currentTimeMillis)
+                diff (- now start)
+                minutes (/ diff 60000)]
+            (if (> minutes 10)
               (do
-                (log/info "Timeout")
+                (log/info "Timeout (Global)")
                 {:table table
                  :queries {:eqv @equivalence-queries
                            :mem @mem-queries
@@ -805,62 +833,22 @@
                  :time (- (System/currentTimeMillis) start)
                  :status :incomplete
                  :equivalence :timeout})
-
-              ;; the two SFAs are entirely equivalent
-              (equivalent? target-sfa (make-sfa* new-table))
               (do
-                (log/info "Total Equivalence")
-                {:table new-table
-                 :queries {:eqv @equivalence-queries
-                           :mem @mem-queries
-                           :max-eqv-depth @max-depth}
-                 :time (- (System/currentTimeMillis) start)
-                 :status :complete
-                 :equivalence :total})
-
-              ;; the candidate SFA is equivalent to a bounded
-              (= table new-table)
-              (do
-                (log/info "Bounded Equivalence:" {:depth depth-limit})
-                {:table new-table
-                 :queries {:eqv @equivalence-queries
-                           :mem @mem-queries
-                           :max-eqv-depth @max-depth}
-                 :time (- (System/currentTimeMillis) start)
-                 :status :complete
-                 :equivalence :bounded})
-
-              ;; continue learning
-              :else
-              (let [now (System/currentTimeMillis)
-                    diff (- now start)
-                    minutes (/ diff 60000)]
-                (if (> minutes 10)
-                  (do
-                    (log/info "Timeout (Global)")
-                    {:table table
-                     :queries {:eqv @equivalence-queries
-                               :mem @mem-queries
-                               :max-eqv-depth @max-depth}
-                     :time (- (System/currentTimeMillis) start)
-                     :status :incomplete
-                     :equivalence :timeout})
-                  (do
-                    (log/info "Beginning next learning cycle (time left:" (float (- 10 minutes))"minutes)")
-                    (recur new-table)))))))))))
+                (log/info "Beginning next learning cycle (time left:" (float (- 10 minutes))"minutes)")
+                (recur new-table)))))))))
 
 
 
 (defn regex->sfa*
-  "A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
+"A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
   the underlying parser, and timing out on parsers that take too long to construct."
-  [target]
-  (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
+[target]
+(timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
 
 ;; evaluation
 
 (defn evaluate!
-  "A wrapper around `learn` that insulates us from some of the harsh realities of
+"A wrapper around `learn` that insulates us from some of the harsh realities of
   evaluation. If `target` causes the underlying `RegexParserProvider` to crash, or
   the provider takes too long to produce a parser. Calls `learn` as the last step,
   given no error state."
@@ -950,13 +938,14 @@
                                (assoc benchmark :target-id idx))
                              benchmarks)
         header (str/join \, ["TargetID"
-                              "Model.StateCount"
-                              "Model.TransitionCount"
-                              "Memb.Queries"
-                              "Equiv.CE"
-                              "Learner.Type"
-                              "TargetRegex"
-                              "\n"])]
+                             "Model.StateCount"
+                             "Model.TransitionCount"
+                             "Memb.Queries"
+                             "Equiv.CE"
+                             "Learner.Type"
+                             "Time(ms)"
+                             "TargetRegex"
+                             "\n"])]
     (reduce (fn [csv benchmark]
               (if (or (= ::timed-out (:equivalence benchmark))
                       (= "Regex is not supported" (:equivalent? benchmark))
@@ -969,12 +958,13 @@
                       target-id (:target-id benchmark)
                       {:keys [mem eqv]} (:queries benchmark)
                       line (str/join \, [target-id
-                                          state-count
-                                          transition-count
-                                          mem
-                                          eqv
-                                          (:equivalence benchmark)
-                                          (escape-string target)])]
+                                         state-count
+                                         transition-count
+                                         mem
+                                         eqv
+                                         (:equivalence benchmark)
+                                         (:time benchmark)
+                                         (escape-string target)])]
                   (str csv line "\n"))))
             header
             indexed)))
