@@ -4,18 +4,53 @@ import argparse
 import subprocess
 import uuid
 
+def chunks(lst, n):
+    """
+    Yield successive n-sized chunks from lst.
+    Source: https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks
+    """
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+def evaluate_parallel(args):
+
+    # TODO Lightweight dict->edn implementation
+    benchmark_config = '{:max-string-length 30, :oracle :coastal, :global-timeout ' + str(args.timeout) + '}'
+
+    benchmarks = open(args.benchmark_file).read().split('\n')
+
+    chunked = list(chunks(benchmarks, (len(benchmarks) // args.parallel)))
+
+    for i, chunk in enumerate(chunked):
+        pod_name = args.name + '-' + str(i)
+        subprocess.run(['mkdir', 'results/' + pod_name], capture_output=True)
+
+        benchmark_config_file = open('results/' + pod_name + '/benchmark.re', 'w')
+        benchmark_config_file.write('\n'.join(chunk))
+        benchmark_config_file.close()
+
+        benchmark_config_file = open('results/' + pod_name + '/benchmark-config.edn', 'w')
+        benchmark_config_file.write(benchmark_config)
+        benchmark_config_file.close()
+
+        if not args.dry:
+            subprocess.run(['bash', 'docker/docker_start_pod.sh', pod_name])
+
 
 def evaluate(args):
-    subprocess.run(['mkdir', 'results/' + args.name])  # fails if the folder exists, sanity check for the lazy
-    subprocess.run(['cp', args.benchmark_file, 'results/' + args.name + '/benchmark.re'])
+    if args.parallel:
+        evaluate_parallel(args)
+    else:
+        subprocess.run(['mkdir', 'results/' + args.name])  # fails if the folder exists, sanity check for the lazy
+        subprocess.run(['cp', args.benchmark_file, 'results/' + args.name + '/benchmark.re'])
 
-    spec_file = open('results/' + args.name + '/benchmark.spec', 'w')
+        spec_file = open('results/' + args.name + '/benchmark.spec', 'w')
 
-    spec_file.write(str(args.depth_limit) + '\n' + str(1000 * 60 * args.timeout))
-    spec_file.close()
+        spec_file.write(str(args.depth_limit) + '\n' + str(1000 * 60 * args.timeout))
+        spec_file.close()
 
-    if not args.dry:
-        subprocess.run(['bash', 'docker/docker_start_pod.sh', args.name])
+        if not args.dry:
+            subprocess.run(['bash', 'docker/docker_start_pod.sh', args.name])
 
 
 def logs(args):
@@ -27,6 +62,9 @@ def init(args):
     subprocess.run(['git', 'submodule', 'update'])
     subprocess.run(['bash', 'docker/docker_build_image.sh'])
 
+def killall(args):
+    subprocess.run(['bash', 'docker/docker_kill_all_pods.sh'])
+
 
 # Create the top-level argument parser
 parser = argparse.ArgumentParser()
@@ -34,12 +72,13 @@ subparsers = parser.add_subparsers()
 
 # Create the parser for the deploy command
 parser_evaluate = subparsers.add_parser('evaluate')
-parser_evaluate.add_argument('name', type=str, help='human-readable label for the evaluation')
-parser_evaluate.add_argument('benchmark_file', type=str, help='file containing newline delimited regular expressions')
-parser_evaluate.add_argument('depth_limit', type=int, help='depth limit for symbolic equivalence queries')
-parser_evaluate.add_argument('timeout', type=int, help='timeout for each symbolic equivalence query in minutes')
+parser_evaluate.add_argument('--name', type=str, help='human-readable label for the evaluation', required=True)
+parser_evaluate.add_argument('--benchmark-file', type=str, metavar='FILE', help='file containing newline delimited regular expressions', required=True)
+parser_evaluate.add_argument('--timeout', type=int, metavar='N', help='timeout for each symbolic equivalence query in minutes', required=True)
+parser_evaluate.add_argument('--max-string-length', type=int, metavar='N', default=30, help='maximum string length used in equivalence queries (default 30)')
 
-parser_evaluate.add_argument('--dry', action='store_true', help='do not start the Docker containers')
+parser_evaluate.add_argument('--dry', action='store_true', help='do not start the experiments containers')
+parser_evaluate.add_argument('--parallel', type=int, metavar='N', help='start N experiments in parallel, dividing the benchmark files between them')
 
 parser_evaluate.set_defaults(func=evaluate)
 
@@ -54,10 +93,15 @@ parser_logs = subparsers.add_parser('init')
 
 parser_logs.set_defaults(func=init)
 
+# Create the parser for the stop all command
+parser_killall = subparsers.add_parser('killall')
+
+parser_killall.set_defaults(func=killall)
+
 if __name__ == '__main__':
     # Parse the args and dispatch to the correct fn
     try:
         args = parser.parse_args()
         args.func(args)
-    except AttributeError:
+    except AttributeError :
         parser.print_help()

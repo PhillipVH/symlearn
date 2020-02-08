@@ -918,12 +918,9 @@
   ([]
    (do
      (log/info "Starting regexlib Evaluation")
-     (let [[depth timeout-ms] (str/split-lines (slurp "results/benchmark.spec"))
-           {:keys [max-string-length
-                   oracle
-                   global-timeout]} (aero/read-config
-                                     (io/resource
-                                      "results/benchmark.edn"))
+     (let [{:keys [max-string-length oracle global-timeout]} (aero/read-config
+                                                              (io/resource
+                                                               "results/benchmark.edn"))
            results (evaluate-benchmark! "results/benchmark.re"
                                         max-string-length
                                         (m->ms global-timeout)
@@ -1008,27 +1005,24 @@
 
   (def bench (load-benchmark "regexlib-stratified.re"))
 
-
-  (coastal-emergency-stop)
-
   (def evaluation (future
-                    (evaluate! {:target (nth bench 2)
+                    (evaluate! {:target bench
                                 :depth 30
                                 :timeout-ms (m->ms 10)
-                                :oracle :coastal})))
+                                :oracle :perfect})))
 
   (future-done? evaluation)
-  (future-cancel evaluation)~
+  (future-cancel evaluation)
 
   (pprint evaluation)
 
-  (show-sfa (regex->sfa* (nth bench 9)))
+  (show-sfa (regex->sfa* (:target @evaluation)))
   (show-sfa (make-sfa* (:table @evaluation)))
 
   (coastal-emergency-stop)
 
   (def eval-fullset (future (evaluate-regexlib "regexlib-stratified.re" 30 (m->ms 10) :perfect)))
-
-  (def eval-partial-last (future (evaluate-regexlib "rest.re" 30 (m->ms 10) :perfect)))
+  (future-cancel eval-fullset)
+  (future-cancelled? eval-fullset)
 
   (java.util.Collections/binarySearch [0 1 2 8] 8 compare))
