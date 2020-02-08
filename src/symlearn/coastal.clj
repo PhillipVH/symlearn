@@ -918,9 +918,9 @@
   ([]
    (do
      (log/info "Starting regexlib Evaluation")
-     (let [{:keys [max-string-length oracle global-timeout]} (aero/read-config
-                                                              (io/resource
-                                                               "results/benchmark-config.edn"))
+     (let [{:keys [max-string-length oracle global-timeout]}
+           (aero/read-config "results/benchmark-config.edn")
+
            results (evaluate-benchmark! "results/benchmark.re"
                                         max-string-length
                                         (m->ms global-timeout)
