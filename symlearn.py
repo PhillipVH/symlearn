@@ -23,7 +23,8 @@ def evaluate_parallel(args):
 
     for i, chunk in enumerate(chunked):
         pod_name = args.name + '-' + str(i)
-        subprocess.run(['mkdir', 'results/' + pod_name], capture_output=True)
+        # use check_output for Python 3.6 compatibility
+        subprocess.check_output(['mkdir', 'results/' + pod_name])
 
         benchmark_config_file = open('results/' + pod_name + '/benchmark.re', 'w')
         benchmark_config_file.write('\n'.join(chunk))
