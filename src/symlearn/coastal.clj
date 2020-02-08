@@ -842,10 +842,10 @@
 
 
 (defn regex->sfa*
-"A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
+  "A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
   the underlying parser, and timing out on parsers that take too long to construct."
-[target]
-(timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
+  [target]
+  (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
 
 ;; evaluation
 
@@ -920,7 +920,7 @@
      (log/info "Starting regexlib Evaluation")
      (let [{:keys [max-string-length oracle global-timeout]} (aero/read-config
                                                               (io/resource
-                                                               "results/benchmark.edn"))
+                                                               "results/benchmark-config.edn"))
            results (evaluate-benchmark! "results/benchmark.re"
                                         max-string-length
                                         (m->ms global-timeout)
