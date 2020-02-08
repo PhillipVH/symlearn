@@ -24,7 +24,7 @@ def evaluate_parallel(args):
     for i, chunk in enumerate(chunked):
         pod_name = args.name + '-' + str(i)
         # use check_output for Python 3.6 compatibility
-        subprocess.check_output(['mkdir', 'results/' + pod_name])
+        subprocess.run(['mkdir', 'results/' + pod_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         benchmark_config_file = open('results/' + pod_name + '/benchmark.re', 'w')
         benchmark_config_file.write('\n'.join(chunk))
@@ -63,8 +63,9 @@ def init(args):
     subprocess.run(['git', 'submodule', 'update'])
     subprocess.run(['bash', 'docker/docker_build_image.sh'])
 
+
 def killall(args):
-    subprocess.run(['bash', 'docker/docker_kill_all_pods.sh'])
+    subprocess.run(['bash', 'docker/docker_kill_all_pods.sh'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # Create the top-level argument parser
