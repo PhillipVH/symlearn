@@ -9,6 +9,7 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.set :as set]
+            [aero.core :as aero]
             [taoensso.carmine :as car]
             [taoensso.tufte :as tufte]
             [taoensso.timbre :as log]
@@ -896,10 +897,15 @@
    (do
      (log/info "Starting regexlib Evaluation")
      (let [[depth timeout-ms] (str/split-lines (slurp "results/benchmark.spec"))
+           {:keys [max-string-length
+                   oracle
+                   global-timeout]} (aero/read-config
+                                     (io/resource
+                                      "results/benchmark.edn"))
            results (evaluate-benchmark! "results/benchmark.re"
-                                        (read-string depth)
-                                        (read-string timeout-ms)
-                                        :coastal)]
+                                        max-string-length
+                                        (m->ms global-timeout)
+                                        oracle)]
        (sh/sh "mkdir" "-p" "results")
        (spit "results/results.edn" (pr-str results))
        (log/info "Finished regexlib Evaluation"))))
