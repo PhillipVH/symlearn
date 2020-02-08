@@ -892,6 +892,28 @@
                         regexes)]
     results))
 
+
+(defn prepare-evaluations
+  [{:keys [benchmark-file benchmark-config n-evaluations]}]
+  (let [{:keys [max-string-length global-timeout oracle]} benchmark-config
+        subjects (str/split-lines (slurp (io/resource benchmark-file)))
+        n-subjects (count subjects)
+        subjects-per-file (quot n-subjects n-evaluations)
+        remainder (rem n-subjects n-evaluations)
+        {:keys [global-timeout]} (aero/read-config (io/resource benchmark-config))
+        completion-estimate (float (* global-timeout
+                                      (+ (/ subjects-per-file
+                                            n-evaluations)
+                                         remainder)))]
+    (doall
+     (map-indexed (fn [idx subjects]
+                    (let [filename (format "%s-%d" benchmark-file idx)
+                          content (str/join "\n" subjects)]
+                      (spit filename content)))
+                  (partition subjects-per-file subjects)))
+    {:subjects-per-file subjects-per-file
+     :completion-estimate completion-estimate}))
+
 (defn evaluate-regexlib
   ([]
    (do
