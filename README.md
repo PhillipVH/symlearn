@@ -11,8 +11,7 @@ $ ./symlearn.py init
 ```
 
 For more information, see `./symlearn.py -h`.
-## Running Experiments
-To start the evaluation, run the following:
+
 ```
 $ ./symlearn.py evaluate -h
 usage: symlearn.py evaluate [-h] --name NAME --benchmark-file FILE --timeout N
@@ -31,10 +30,14 @@ optional arguments:
   --parallel N          start N experiments in parallel, dividing the
                         benchmark file between them
 
-$ ./symlearn.py evaluate foo regexlib-clean-single.re 10 10
+
 ```
-This will begin an evaluation of the `regexlib-clean-single.re` file, with a equivalence check depth limit of 10, and a
-timeout of 10 minutes.
+## Running Experiments
+To start the evaluation, run the following:
+```
+$ ./symlearn.py evaluate --name foo --benchmark-file regexlib-stratified.re --timeout 10
+```
+This will begin an evaluation of the `regexlib-stratified.re` file, with a timeout of 10 minutes.
 
 Results from a run are stored in a `results.edn` file in the `results/[name]/` folder in the root of the repository.
 
