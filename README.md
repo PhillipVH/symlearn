@@ -29,8 +29,6 @@ optional arguments:
   --dry                 do not start the experiments
   --parallel N          start N experiments in parallel, dividing the
                         benchmark file between them
-
-
 ```
 ## Running Experiments
 To start the evaluation, run the following:
