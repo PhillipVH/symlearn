@@ -849,6 +849,12 @@
 
 ;; evaluation
 
+(defn load-benchmark
+  [filename]
+  (-> filename
+      slurp
+      str/split-lines))
+
 (defn evaluate!
 "A wrapper around `learn` that insulates us from some of the harsh realities of
   evaluation. If `target` causes the underlying `RegexParserProvider` to crash, or
@@ -891,7 +897,6 @@
                         []
                         regexes)]
     results))
-
 
 (defn prepare-evaluations
   [{:keys [benchmark-file benchmark-config n-evaluations]}]
@@ -941,6 +946,25 @@
 
 ;; reporting
 
+(defn load-results
+  []
+  (let [files (map #(format "results/regexlib-%d/results.edn" %) (range 8))
+        results (map (comp read-string slurp) files)]
+    results))
+
+(defn pad-results
+  []
+  (reduce (fn [results result-set]
+            (let [n-results (count result-set)
+                  n-pad (- 25 n-results)]
+              (conj results (concat result-set (repeat n-pad {:padding true})))))
+          []
+          (load-results)))
+
+(defn merge-results
+  []
+  (apply concat (pad-results)))
+
 (defn escape-string
   [string]
   (let [escapes (map char-escape-string string)
@@ -952,12 +976,6 @@
             ""
             (range (count string)))))
 
-(defn load-benchmark
-  [filename]
-  (-> filename
-      slurp
-      str/split-lines))
-
 (defn benchmarks->csv
   [benchmarks]
   (let [indexed (map-indexed (fn [idx benchmark]
@@ -966,32 +984,40 @@
         header (str/join \, ["TargetID"
                              "Model.StateCount"
                              "Model.TransitionCount"
+                             "Model.CEDistance"
                              "Memb.Queries"
                              "Equiv.CE"
+                             "Equiv.MaxDepth"
                              "Learner.Type"
                              "Time(ms)"
                              "TargetRegex"
                              "\n"])]
     (reduce (fn [csv benchmark]
-              (if (or (= ::timed-out (:equivalence benchmark))
-                      (= "Regex is not supported" (:equivalent? benchmark))
-                      (nil? (:table benchmark)))
-                (str csv (:target-id benchmark) ",Timeout\n")
-                (let [candidate ^SFA (make-sfa (:table benchmark))
-                      state-count (.stateCount candidate)
-                      target (:target benchmark)
-                      transition-count (.getTransitionCount candidate)
-                      target-id (:target-id benchmark)
-                      {:keys [mem eqv]} (:queries benchmark)
-                      line (str/join \, [target-id
-                                         state-count
-                                         transition-count
-                                         mem
-                                         eqv
-                                         (:equivalence benchmark)
-                                         (:time benchmark)
-                                         (escape-string target)])]
-                  (str csv line "\n"))))
+              (if (:padding benchmark)
+                (str csv (:target-id benchmark) ",Padding\n")
+                (if (or (= ::timed-out (:equivalence benchmark))
+                        (= "Regex is not supported" (:equivalent? benchmark))
+                        (nil? (:table benchmark)))
+                  (str csv (:target-id benchmark) ",Timeout\n")
+                  (let [candidate ^SFA (make-sfa* (:table benchmark))
+                        state-count (.stateCount candidate)
+                        target (:target benchmark)
+                        target-sfa (regex->sfa* target)
+                        ce-distance (count (first (check-equivalence-perfect target-sfa candidate)))
+                        transition-count (.getTransitionCount candidate)
+                        target-id (:target-id benchmark)
+                        {:keys [mem eqv max-eqv-depth]} (:queries benchmark)
+                        line (str/join \, [target-id
+                                           state-count
+                                           transition-count
+                                           ce-distance
+                                           mem
+                                           eqv
+                                           max-eqv-depth
+                                           (:equivalence benchmark)
+                                           (:time benchmark)
+                                           (escape-string target)])]
+                    (str csv line "\n")))))
             header
             indexed)))
 
