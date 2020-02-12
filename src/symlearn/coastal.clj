@@ -70,7 +70,10 @@
            (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))))
 
   ;; wait for a solved response
-  (while (not= 1 (wcar* (car/exists :refined))))
+  (while (not= 1 (wcar* (car/exists :refined)))
+    (when (Thread/interrupted)
+      (log/error "Interrupted")
+      (throw (InterruptedException.))))
 
   ;; process reponse
   (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
