@@ -899,14 +899,17 @@
   on each equivalence check of `timeout-ms`."
   [benchmark max-depth timeout-ms oracle]
   (let [regexes (str/split-lines (slurp benchmark))
+        n (count regexes)
+        i (atom 0)
         results (reduce (fn [results target]
                           (let [evaluation (evaluate! {:target target
                                                        :depth max-depth
                                                        :timeout-ms timeout-ms
                                                        :oracle oracle})
                                 new-results (conj results evaluation)]
-                            (log/info "Evaluation of" target "complete")
-                            (log/info evaluation)
+                            (log/info (str "<" @i "/" n ">"))
+                            (swap! i inc)
+                            (log/info (dissoc evaluation :table))
                             (Thread/sleep 5000) ;; rest a bit between experiments
                             (spit "results/results.edn" (pr-str new-results))
                             new-results))

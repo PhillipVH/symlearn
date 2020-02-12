@@ -15,11 +15,11 @@ def chunks(lst, n):
 def evaluate_parallel(args):
 
     # TODO Lightweight dict->edn implementation
-    benchmark_config = '{:max-string-length 30, :oracle :coastal, :global-timeout ' + str(args.timeout) + '}'
+    benchmark_config = '{:max-string-length 30, :oracle :' + args.oracle + ', :global-timeout ' + str(args.timeout) + '}'
 
     benchmarks = open(args.benchmark_file).read().split('\n')
 
-    chunked = list(chunks(benchmarks, (len(benchmarks) // args.parallel)))
+    chunked = list(chunks(benchmarks, (len(benchmarks) // args.parallel))) # good idea to have these two divide without a remainder
 
     for i, chunk in enumerate(chunked):
         pod_name = args.name + '-' + str(i)
@@ -77,6 +77,7 @@ parser_evaluate = subparsers.add_parser('evaluate')
 parser_evaluate.add_argument('--name', type=str, help='human-readable label for the evaluation', required=True)
 parser_evaluate.add_argument('--benchmark-file', type=str, metavar='FILE', help='file containing newline delimited regular expressions', required=True)
 parser_evaluate.add_argument('--timeout', type=int, metavar='N', help='timeout for each symbolic equivalence query in minutes', required=True)
+parser_evaluate.add_argument('--oracle', type=str, metavar='ORACLE', default='coastal', help='use coastal (default) or perfect as the equivalence oracle')
 parser_evaluate.add_argument('--max-string-length', type=int, metavar='N', default=30, help='maximum string length used in equivalence queries (default 30)')
 
 parser_evaluate.add_argument('--dry', action='store_true', help='do not start the experiments containers')
