@@ -330,6 +330,10 @@
 (def mem-queries (atom 0))
 (def newest-table (atom nil))
 
+(defn quick-query
+  [word]
+  (= "+" (str/trim (:out (sh/sh "java" "-cp" "." "Quick" :in word)))))
+
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's
   acceptance status."
@@ -839,13 +843,22 @@
                 (log/info "Beginning next learning cycle (time left:" (float (- (ms->m timeout-ms) minutes))"minutes)")
                 (recur new-table)))))))))
 
-
-
 (defn regex->sfa*
   "A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
   the underlying parser, and timing out on parsers that take too long to construct."
   [target]
   (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
+
+(defn mk-qmem-oracle
+  [target]
+  (render-resource "templates/Quick.java" {:target-fn (sfa->java (regex->sfa* target) "parse")}))
+
+(defn install-qparser!
+  [regex]
+  (let [parser-src (mk-qmem-oracle regex)]
+    (spit "Quick.java" parser-src)
+    (log/info (sh/sh "javac" "Quick.java"))))
+
 
 ;; evaluation
 
