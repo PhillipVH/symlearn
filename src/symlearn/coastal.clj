@@ -359,19 +359,17 @@
      (swap! mem-queries inc))
    (query string))
   ([string]
-   (tufte/p
-    ::membership-query
-    (let [[accepted path] (refine-string string)
-          constraints (doall (->> path
-                            path->constraints
-                            (map (fn [[idx op guard]]
-                                   [(Integer/parseInt idx) op (Integer/parseInt guard)]))
-                            (sort-by first)
-                            (partition-by first)
-                            (map (fn [constraints] (vec (map #(vec (drop 1 %)) constraints))))
-                            (map set)
-                            (vec)))]
-      (->PathCondition accepted constraints)))))
+   (let [[accepted path] (refine-string string)
+         constraints (doall (->> path
+                                 path->constraints
+                                 (map (fn [[idx op guard]]
+                                        [(Integer/parseInt idx) op (Integer/parseInt guard)]))
+                                 (sort-by first)
+                                 (partition-by first)
+                                 (map (fn [constraints] (vec (map #(vec (drop 1 %)) constraints))))
+                                 (map set)
+                                 (vec)))]
+     (->PathCondition accepted constraints))))
 
 (defn make-table
   "Table"
@@ -393,7 +391,7 @@
     (if (= row-length evidence-count)
       row
       (let [new-row (reduce (fn [row e]
-                              (conj row (tufte/p ::query-execution (quick-check (str (witness path) e)))#_(accepted? (tufte/p ::query-execution (query (str (witness path) e) :count)))))
+                              (conj row (tufte/p ::membership-query (quick-check (str (witness path) e)))#_(accepted? (tufte/p ::query-execution (query (str (witness path) e) :count)))))
                             row
                             (drop row-length evidence))]
         new-row))))
@@ -686,12 +684,12 @@
   "Table -> String -> Table"
   [table counter-example]
   (let [unique-evidence (set (:E table))
-        paths (map (comp constraints query) (:E table))
-        unique-paths (set (map #(map intervals/constraint-set->CharPred %) paths))]
-    (let [new-table (add-path-condition table (query counter-example :count))]
+        #_paths #_(map (comp constraints query) (:E table))
+        #_unique-paths #_(set (map #(map intervals/constraint-set->CharPred %) paths))]
+    (let [new-table (add-path-condition table (tufte/p ::s-membership-query (query counter-example :count)))]
       (if (= 1 (count unique-evidence))
         (tufte/p ::add-evidence (add-evidence* new-table counter-example))
-        (if-not (deterministic? new-table)
+        (if-not (tufte/p ::check-determinism (deterministic? new-table))
           (do
             (log/info "Table has non-deterministic transitions, applying evidence.")
             (tufte/p ::add-evidence (add-evidence* new-table counter-example)))
@@ -700,8 +698,6 @@
             new-table))))))
 
 ;; evaluation
-
-
 
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
@@ -799,8 +795,9 @@
                               (log/info "Got counter example(s):" counter-example)
                               (swap! equivalence-queries inc)
                               (tufte/p ::apply-counter-example
-                                       (reduce (fn [new-table ce]
-                                                 (if (contains? @cached-ces (ce->pred ce))
+                                       (process-counter-example table (first counter-example))
+                                       #_(reduce (fn [new-table ce]
+                                                 #_(if (contains? @cached-ces (ce->pred ce))
                                                    (log/error "Duplicate CE:" ce)
                                                    (swap! cached-ces conj (ce->pred ce)))
                                                  (process-counter-example new-table ce))
