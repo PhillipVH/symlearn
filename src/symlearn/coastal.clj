@@ -298,6 +298,23 @@
        (alter-var-root #'coastal-instance (constantly new-coastal-instance))
        ::ok))))
 
+(defn timeout
+  [timeout-ms callback]
+  (let [fut (future (callback))
+        ret (deref fut timeout-ms ::timed-out)]
+    (when (= ret ::timed-out)
+      (future-cancel fut)
+      (stop!))
+    ret))
+
+(defn regex->sfa*
+  "A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
+  the underlying parser, and timing out on parsers that take too long to construct."
+  [target]
+  (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
+
+(def target-sfa (atom nil))
+
 (defn install-parser!
   [regex]
   (if coastal-instance
@@ -312,6 +329,7 @@
     (log/info "Flushing Parser:" {:target regex})
     (dotimes [_ 3]
       (refine-string "")) ;; flush the default run from the membership oracle
+    (reset! target-sfa (regex->sfa* regex))
     (log/info "Parser Ready:" {:target regex})
     ::ok))
 
@@ -333,10 +351,6 @@
 (def mem-queries (atom 0))
 (def newest-table (atom nil))
 
-(defn quick-query
-  [word]
-  (= "+" (str/trim (:out (sh/sh "java" "-cp" "." "Quick" :in word)))))
-
 (defn query
   "Return a map with a set of assertions against `string`, and the parser's
   acceptance status."
@@ -345,17 +359,19 @@
      (swap! mem-queries inc))
    (query string))
   ([string]
-   (let [[accepted path] (refine-string string)
-         constraints (->> path
-                          path->constraints
-                          (map (fn [[idx op guard]]
-                                 [(Integer/parseInt idx) op (Integer/parseInt guard)]))
-                          (sort-by first)
-                          (partition-by first)
-                          (map (fn [constraints] (vec (map #(vec (drop 1 %)) constraints))))
-                          (map set)
-                          (vec))]
-     (->PathCondition accepted constraints))))
+   (tufte/p
+    ::membership-query
+    (let [[accepted path] (refine-string string)
+          constraints (doall (->> path
+                            path->constraints
+                            (map (fn [[idx op guard]]
+                                   [(Integer/parseInt idx) op (Integer/parseInt guard)]))
+                            (sort-by first)
+                            (partition-by first)
+                            (map (fn [constraints] (vec (map #(vec (drop 1 %)) constraints))))
+                            (map set)
+                            (vec)))]
+      (->PathCondition accepted constraints)))))
 
 (defn make-table
   "Table"
@@ -365,6 +381,11 @@
      :R {}
      :E [""]}))
 
+(defn quick-check
+  [string]
+  (swap! mem-queries inc)
+  (.accepts ^SFA @target-sfa (vec (.toCharArray ^String string)) intervals/solver))
+
 (defn fill-row
   [[path row] evidence]
   (let [row-length (count row)
@@ -372,7 +393,7 @@
     (if (= row-length evidence-count)
       row
       (let [new-row (reduce (fn [row e]
-                              (conj row (accepted? (query (str (witness path) e) :count))))
+                              (conj row (tufte/p ::query-execution (quick-check (str (witness path) e)))#_(accepted? (tufte/p ::query-execution (query (str (witness path) e) :count)))))
                             row
                             (drop row-length evidence))]
         new-row))))
@@ -669,25 +690,18 @@
         unique-paths (set (map #(map intervals/constraint-set->CharPred %) paths))]
     (let [new-table (add-path-condition table (query counter-example :count))]
       (if (= 1 (count unique-evidence))
-        (add-evidence* new-table counter-example)
+        (tufte/p ::add-evidence (add-evidence* new-table counter-example))
         (if-not (deterministic? new-table)
           (do
             (log/info "Table has non-deterministic transitions, applying evidence.")
-            (add-evidence* new-table counter-example))
+            (tufte/p ::add-evidence (add-evidence* new-table counter-example)))
           (do
             (log/info "Table is deterministic, not applying evidence.")
             new-table))))))
 
 ;; evaluation
 
-(defn timeout
-  [timeout-ms callback]
-  (let [fut (future (callback))
-        ret (deref fut timeout-ms ::timed-out)]
-    (when (= ret ::timed-out)
-      (future-cancel fut)
-      (stop!))
-    ret))
+
 
 (defn check-equivalence!
   [{:keys [depth target ^SFA candidate]}]
@@ -759,14 +773,15 @@
                                              max)))
                         (let [counter-example
                               (if (= :perfect oracle)
-                                (check-equivalence-perfect target-sfa conjecture)
-                                (check-equivalence-timed!
-                                 {:depth depth,
-                                  :target target
-                                  :candidate conjecture
-                                  :timeout-ms (ms-to-timeout start
-                                                             (System/currentTimeMillis)
-                                                             (ms->m timeout-ms))}))]
+                                (tufte/p ::equivalence-query (check-equivalence-perfect target-sfa conjecture))
+                                (tufte/p ::equivalence-query
+                                         (check-equivalence-timed!
+                                          {:depth depth,
+                                           :target target
+                                           :candidate conjecture
+                                           :timeout-ms (ms-to-timeout start
+                                                                      (System/currentTimeMillis)
+                                                                      (ms->m timeout-ms))})))]
                           (cond
                             ;; no counter example, search deeper or yield table
                             (nil? counter-example)
@@ -783,13 +798,14 @@
                             (do
                               (log/info "Got counter example(s):" counter-example)
                               (swap! equivalence-queries inc)
-                              (reduce (fn [new-table ce]
-                                        (if (contains? @cached-ces (ce->pred ce))
-                                          (log/error "Duplicate CE:" ce)
-                                          (swap! cached-ces conj (ce->pred ce)))
-                                        (process-counter-example new-table ce))
-                                      table
-                                      counter-example)))))]
+                              (tufte/p ::apply-counter-example
+                                       (reduce (fn [new-table ce]
+                                                 (if (contains? @cached-ces (ce->pred ce))
+                                                   (log/error "Duplicate CE:" ce)
+                                                   (swap! cached-ces conj (ce->pred ce)))
+                                                 (process-counter-example new-table ce))
+                                               table
+                                               counter-example))))))]
         (cond
           ;; equivalence check timed out
           (= ::timeout new-table)
@@ -846,11 +862,9 @@
                 (log/info "Beginning next learning cycle (time left:" (float (- (ms->m timeout-ms) minutes))"minutes)")
                 (recur new-table)))))))))
 
-(defn regex->sfa*
-  "A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
-  the underlying parser, and timing out on parsers that take too long to construct."
-  [target]
-  (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
+
+
+;; quick parser generation (experimental, encoding issues)
 
 (defn mk-qmem-oracle
   [target]
@@ -860,8 +874,13 @@
   [regex]
   (let [parser-src (mk-qmem-oracle regex)]
     (spit "Quick.java" parser-src)
-    (log/info (sh/sh "javac" "Quick.java"))))
+    (log/info (sh/sh "javac" "Quick.java")))) ;; perfect GraalVM use case
 
+(defn quick-query
+  [word]
+  (let [parse-log (:out (sh/sh "java" "-cp" "." "Quick" :in word))]
+    (log/info parse-log)
+    (= "+" (str/trim parse-log))))
 
 ;; evaluation
 
@@ -1048,18 +1067,24 @@
 
 (comment
 
+  (tufte/add-basic-println-handler! {})
+
   (def bench (load-benchmark "regexlib-stratified.re"))
 
-  (def evaluation (future
-                    (evaluate! {:target bench
-                                :depth 30
-                                :timeout-ms (m->ms 10)
-                                :oracle :perfect})))
+  (def evaluation
+    (tufte/profile
+     {}
+     (evaluate! {:target (nth bench 144)
+                 :depth 30
+                 :timeout-ms (m->ms 10)
+                 :oracle :perfect})))
+
+  (coastal-emergency-stop)
 
   (future-done? evaluation)
   (future-cancel evaluation)
 
-  (pprint evaluation)
+  (pprint (:queries @evaluation))
 
   (show-sfa (regex->sfa* (:target @evaluation)))
   (show-sfa (make-sfa* (:table @evaluation)))
