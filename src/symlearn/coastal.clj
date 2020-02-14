@@ -1058,32 +1058,31 @@
 
 (comment
 
+  ;; get some statistics about the interal workings
   (tufte/add-basic-println-handler! {})
 
+  ;; load the (stratified + filtered) regexlib benchmark
   (def bench (load-benchmark "regexlib-stratified.re"))
 
+  ;; learn a target and report profiling information
   (def evaluation
     (tufte/profile
      {}
-     (evaluate! {:target (nth bench 144)
+     (evaluate! {:target (nth bench 120)
                  :depth 30
                  :timeout-ms (m->ms 10)
                  :oracle :perfect})))
 
+  ;; get some stats from the evaluation
+  (pprint (select-keys evaluation [:queries :time]))
+
+  ;; stop all coastal instances
   (coastal-emergency-stop)
 
-  (future-done? evaluation)
-  (future-cancel evaluation)
+  (def sfas (doall (map regex->sfa* bench)))
 
-  (pprint (:queries @evaluation))
+  ;; evaluate the full benchmark
+  (def eval-fullsetset (future (evaluate-regexlib "regexlib-stratified.re" 30 (m->ms 10) :perfect)))
 
-  (show-sfa (regex->sfa* (:target @evaluation)))
-  (show-sfa (make-sfa* (:table @evaluation)))
-
-  (coastal-emergency-stop)
-
-  (def eval-fullset (future (evaluate-regexlib "regexlib-stratified.re" 30 (m->ms 10) :perfect)))
-  (future-cancel eval-fullset)
-  (future-cancelled? eval-fullset)
-
+  ;; this might be useful one day
   (java.util.Collections/binarySearch [0 1 2 8] 8 compare))
