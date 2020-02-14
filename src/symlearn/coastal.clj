@@ -447,16 +447,17 @@
 (defn add-path-condition
   "Table -> PathCondition -> Table"
   [table {:keys [accepted] :as path}]
-  (if (get table path)
-    (log/error "Duplicate entry to table:" path)
-    (let [prefixes (prefixes path)
-          table-with-ce (update table :R #(assoc % path [accepted]))
-          table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
-                                        (update table* :R #(assoc % path [accepted])))
-                                      table-with-ce
-                                      prefixes)
-          filled-table (fill table-with-prefixes)]
-      (close-totally filled-table))))
+  (let [prefixes (prefixes path)
+        table-with-ce (update table :R #(assoc % path [accepted]))
+        table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
+                                      (if (or (get (:R table-with-ce) path)
+                                              (get (:S table-with-ce) path))
+                                        table*  ;; lazyness being useful
+                                        (update table* :R #(assoc % path [accepted]))))
+                                    table-with-ce
+                                    prefixes)
+        filled-table (fill table-with-prefixes)]
+    (close-totally filled-table)))
 
 (defn make-evidence
   "String -> [String]"
@@ -792,17 +793,10 @@
                             ;; found a counter example, process and return new table
                             :else
                             (do
-                              (log/info "Got counter example(s):" counter-example)
+                              (log/trace "Got counter example(s):" counter-example)
                               (swap! equivalence-queries inc)
                               (tufte/p ::apply-counter-example
-                                       (process-counter-example table (first counter-example))
-                                       #_(reduce (fn [new-table ce]
-                                                 #_(if (contains? @cached-ces (ce->pred ce))
-                                                   (log/error "Duplicate CE:" ce)
-                                                   (swap! cached-ces conj (ce->pred ce)))
-                                                 (process-counter-example new-table ce))
-                                               table
-                                               counter-example))))))]
+                                       (process-counter-example table (first counter-example)))))))]
         (cond
           ;; equivalence check timed out
           (= ::timeout new-table)
