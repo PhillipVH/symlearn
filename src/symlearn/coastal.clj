@@ -447,17 +447,17 @@
 (defn add-path-condition
   "Table -> PathCondition -> Table"
   [table {:keys [accepted] :as path}]
-  (if (get table path)
-    (log/error "Duplicate entry to table:" path)
-    (let [prefixes (tufte/p ::prefix-generation (doall (prefixes path)))
-          table-with-ce (update table :R #(assoc % path [accepted]))
-          table-with-prefixes (tufte/p ::table-traversal
-                                       (reduce (fn [table* {:keys [accepted] :as path}]
-                                                 (update table* :R assoc path [accepted]))
-                                               table-with-ce
-                                               prefixes))
-          filled-table (tufte/p ::table-filling (fill table-with-prefixes))]
-      (close-totally filled-table))))
+  (let [prefixes (prefixes path)
+        table-with-ce (update table :R #(assoc % path [accepted]))
+        table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
+                                      (if (or (get (:R table-with-ce) path)
+                                              (get (:S table-with-ce) path))
+                                        table*  ;; lazyness being useful
+                                        (update table* :R #(assoc % path [accepted]))))
+                                    table-with-ce
+                                    prefixes)
+        filled-table (fill table-with-prefixes)]
+    (close-totally filled-table)))
 
 (defn make-evidence
   "String -> [String]"
@@ -791,17 +791,10 @@
                             ;; found a counter example, process and return new table
                             :else
                             (do
-                              (log/info "Got counter example(s):" counter-example)
+                              (log/trace "Got counter example(s):" counter-example)
                               (swap! equivalence-queries inc)
                               (tufte/p ::apply-counter-example
-                                       (process-counter-example table (first counter-example))
-                                       #_(reduce (fn [new-table ce]
-                                                 #_(if (contains? @cached-ces (ce->pred ce))
-                                                   (log/error "Duplicate CE:" ce)
-                                                   (swap! cached-ces conj (ce->pred ce)))
-                                                 (process-counter-example new-table ce))
-                                               table
-                                               counter-example))))))]
+                                       (process-counter-example table (first counter-example)))))))]
         (cond
           ;; equivalence check timed out
           (= ::timeout new-table)
@@ -1063,34 +1056,31 @@
 
 (comment
 
+  ;; get some statistics about the interal workings
   (tufte/add-basic-println-handler! {})
 
+  ;; load the (stratified + filtered) regexlib benchmark
   (def bench (load-benchmark "regexlib-stratified.re"))
 
+  ;; learn a target and report profiling information
   (def evaluation
     (tufte/profile
      {}
-     (evaluate! {:target (nth bench 144)
+     (evaluate! {:target (nth bench 120)
                  :depth 30
                  :timeout-ms (m->ms 10)
                  :oracle :perfect})))
 
+  ;; get some stats from the evaluation
+  (pprint (select-keys evaluation [:queries :time]))
+
+  ;; stop all coastal instances
   (coastal-emergency-stop)
 
-  (future-done? evaluation)
-  (future-cancel evaluation)
+  (def sfas (doall (map regex->sfa* bench)))
 
-  (install-parser! "g")
+  ;; evaluate the full benchmark
+  (def eval-fullsetset (future (evaluate-regexlib "regexlib-stratified.re" 30 (m->ms 10) :perfect)))
 
-  (pprint (:queries @evaluation))
-
-  (show-sfa (regex->sfa* (:target @evaluation)))
-  (show-sfa (make-sfa* (:table @evaluation)))
-
-  (coastal-emergency-stop)
-
-  (def eval-fullset (future (evaluate-regexlib "regexlib-stratified.re" 30 (m->ms 10) :perfect)))
-  (future-cancel eval-fullset)
-  (future-cancelled? eval-fullset)
-
+  ;; this might be useful one day
   (java.util.Collections/binarySearch [0 1 2 8] 8 compare))
