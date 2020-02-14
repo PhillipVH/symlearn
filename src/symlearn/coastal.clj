@@ -53,10 +53,15 @@
 
 ;; coastal integration
 
+(def redis-conn {:pool {}
+                 :spec {:host (or (System/getenv "REDIS_HOST") "localhost")
+                        :port 6379}})
+
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
   [& body]
-  `(let [redis-conn# {:pool {} :spec {:host (or (System/getenv "REDIS_HOST") "localhost") :port 6379}}]
+  `(car/wcar redis-conn ~@body)
+  #_`(let [redis-conn# {:pool {} :spec {:host (or (System/getenv "REDIS_HOST") "localhost") :port 6379}}]
      (car/wcar redis-conn# ~@body)))
 
 (defn- refine-string
@@ -70,13 +75,8 @@
            (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))))
 
   ;; wait for a solved response
-  (while (not= 1 (wcar* (car/exists :refined)))
-    (when (Thread/interrupted)
-      (log/error "Interrupted")
-      (throw (InterruptedException.))))
-
   ;; process reponse
-  (let [refined-path (tufte/p ::refine-path (wcar* (car/get :refined)))
+  (let [[_ refined-path] (tufte/p ::poplock (wcar* (car/brpop :refined 0)))
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
     (log/trace "Refinement received:" accepted)
@@ -105,7 +105,7 @@
 (defn prefixes*
   "Return the suffixes of the path condition pc"
   [constraint-sets]
-  (let [prefixes (map #(take % constraint-sets)
+  (let [prefixes (map (fn [n] (take n constraint-sets))
                       (range 1 (count constraint-sets)))]
     (set prefixes)))
 
@@ -359,7 +359,7 @@
      (swap! mem-queries inc))
    (query string))
   ([string]
-   (let [[accepted path] (refine-string string)
+   (let [[accepted path] (tufte/p ::refine-string (refine-string string))
          constraints (doall (->> path
                                  path->constraints
                                  (map (fn [[idx op guard]]
@@ -449,13 +449,14 @@
   [table {:keys [accepted] :as path}]
   (if (get table path)
     (log/error "Duplicate entry to table:" path)
-    (let [prefixes (prefixes path)
+    (let [prefixes (tufte/p ::prefix-generation (doall (prefixes path)))
           table-with-ce (update table :R #(assoc % path [accepted]))
-          table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
-                                        (update table* :R #(assoc % path [accepted])))
-                                      table-with-ce
-                                      prefixes)
-          filled-table (fill table-with-prefixes)]
+          table-with-prefixes (tufte/p ::table-traversal
+                                       (reduce (fn [table* {:keys [accepted] :as path}]
+                                                 (update table* :R assoc path [accepted]))
+                                               table-with-ce
+                                               prefixes))
+          filled-table (tufte/p ::table-filling (fill table-with-prefixes))]
       (close-totally filled-table))))
 
 (defn make-evidence
@@ -683,10 +684,8 @@
 (defn process-counter-example
   "Table -> String -> Table"
   [table counter-example]
-  (let [unique-evidence (set (:E table))
-        #_paths #_(map (comp constraints query) (:E table))
-        #_unique-paths #_(set (map #(map intervals/constraint-set->CharPred %) paths))]
-    (let [new-table (add-path-condition table (tufte/p ::s-membership-query (query counter-example :count)))]
+  (let [unique-evidence (set (:E table))]
+    (let [new-table (tufte/p ::add-word-to-table (add-path-condition table (tufte/p ::s-membership-query (query counter-example :count))))]
       (if (= 1 (count unique-evidence))
         (tufte/p ::add-evidence (add-evidence* new-table counter-example))
         (if-not (tufte/p ::check-determinism (deterministic? new-table))
@@ -1080,6 +1079,8 @@
 
   (future-done? evaluation)
   (future-cancel evaluation)
+
+  (install-parser! "g")
 
   (pprint (:queries @evaluation))
 

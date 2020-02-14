@@ -323,6 +323,9 @@ public class SymbolicState implements State {
 	}
 
 	private void dumpFrames() {
+		if (1 == 1) {
+			return;
+		}
 		int n = frames.size();
 		for (int i = n - 1; i >= 0; i--) {
 			log.trace("--> st{} locals:{} <{}>", frames.get(i).stack, frames.get(i).locals,

@@ -158,7 +158,7 @@ public class PCReporterFactory implements ObserverFactory {
             } else {
                 jedis = new Jedis("localhost");
             }
-            jedis.set("refined", accepted + "\n" + pathCondition.toString());
+            jedis.rpush("refined", accepted + "\n" + pathCondition.toString());
         }
 
         public void report(Object object) {
