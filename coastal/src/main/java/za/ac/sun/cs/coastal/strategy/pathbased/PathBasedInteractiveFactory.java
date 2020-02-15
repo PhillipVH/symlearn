@@ -213,9 +213,10 @@ public abstract class PathBasedInteractiveFactory implements StrategyFactory {
 
 
                     // Wait for a refinement request to be issued
-                    while (!(jedis.exists("refine"))) {
-                        continue;
-                    }
+                    // while (!(jedis.exists("mustrefine"))) {
+                    //     continue;
+                    // }
+                    jedis.brpop(0, "mustrefine");
 
                     List<String> request = jedis.lrange("refine", 0, -1);
                     log.info(request);

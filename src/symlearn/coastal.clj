@@ -62,7 +62,7 @@
   [& body]
   `(car/wcar redis-conn ~@body)
   #_`(let [redis-conn# {:pool {} :spec {:host (or (System/getenv "REDIS_HOST") "localhost") :port 6379}}]
-     (car/wcar redis-conn# ~@body)))
+       (car/wcar redis-conn# ~@body)))
 
 (defn- refine-string
   "Returns [boolean list] of accepted? and path conditions"
@@ -72,11 +72,12 @@
   (let [exploded-string (map int (.toCharArray ^String string))
         strlen (count string)] ;; avoid "first byte is null" encoding issues
     (wcar* (car/del :refined)
-           (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))))
+           (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))
+           (car/rpush :mustrefine ::ready)))
 
   ;; wait for a solved response
   ;; process reponse
-  (let [[_ refined-path] (tufte/p ::poplock (wcar* (car/brpop :refined 0)))
+  (let [[_ refined-path] (tufte/p ::wait-for-refinement (wcar* (car/brpop :refined 0)))
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
     (log/trace "Refinement received:" accepted)
@@ -349,6 +350,7 @@
     (map query (map #(str/join (map char %)) (map z3/witness (prefixes* (:constraints this)))))))
 
 (def mem-queries (atom 0))
+(def s-mem-queries (atom 0))
 (def newest-table (atom nil))
 
 (defn query
@@ -356,7 +358,7 @@
   acceptance status."
   ([string count?]
    (when count
-     (swap! mem-queries inc))
+     (swap! s-mem-queries inc))
    (query string))
   ([string]
    (let [[accepted path] (tufte/p ::refine-string (refine-string string))
@@ -750,6 +752,7 @@
 
   ;; install the membership oracle
   (reset! mem-queries 0)
+  (reset! s-mem-queries 0)
   (install-parser! target)
 
   ;; parser installed, begin learning
@@ -757,6 +760,7 @@
         equivalence-queries (atom 0)
         start (System/currentTimeMillis)
         max-depth (atom 1)
+        eq-time (atom 0)
         cached-ces (atom #{})]
     (loop [table (make-table)]
       (let [conjecture (make-sfa* table)
@@ -766,7 +770,8 @@
                                            (if (> depth max)
                                              depth
                                              max)))
-                        (let [counter-example
+                        (let [eq-start (System/currentTimeMillis)
+                              counter-example
                               (if (= :perfect oracle)
                                 (tufte/p ::equivalence-query (check-equivalence-perfect target-sfa conjecture))
                                 (tufte/p ::equivalence-query
@@ -777,6 +782,9 @@
                                            :timeout-ms (ms-to-timeout start
                                                                       (System/currentTimeMillis)
                                                                       (ms->m timeout-ms))})))]
+                          ;; update equivalence time
+                          (swap! eq-time + (- (System/currentTimeMillis) eq-start))
+
                           (cond
                             ;; no counter example, search deeper or yield table
                             (nil? counter-example)
@@ -803,8 +811,10 @@
             {:table table
              :queries {:eqv @equivalence-queries
                        :mem @mem-queries
+                       :s-mem @s-mem-queries
                        :max-eqv-depth @max-depth}
              :time (- (System/currentTimeMillis) start)
+             :eq-time @eq-time
              :status :incomplete
              :equivalence :timeout})
 
@@ -815,8 +825,10 @@
             {:table new-table
              :queries {:eqv @equivalence-queries
                        :mem @mem-queries
+                       :s-mem @s-mem-queries
                        :max-eqv-depth @max-depth}
              :time (- (System/currentTimeMillis) start)
+             :eq-time @eq-time
              :status :complete
              :equivalence :total})
 
@@ -827,8 +839,10 @@
             {:table new-table
              :queries {:eqv @equivalence-queries
                        :mem @mem-queries
+                       :s-mem @s-mem-queries
                        :max-eqv-depth @max-depth}
              :time (- (System/currentTimeMillis) start)
+             :eq-time @eq-time
              :status :complete
              :equivalence :bounded})
 
@@ -843,6 +857,8 @@
                 {:table table
                  :queries {:eqv @equivalence-queries
                            :mem @mem-queries
+                           :eq-time @eq-time
+                           :s-mem @s-mem-queries
                            :max-eqv-depth @max-depth}
                  :time (- (System/currentTimeMillis) start)
                  :status :incomplete
@@ -1013,7 +1029,9 @@
                              "Model.TransitionCount"
                              "Model.CEDistance"
                              "Memb.Queries"
+                             "Memb.SQueries"
                              "Equiv.CE"
+                             "Equiv.Time"
                              "Equiv.MaxDepth"
                              "Learner.Type"
                              "Time(ms)"
@@ -1033,13 +1051,15 @@
                         ce-distance (count (first (check-equivalence-perfect target-sfa candidate)))
                         transition-count (.getTransitionCount candidate)
                         target-id (:target-id benchmark)
-                        {:keys [mem eqv max-eqv-depth]} (:queries benchmark)
+                        {:keys [s-mem mem eqv max-eqv-depth]} (:queries benchmark)
                         line (str/join \, [target-id
                                            state-count
                                            transition-count
                                            ce-distance
                                            mem
+                                           s-mem
                                            eqv
+                                           (:eq-time benchmark)
                                            max-eqv-depth
                                            (:equivalence benchmark)
                                            (:time benchmark)
@@ -1066,13 +1086,13 @@
   (def evaluation
     (tufte/profile
      {}
-     (evaluate! {:target (nth bench 120)
+     (evaluate! {:target (nth bench 4)
                  :depth 30
                  :timeout-ms (m->ms 10)
                  :oracle :perfect})))
 
   ;; get some stats from the evaluation
-  (pprint (select-keys evaluation [:queries :time]))
+  (pprint (select-keys evaluation [:queries :time :eq-time]))
 
   ;; stop all coastal instances
   (coastal-emergency-stop)
@@ -1081,6 +1101,16 @@
 
   ;; evaluate the full benchmark
   (def eval-fullsetset (future (evaluate-regexlib "regexlib-stratified.re" 30 (m->ms 10) :perfect)))
+
+  ;; cancel the evaluation
+  (future-cancel eval-fullsetset)
+
+  ;; load the results and check some stats
+  (def results (read-string (slurp "results/results.edn")))
+  (count results)
+
+  ;; write results to CSV
+  (spit "results.csv" (benchmarks->csv results))
 
   ;; this might be useful one day
   (java.util.Collections/binarySearch [0 1 2 8] 8 compare))
