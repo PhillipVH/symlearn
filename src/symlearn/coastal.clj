@@ -2,12 +2,9 @@
   (:gen-class)
   (:require [clojure.string :as str]
             [clojure.pprint :refer [pprint]]
-            [clojure.test :refer :all]
-            [clojure.spec.alpha :as s]
-            [clojure.spec.gen.alpha :as gen]
-            [clojure.java.shell :as shell]
-            [clojure.java.io :as io]
+            [clojure.test :refer [deftest is]]
             [clojure.java.shell :as sh]
+            [clojure.java.io :as io]
             [clojure.set :as set]
             [aero.core :as aero]
             [taoensso.carmine :as car]
@@ -15,17 +12,13 @@
             [taoensso.timbre :as log]
             [symlearn.intervals :as intervals]
             [symlearn.z3 :as z3]
-            [cljstache.core :refer [render render-resource]])
-  (:import [java.io File FileReader]
-           [java.nio.file Paths Path]
-           [java.net URI]
-           [java.util LinkedList Collection Iterator]
+            [cljstache.core :refer [render-resource]])
+  (:import [java.util LinkedList Collection Iterator]
+           [java.io File]
            [automata.sfa SFA SFAInputMove]
            [com.google.common.collect ImmutableList]
            [org.apache.commons.lang3.tuple ImmutablePair]
-           [theory.characters CharPred]
-           [RegexParser RegexParserProvider]
-           [benchmark.regexconverter RegexConverter]))
+           [theory.characters CharPred]))
 
 (set! *warn-on-reflection* true)
 
@@ -60,9 +53,7 @@
 (defmacro wcar*
   "Wraps Redis commands in a `car/wcar`."
   [& body]
-  `(car/wcar redis-conn ~@body)
-  #_`(let [redis-conn# {:pool {} :spec {:host (or (System/getenv "REDIS_HOST") "localhost") :port 6379}}]
-       (car/wcar redis-conn# ~@body)))
+  `(car/wcar redis-conn ~@body))
 
 (defn- refine-string
   "Returns [boolean list] of accepted? and path conditions"
@@ -75,14 +66,12 @@
            (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))
            (car/rpush :mustrefine ::ready)))
 
-  ;; wait for a solved response
-  ;; process reponse
+  ;; block for a response
   (let [[_ refined-path] (tufte/p ::wait-for-refinement (wcar* (car/brpop :refined 0)))
         [accepted path-condition] (str/split refined-path #"\n")]
     (wcar* (car/del :refined))
     (log/trace "Refinement received:" accepted)
     [(read-string accepted) path-condition]))
-
 
 (defn path->constraints
   "Return a seq of constraints extracted from `path-condition`, each of
@@ -181,8 +170,7 @@
                     interval-size (.size zi-intervals)]
                 (.append java-src "\t\t\t\tif (")
                 (doseq [id (range 0 interval-size)]
-                  (let [
-                        zi-guard ^CharPred (.guard transition)
+                  (let [zi-guard ^CharPred (.guard transition)
                         zi-intervals (.intervals zi-guard)
                         ;; bound (.. transition guard intervals (get id))
                         bound (.get zi-intervals id)
@@ -285,7 +273,7 @@
 (defn ^Process start!
   "Launch a Coastal process with a config file called `filename` as an argument."
   []
-  (if coastal-instance
+  (when coastal-instance
     (stop!))
   (tufte/p
    ::start-coastal
@@ -312,13 +300,13 @@
   "A safe version of `intervals/regex->sfa`, catching unsupported regex exceptions from
   the underlying parser, and timing out on parsers that take too long to construct."
   [target]
-  (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception e ::unsupported-regex))))
+  (timeout 5000 #(try (intervals/regex->sfa target) (catch Exception _ ::unsupported-regex))))
 
 (def target-sfa (atom nil))
 
 (defn install-parser!
   [regex]
-  (if coastal-instance
+  (when coastal-instance
     (stop!))
   (log/info "Generating Parser:" {:target regex})
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
@@ -357,7 +345,7 @@
   "Return a map with a set of assertions against `string`, and the parser's
   acceptance status."
   ([string count?]
-   (when count
+   (when count?
      (swap! s-mem-queries inc))
    (query string))
   ([string]
@@ -393,7 +381,7 @@
     (if (= row-length evidence-count)
       row
       (let [new-row (reduce (fn [row e]
-                              (conj row (tufte/p ::membership-query (quick-check (str (witness path) e)))#_(accepted? (tufte/p ::query-execution (query (str (witness path) e) :count)))))
+                              (conj row (tufte/p ::membership-query (quick-check (str (witness path) e))) #_(accepted? (tufte/p ::query-execution (query (str (witness path) e) :count)))))
                             row
                             (drop row-length evidence))]
         new-row))))
@@ -415,10 +403,10 @@
   if no open entries are present"
   [{:keys [S R]}]
   (let [s-rows (set (vals S))
-        r-rows (set (vals R))]
-    (let [candidate-rows (set/difference r-rows s-rows)
-          entries (filter (fn [[_ row]] (candidate-rows row)) R)]
-      (set (keys entries)))))
+        r-rows (set (vals R))
+        candidate-rows (set/difference r-rows s-rows)
+        entries (filter (fn [[_ row]] (candidate-rows row)) R)]
+    (set (keys entries))))
 
 (defn closed?
   "Table -> Boolean"
@@ -501,18 +489,6 @@
       (let [results (map #(% input) assertions)]
         (not (some false? results))))))
 
-(defn- root-entries
-  [{:keys [S R]}]
-  (let [s+r (merge S R)]
-    (assert (= (count s+r) (+ (count S) (count R))) "Elements lost during map merge")
-    (group-by (comp #(or (first %) #{}) :constraints first) s+r)))
-
-(defn- roots
-  [table]
-  (let [root-entries (root-entries table)]
-    (map (fn [[prefix entries]]
-           [prefix (sort-by (comp length first) entries)]) root-entries)))
-
 (defn pop*
   "Safe version of `clojure.core/pop`; returns nil when `coll` is empty"
   [coll]
@@ -525,8 +501,8 @@
 (defn- compute-prefix-pairs
   [{:keys [S R]}]
   (let [s+r (merge S R)]
-    (reduce (fn [prefix-pairs [path row :as entry]]
-              (let [prefixes  (filter (fn [[other-path other-row]]
+    (reduce (fn [prefix-pairs [path _ :as entry]]
+              (let [prefixes  (filter (fn [[other-path _]]
                                         (= (constraints path)
                                            (pop* (constraints other-path))))
                                       s+r)]
@@ -543,8 +519,7 @@
                   (if (seq? follow)
                     (conj transitions
                           (map (fn [[path row]]
-                                 (let [guard (first (drop (length prefix-path) (constraints path)))
-                                       guard-fn (constraint-set->fn (first guard))]
+                                 (let [guard (first (drop (length prefix-path) (constraints path)))]
                                    {:from prefix-row
                                     :guard guard
                                     :to row})) follow))
@@ -556,7 +531,7 @@
 (defn initial-state
   "Table -> State"
   [{:keys [S]}]
-  (let [[[path row]] (filter (fn [[path row]] (= 0 (length path))) S)]
+  (let [[[_ row]] (filter (fn [[path _]] (= 0 (length path))) S)]
     row))
 
 (defn states
@@ -574,7 +549,7 @@
     (into {} state-labels)))
 
 (defn final-states
-  [{:keys [S] :as table}]
+  [table]
   (let [states (states table)
         state-map (state-map table)
         final-states (filter (fn [state] (first state)) states)]
@@ -589,10 +564,10 @@
   (let [state-map (state-map table)
         transitions (set (compute-transitions table))
         relabeled (set (map (fn [{:keys [from guard to]}]
-                          {:from (get state-map from)
-                           :to (get state-map to)
-                           :guard (intervals/constraint-set->CharPred guard)})
-                        transitions))
+                              {:from (get state-map from)
+                               :to (get state-map to)
+                               :guard (intervals/constraint-set->CharPred guard)})
+                            transitions))
         transitions (map transition->SFAInputMove relabeled)
         initial-state (get state-map (initial-state table))
         final-states (final-states table)
@@ -640,7 +615,7 @@
                               {:from (get state-map from)
                                :to (get state-map to)
                                :guard (intervals/constraint-set->CharPred guard)})
-                           transitions))]
+                            transitions))]
     relabeled))
 
 (defn- intersection-of-transitions
@@ -686,22 +661,24 @@
 (defn process-counter-example
   "Table -> String -> Table"
   [table counter-example]
-  (let [unique-evidence (set (:E table))]
-    (let [new-table (tufte/p ::add-word-to-table (add-path-condition table (tufte/p ::s-membership-query (query counter-example :count))))]
-      (if (= 1 (count unique-evidence))
-        (tufte/p ::add-evidence (add-evidence* new-table counter-example))
-        (if-not (tufte/p ::check-determinism (deterministic? new-table))
-          (do
-            (log/info "Table has non-deterministic transitions, applying evidence.")
-            (tufte/p ::add-evidence (add-evidence* new-table counter-example)))
-          (do
-            (log/info "Table is deterministic, not applying evidence.")
-            new-table))))))
+  (let [unique-evidence (set (:E table))
+        new-table
+        (add-path-condition table (tufte/p ::s-membership-query
+                                           (query counter-example :count)))]
+    (if (= 1 (count unique-evidence))
+      (tufte/p ::add-evidence (add-evidence* new-table counter-example))
+      (if-not (tufte/p ::check-determinism (deterministic? new-table))
+        (do
+          (log/info "Table has non-deterministic transitions, applying evidence.")
+          (tufte/p ::add-evidence (add-evidence* new-table counter-example)))
+        (do
+          (log/info "Table is deterministic, not applying evidence.")
+          new-table)))))
 
 ;; evaluation
 
 (defn check-equivalence!
-  [{:keys [depth target ^SFA candidate]}]
+  [{:keys [depth target _]}]
   (log/info "Starting Equivalence Check:" {:target target, :depth depth})
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal"
                                  "learning/Example.properties"
@@ -751,17 +728,18 @@
   (log/info "Learning" {:target target, :depth depth-limit, :timeout-ms timeout-ms})
 
   ;; install the membership oracle
-  (reset! mem-queries 0)
-  (reset! s-mem-queries 0)
-  (install-parser! target)
+  (tufte/p
+   ::install-membership-oracle
+   (reset! mem-queries 0)
+   (reset! s-mem-queries 0)
+   (install-parser! target))
 
   ;; parser installed, begin learning
   (let [target-sfa (.minimize (intervals/regex->sfa target) intervals/solver)
         equivalence-queries (atom 0)
         start (System/currentTimeMillis)
         max-depth (atom 1)
-        eq-time (atom 0)
-        cached-ces (atom #{})]
+        eq-time (atom 0)]
     (loop [table (make-table)]
       (let [conjecture (make-sfa* table)
             new-table (loop [depth 1]
@@ -864,7 +842,7 @@
                  :status :incomplete
                  :equivalence :timeout})
               (do
-                (log/info "Beginning next learning cycle (time left:" (float (- (ms->m timeout-ms) minutes))"minutes)")
+                (log/info "Beginning next learning cycle (time left:" (float (- (ms->m timeout-ms) minutes)) "minutes)")
                 (recur new-table)))))))))
 
 
@@ -896,7 +874,7 @@
       str/split-lines))
 
 (defn evaluate!
-"A wrapper around `learn` that insulates us from some of the harsh realities of
+  "A wrapper around `learn` that insulates us from some of the harsh realities of
   evaluation. If `target` causes the underlying `RegexParserProvider` to crash, or
   the provider takes too long to produce a parser. Calls `learn` as the last step,
   given no error state."
@@ -943,8 +921,7 @@
 
 (defn prepare-evaluations
   [{:keys [benchmark-file benchmark-config n-evaluations]}]
-  (let [{:keys [max-string-length global-timeout oracle]} benchmark-config
-        subjects (str/split-lines (slurp (io/resource benchmark-file)))
+  (let [subjects (str/split-lines (slurp (io/resource benchmark-file)))
         n-subjects (count subjects)
         subjects-per-file (quot n-subjects n-evaluations)
         remainder (rem n-subjects n-evaluations)
@@ -964,34 +941,32 @@
 
 (defn evaluate-regexlib
   ([]
-   (do
-     (log/info "Starting regexlib Evaluation")
-     (let [{:keys [max-string-length oracle global-timeout]}
-           (aero/read-config "results/benchmark-config.edn")
+   (log/info "Starting regexlib Evaluation")
+   (let [{:keys [max-string-length oracle global-timeout]}
+         (aero/read-config "results/benchmark-config.edn")
 
-           results (evaluate-benchmark! "results/benchmark.re"
-                                        max-string-length
-                                        (m->ms global-timeout)
-                                        oracle)]
-       (sh/sh "mkdir" "-p" "results")
-       (spit "results/results.edn" (pr-str results))
-       (log/info "Finished regexlib Evaluation"))))
+         results (evaluate-benchmark! "results/benchmark.re"
+                                      max-string-length
+                                      (m->ms global-timeout)
+                                      oracle)]
+     (sh/sh "mkdir" "-p" "results")
+     (spit "results/results.edn" (pr-str results))
+     (log/info "Finished regexlib Evaluation")))
   ([file depth timeout-ms oracle]
-   (do
-     (log/info "Starting regexlib Evaluation")
-     (let [results (evaluate-benchmark! file
-                                        depth
-                                        timeout-ms
-                                        oracle)]
-       (sh/sh "mkdir" "-p" "results")
-       (spit "results/results.edn" (pr-str results))
-       (log/info "Finished regexlib Evaluation")))))
+   (log/info "Starting regexlib Evaluation")
+   (let [results (evaluate-benchmark! file
+                                      depth
+                                      timeout-ms
+                                      oracle)]
+     (sh/sh "mkdir" "-p" "results")
+     (spit "results/results.edn" (pr-str results))
+     (log/info "Finished regexlib Evaluation"))))
 
 ;; reporting
 
 (defn load-results
   []
-  (let [files (map #(format "results/regexlib-%d/results.edn" %) (range 8))
+  (let [files (map #(format "results/help-%d/results.edn" %) (range 8))
         results (map (comp read-string slurp) files)]
     results))
 
@@ -1068,8 +1043,27 @@
             header
             indexed)))
 
+(defn parser-size
+  [regex]
+  ;; generate the parser
+  (spit "ParserSize.java"
+        (render-resource "templates/ParserSize.java"
+                         {:parse-fn (sfa->java (regex->sfa* regex) "parse")}))
+
+  ;; compile
+  (sh/sh "javac" "ParserSize.java")
+
+  ;; measure
+  (-> (:out (sh/sh "javap" "-c" "ParserSize")) ;; dump bytecode
+      (str/split #"\n\n")
+      second ;; select "parse" function
+      (str/split #"\n")
+      (as-> $ (drop 2 $))
+      count ;; count the byte codes
+      dec))
+
 (defn -main
-  [& args]
+  []
   (evaluate-regexlib)
   (stop!)
   (shutdown-agents))

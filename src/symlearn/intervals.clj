@@ -73,8 +73,8 @@
   (initial-state [this] (.getInitialState this))
   (final-states [this] (.getFinalStates this))
   (state-count [this] (.stateCount this))
-  (transitions-from [this state] (.getTransitionsFrom this (int state)))
-  (transitions-to [this state] (.getTransitionsTo this (int state))))
+  (transitions-from [this state] (.getTransitionsFrom this ^int (int state)))
+  (transitions-to [this state] (.getTransitionsTo this ^int (int state))))
 
 (defprotocol ITransition
   "A protocol for transitions over the domain of characters."
@@ -117,7 +117,6 @@
                 (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array [regex])))
         root (.get nodes 0)
         sfa (RegexConverter/toSFA root solver)
-        determinized (.determinize sfa solver)
         completed (SFA/mkTotal sfa solver 1000)]
     completed))
 
