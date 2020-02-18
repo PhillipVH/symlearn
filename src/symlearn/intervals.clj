@@ -118,7 +118,7 @@
         root (.get nodes 0)
         sfa (RegexConverter/toSFA root solver)
         completed (SFA/mkTotal sfa solver 1000)]
-    completed))
+    (.minimize completed solver)))
 
 (defn sfa->java
   "Return the Java source code that represents a parser accepting the language

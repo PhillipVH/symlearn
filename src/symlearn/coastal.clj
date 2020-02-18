@@ -308,14 +308,14 @@
   [regex]
   (when coastal-instance
     (stop!))
-  (log/info "Generating Parser:" {:target regex})
+  (log/trace "Generating Parser:" {:target regex})
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
     (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
-    (log/info "Compiling Parser:" {:target regex})
+    (log/trace "Compiling Parser:" {:target regex})
     (compile-parsers!)
-    (log/info "Starting Parser:" {:target regex})
+    (log/trace "Starting Parser:" {:target regex})
     (start!)
-    (log/info "Flushing Parser:" {:target regex})
+    (log/trace "Flushing Parser:" {:target regex})
     (dotimes [_ 3]
       (refine-string "")) ;; flush the default run from the membership oracle
     (reset! target-sfa (regex->sfa* regex))
@@ -442,7 +442,7 @@
         table-with-prefixes (reduce (fn [table* {:keys [accepted] :as path}]
                                       (if (or (get (:R table-with-ce) path)
                                               (get (:S table-with-ce) path))
-                                        table*  ;; lazyness being useful
+                                        table*  ;; laziness being useful
                                         (update table* :R #(assoc % path [accepted]))))
                                     table-with-ce
                                     prefixes)
@@ -669,10 +669,10 @@
       (tufte/p ::add-evidence (add-evidence* new-table counter-example))
       (if-not (tufte/p ::check-determinism (deterministic? new-table))
         (do
-          (log/info "Table has non-deterministic transitions, applying evidence.")
+          (log/trace "Table has non-deterministic transitions, applying evidence.")
           (tufte/p ::add-evidence (add-evidence* new-table counter-example)))
         (do
-          (log/info "Table is deterministic, not applying evidence.")
+          (log/trace "Table is deterministic, not applying evidence.")
           new-table)))))
 
 ;; evaluation
@@ -785,7 +785,7 @@
           ;; equivalence check timed out
           (= ::timeout new-table)
           (do
-            (log/info "Timeout")
+            (log/info "\nTimeout")
             {:table table
              :queries {:eqv @equivalence-queries
                        :mem @mem-queries
@@ -799,6 +799,7 @@
           ;; the two SFAs are entirely equivalent
           (equivalent? target-sfa (make-sfa* new-table))
           (do
+            (println)
             (log/info "Total Equivalence")
             {:table new-table
              :queries {:eqv @equivalence-queries
@@ -813,6 +814,7 @@
           ;; the candidate SFA is equivalent to a bounded
           (= table new-table)
           (do
+            (println)
             (log/info "Bounded Equivalence:" {:depth depth-limit})
             {:table new-table
              :queries {:eqv @equivalence-queries
@@ -831,6 +833,7 @@
                 minutes (/ diff 60000)]
             (if (> minutes (ms->m timeout-ms))
               (do
+                (println)
                 (log/info "Timeout (Global)")
                 {:table table
                  :queries {:eqv @equivalence-queries
@@ -842,7 +845,8 @@
                  :status :incomplete
                  :equivalence :timeout})
               (do
-                (log/info "Beginning next learning cycle (time left:" (float (- (ms->m timeout-ms) minutes)) "minutes)")
+                (log/trace "Beginning next learning cycle (time left:" (float (- (ms->m timeout-ms) minutes)) "minutes)")
+                (print \.)
                 (recur new-table)))))))))
 
 
@@ -1044,6 +1048,7 @@
             indexed)))
 
 (defn parser-size
+  "Count the number of bytecodes in the parser generated for `regex`."
   [regex]
   ;; generate the parser
   (spit "ParserSize.java"
@@ -1061,6 +1066,56 @@
       (as-> $ (drop 2 $))
       count ;; count the byte codes
       dec))
+
+(defn path->str
+  [path]
+  (let [constraints (map intervals/constraint-set->CharPred (constraints path))]
+    (str/join constraints)))
+
+(defn row->str
+  [row]
+  (reduce (fn [row accepted]
+            (str row (if accepted "+" "-") " "))
+          ""
+          row))
+
+(defn entry->str
+  [[path row]]
+  (let [path-str (path->str path)
+        row-str (row->str row)]
+    (format "%-51s | %s \n" path-str row-str)))
+
+(defn table->str
+  [table]
+  (doseq [entry (:S table)]
+    (print (entry->str entry)))
+  (println "---------------------------------------------")
+  (doseq [entry (:R table)]
+    (print (entry->str entry))))
+
+(defn shrink-table
+  "Remove junk entries from R in `table`."
+  [table iterations]
+  (loop [table table
+         iterations iterations]
+    (let [dropout (nth (keys (:R table)) ;; select a key to drop
+                       (int (rand (count (:R table)))))
+          new-table (update-in table [:R] dissoc dropout)
+          t (count (:R table))
+          nt (count (:R new-table))
+          eqv? (equivalent? (make-sfa* table)
+                            (make-sfa* new-table))
+          next (if eqv? new-table table)]
+      (print \.)
+      ;; ensure the number of nodes decreases by one
+      (assert (= (dec t) nt))
+
+      ;; loop until budget exhausted
+      (if (< 0 iterations)
+        (recur next (dec iterations))
+        (do
+          (log/info "New R Size: " nt)
+          next)))))
 
 (defn -main
   []
