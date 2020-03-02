@@ -1,14 +1,11 @@
 (ns symlearn.intervals
   (:import org.apache.commons.lang3.tuple.ImmutablePair
-           (com.google.common.collect ImmutableList
-                                      Iterators)
            theory.intervals.UnaryCharIntervalSolver
            theory.characters.CharPred
            benchmark.regexconverter.RegexConverter
            (automata.sfa SFA
                          SFAInputMove)
-           (RegexParser RegexNode
-                        RegexParserProvider)))
+           (RegexParser RegexParserProvider)))
 
 (set! *warn-on-reflection* true)
 
@@ -35,7 +32,7 @@
   [^CharPred interval]
   (let [iter (.iterator (.intervals interval))]
     (loop [intervals #{}]
-      (if-let [has-next? (.hasNext iter)]
+      (if-let [_ (.hasNext iter)]
         (let [next ^ImmutablePair (.next iter)
               left (.getLeft next)
               right (.getRight next)]
