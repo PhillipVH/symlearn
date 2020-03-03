@@ -124,7 +124,7 @@
          args-in (or path-in-docker (str (System/getProperty "user.dir") "/resources/Regex.xml"))
          args (into-array ["./gradlew" "run" (str "--args=" args-in)])
          builder (ProcessBuilder. ^"[Ljava.lang.String;" args)
-         coastal-dir (File. "coastal")]
+         coastal-dir (File. "mem-coastal")]
      (.directory builder coastal-dir)
      (let [new-coastal-instance (.start builder)]
        (alter-var-root #'coastal-instance (constantly new-coastal-instance))
@@ -145,7 +145,7 @@
     (stop!))
   (log/trace "Generating Parser:" {:target regex})
   (let [parser-src (intervals/sfa->java (intervals/regex->sfa regex) "examples.tacas2017" "Regex")]
-    (spit "coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
+    (spit "mem-coastal/src/main/java/examples/tacas2017/Regex.java" parser-src)
     (log/trace "Compiling Parser:" {:target regex})
     (codegen/compile-parsers!)
     (log/trace "Starting Parser:" {:target regex})
@@ -201,7 +201,7 @@
   (log/info "Starting Equivalence Check:" {:target target, :depth depth})
   (let [coastal-log (:out (sh/sh "./coastal/bin/coastal"
                                  "learning/Example.properties"
-                                 :dir "eqv-coastal-new/build/classes/java/main"))
+                                 :dir "eqv-coastal/build/classes/java/main"))
         ce (re-seq #"<<Counter Example: (.*)>>" coastal-log)]
     (log/info coastal-log)
     (log/info "Finished Equivalence Check:" {:target target, :depth depth})

@@ -17,9 +17,9 @@
 (defn compile-parsers!
   "Compile the parsers installed in the Coastal system."
   []
-  (sh/with-sh-dir "coastal"
+  (sh/with-sh-dir "mem-coastal"
     (sh/sh "./gradlew" "clean"))
-  (let [coastal-dir (File. "coastal")
+  (let [coastal-dir (File. "mem-coastal")
         args (into-array ["./gradlew" "compileJava" "--no-daemon"])
         builder (ProcessBuilder. ^"[Ljava.lang.String;" args)]
     (.directory builder coastal-dir)
@@ -29,7 +29,7 @@
 
 (defn compile-equivalence-oracle!
   []
-  (sh/with-sh-dir "eqv-coastal-new"
+  (sh/with-sh-dir "eqv-coastal"
     ;; compile coastal
     (let [clean-log (:out (sh/sh "./gradlew" "clean"))]
       (log/info clean-log))
@@ -136,9 +136,7 @@
 
 (defn install-equivalence-oracle!
   [^SFA candidate target depth]
-  (spit "eqv-coastal-new/src/main/java/learning/Example.java"
+  (spit "eqv-coastal/src/main/java/learning/Example.java"
         (mk-equivalence-oracle candidate target depth))
   (log/info "Compiling Equivalence Oracle:" {:target target, :depth depth})
   (compile-equivalence-oracle!))
-
-

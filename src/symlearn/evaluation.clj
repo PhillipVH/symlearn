@@ -239,9 +239,9 @@
     (profile/profile
      {}
      (evaluate!
-      {:target (nth bench 20)
+      {:target (nth bench 100)
        :depth 30
-       :timeout-ms (coastal/m->ms 10)
+       :timeout-ms (time/m->ms 10)
        :oracle :perfect})))
 
   ;; get some stats from the evaluation
