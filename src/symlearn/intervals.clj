@@ -1,7 +1,7 @@
 (ns symlearn.intervals
   (:import org.apache.commons.lang3.tuple.ImmutablePair
            theory.intervals.UnaryCharIntervalSolver
-           theory.characters.CharPred
+           (theory.characters CharPred)
            benchmark.regexconverter.RegexConverter
            (automata.sfa SFA
                          SFAInputMove)
@@ -61,17 +61,13 @@
   "A protocol for SFAs over the domain of characters."
   (initial-state [this] "Return the initial state of `this`.")
   (final-states [this] "Return the set of final states of `this`.")
-  (state-count [this] "Return the number of states in `this`.")
-  (transitions-from [this state] "Return all the transitions in `this` from `state`.")
-  (transitions-to [this state] "Return all the transitions in `this` to `state`."))
+  (state-count [this] "Return the number of states in `this`."))
 
 (extend-type SFA
   ISFA
   (initial-state [this] (.getInitialState this))
   (final-states [this] (.getFinalStates this))
-  (state-count [this] (.stateCount this))
-  (transitions-from [this state] (.getTransitionsFrom this ^int (int state)))
-  (transitions-to [this state] (.getTransitionsTo this ^int (int state))))
+  (state-count [this] (.stateCount this)))
 
 (defprotocol ITransition
   "A protocol for transitions over the domain of characters."
@@ -80,12 +76,12 @@
   (guard [this] "Return the guard used by `this` to check if a transition should occur."))
 
 (defn constraint->CharPred
-  [[op bound]]
+  [[op ^int bound]]
   (case op
-    ">" (CharPred. (char (inc bound)) \uFFFF)
-    ">=" (CharPred. (char bound) \uFFFF)
-    "<" (CharPred. \u0000 (char (dec bound)))
-    "<=" (CharPred. \u0000 (char bound))
+    ">" (CharPred. ^Character (char (inc bound)) \uFFFF)
+    ">=" (CharPred. ^Character (char bound) \uFFFF)
+    "<" (CharPred. \u0000 ^Character (char (dec bound)))
+    "<=" (CharPred. \u0000 ^Character (char bound))
     "==" (CharPred. (char bound))
     "!=" (negate (CharPred. (char bound)))))
 
@@ -112,7 +108,7 @@
   [regex]
   (let [nodes (binding [*out* (java.io.StringWriter.)] ;; get rid of the "string to be parsed" message
                 (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array [regex])))
-        root (.get nodes 0)
+        root (.get ^java.util.List nodes 0)
         sfa (RegexConverter/toSFA root solver)
         completed (SFA/mkTotal sfa solver 1000)]
     (.minimize completed solver)))
@@ -152,13 +148,20 @@
 
           (let [transitions-iter (.iterator (.getTransitionsFrom sfa ^Integer state))]
             (while (.hasNext transitions-iter)
-              (let [transition (.next transitions-iter)
-                    interval-size (.. transition guard intervals size)]
+              (let [transition ^SFAInputMove (.next transitions-iter)
+                    zi-guard ^CharPred (.guard transition)
+                    zi-intervals (.intervals zi-guard)
+                    interval-size (.size zi-intervals)
+                    #_interval-size #_(.. transition guard intervals size)]
                 (.append java-src "\t\t\t\tif (")
                 (doseq [id (range 0 interval-size)]
-                  (let [bound (.. transition guard intervals (get id))
-                        left (.getLeft bound)
-                        right (.getRight bound)]
+                  (let [#_bound #_(.. transition guard intervals (get id))
+                        zi-guard ^CharPred (.guard transition)
+                        zi-intervals (.intervals zi-guard)
+
+                        bound (.get zi-intervals id)
+                        left (.getLeft ^ImmutablePair bound)
+                        right (.getRight ^ImmutablePair bound)]
                     (when (> id 0)
                       (.append java-src " || "))
 
@@ -167,18 +170,18 @@
                         (.append "(current >= ")
                         (.append (if (nil? left)
                                    "Character.MIN_VALUE"
-                                   (str "(char)" (int (.charValue left)))))
+                                   (str "(char)" (int (.charValue ^Character left)))))
                         (.append " && current <= ")
                         (.append (if (nil? right)
                                    "Character.MAX_VALUE"
-                                   (str "(char)" (int (.charValue right)))))
+                                   (str "(char)" (int (.charValue ^Character right)))))
                         (.append ")"))
 
                       (doto java-src
                         (.append "(current == ")
                         (.append (if (nil? left)
                                    "Character.MIN_VALUE"
-                                   (str "(char)" (int (.charValue left)))))
+                                   (str "(char)" (int (.charValue ^Character left)))))
                         (.append ")")))))
                 (doto java-src
                   (.append ") {\n")
