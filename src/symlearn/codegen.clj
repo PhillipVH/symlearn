@@ -10,6 +10,8 @@
            org.apache.commons.lang3.tuple.ImmutablePair
            theory.characters.CharPred))
 
+(set! *warn-on-reflection* true)
+
 ;; code generation and compilation
 
 (defn compile-parsers!

@@ -76,7 +76,7 @@
   (guard [this] "Return the guard used by `this` to check if a transition should occur."))
 
 (defn constraint->CharPred
-  [[op ^int bound]]
+  [[op bound]]
   (case op
     ">" (CharPred. ^Character (char (inc bound)) \uFFFF)
     ">=" (CharPred. ^Character (char bound) \uFFFF)

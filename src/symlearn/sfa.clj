@@ -8,6 +8,8 @@
            theory.characters.CharPred
            com.google.common.collect.ImmutableList))
 
+(set! *warn-on-reflection* true)
+
 ;; sfa creation
 
 (defn constraint-set->fn
@@ -37,8 +39,8 @@
   (let [s+r (merge S R)]
     (reduce (fn [prefix-pairs [path _ :as entry]]
               (let [prefixes  (filter (fn [[other-path _]]
-                                        (= (.constraints path)
-                                           (pop* (.constraints other-path))))
+                                        (= (coastal/constraints path)
+                                           (pop* (coastal/constraints other-path))))
                                       s+r)]
                 (conj prefix-pairs [entry :is-prefix-of prefixes])))
             []
@@ -53,7 +55,7 @@
                   (if (seq? follow)
                     (conj transitions
                           (map (fn [[path row]]
-                                 (let [guard (first (drop (.length prefix-path) (.constraints path)))]
+                                 (let [guard (first (drop (coastal/length prefix-path) (coastal/constraints path)))]
                                    {:from prefix-row
                                     :guard guard
                                     :to row})) follow))

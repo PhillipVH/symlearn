@@ -7,9 +7,10 @@
             [taoensso.timbre :as log])
   (:import automata.sfa.SFA))
 
+(set! *warn-on-reflection* true)
+
 (def mem-queries (atom 0))
 (def target-sfa (atom nil))
-
 
 (defn make-table
   "Table"
@@ -120,7 +121,6 @@
             (add-evidence table evidence))
           table
           (make-evidence counter-example)))
-
 
 (defn process-counter-example
   "Table -> String -> Table"

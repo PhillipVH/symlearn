@@ -7,6 +7,8 @@
             [symlearn.time :as time]
             [symlearn.sfa :as sfa]))
 
+(set! *warn-on-reflection* true)
+
 (defn learn
   "Learn `target` to `depth`."
   [{:keys [target depth-limit timeout-ms oracle] :or {oracle :coastal}}]

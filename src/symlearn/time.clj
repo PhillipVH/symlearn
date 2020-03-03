@@ -1,5 +1,7 @@
 (ns symlearn.time)
 
+(set! *warn-on-reflection* true)
+
 ;; time utilities
 
 (defn ms->m

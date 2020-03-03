@@ -14,6 +14,8 @@
             [aero.core :as aero])
   (:import automata.sfa.SFA))
 
+(set! *warn-on-reflection* true)
+
 ;; evaluation
 
 (defn load-benchmark
