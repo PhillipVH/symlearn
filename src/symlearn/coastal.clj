@@ -1,40 +1,21 @@
 (ns symlearn.coastal
   (:gen-class)
-  (:require [clojure.string :as str]
-            [clojure.java.shell :as sh]
-            [taoensso.carmine :as car]
-            [taoensso.tufte :as tufte]
-            [taoensso.timbre :as log]
+  (:require [clojure.java.shell :as sh]
+            [clojure.string :as str]
+            [symlearn.codegen :as codegen]
             [symlearn.intervals :as intervals]
-            [symlearn.z3 :as z3]
             [symlearn.sfa :as sfa]
-            [symlearn.codegen :as codegen])
-  (:import [automata.sfa SFA]
-           [java.io File]))
+            [symlearn.time :as time]
+            [symlearn.z3 :as z3]
+            [taoensso.carmine :as car]
+            [taoensso.timbre :as log]
+            [taoensso.tufte :as tufte])
+  (:import automata.sfa.SFA
+           java.io.File))
 
 (set! *warn-on-reflection* true)
 
 (defonce ^Process coastal-instance nil)
-
-;; time utilities
-
-(defn m->ms
-  "Returns `m` minutes in milliseconds."
-  [m]
-  (* 1000 60 m))
-
-(defn ms->m
-  [ms]
-  (/ ms 60000))
-
-(defn ms-to-timeout
-  "Returns the number of milliseconds left between `now` and `minutes-limit`."
-  [start now minutes-limit]
-  (let [diff (- now start)
-        minutes (float (/ diff 60000))]
-    (if (>= minutes minutes-limit)
-      0
-      (m->ms (- minutes-limit minutes)))))
 
 ;; coastal integration
 
@@ -232,7 +213,7 @@
 (defn check-equivalence-timed!
   [{:keys [depth target ^SFA candidate timeout-ms]}]
   (codegen/install-equivalence-oracle! candidate target depth) ;; don't include compilation time
-  (log/info "Minutes for this check:" (ms->m timeout-ms))
+  (log/info "Minutes for this check:" (time/ms->m timeout-ms))
   (let [f (future (check-equivalence! {:depth depth
                                        :target target
                                        :candidate candidate}))
@@ -252,7 +233,7 @@
 (defn check-equivalence-perfect
   "Use symbolicautomata to check our candidate against a perfect target."
   [^SFA target ^SFA candidate]
-  (let [check (SFA/areEquivalentPlusWitness target candidate intervals/solver (m->ms 10))
+  (let [check (SFA/areEquivalentPlusWitness target candidate intervals/solver (time/m->ms 10))
         equivalent? (.getFirst check)]
     (when-not equivalent?
       #{(str/join "" (.getSecond check))})))

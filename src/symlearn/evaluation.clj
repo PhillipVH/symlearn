@@ -1,6 +1,7 @@
 (ns symlearn.evaluation
   (:require [symlearn.coastal :as coastal]
             [symlearn.sfa :as sfa]
+            [symlearn.time :as time]
             [symlearn.core :as symlearn]
             [symlearn.table :as table]
             [taoensso.timbre :as log]
@@ -93,7 +94,7 @@
 
          results (evaluate-benchmark! "results/benchmark.re"
                                       max-string-length
-                                      (coastal/m->ms global-timeout)
+                                      (time/m->ms global-timeout)
                                       oracle)]
      (sh/sh "mkdir" "-p" "results")
      (spit "results/results.edn" (pr-str results))
@@ -108,7 +109,11 @@
      (spit "results/results.edn" (pr-str results))
      (log/info "Finished regexlib Evaluation"))))
 
-
+(defn -main
+  []
+  (evaluate-regexlib)
+  (coastal/stop!)
+  (shutdown-agents))
 
 (comment
 

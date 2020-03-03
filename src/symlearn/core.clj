@@ -1,10 +1,10 @@
 (ns symlearn.core
-  (:require [clojure.pprint :refer [pprint]]
-            [taoensso.timbre :as log]
+  (:require [taoensso.timbre :as log]
             [taoensso.tufte :as tufte]
             [symlearn.coastal :as c]
             [symlearn.intervals :as intervals]
             [symlearn.table :as table]
+            [symlearn.time :as time]
             [symlearn.sfa :as sfa]))
 
 (defn learn
@@ -43,9 +43,9 @@
                                           {:depth depth,
                                            :target target
                                            :candidate conjecture
-                                           :timeout-ms (c/ms-to-timeout start
+                                           :timeout-ms (time/ms-to-timeout start
                                                                         (System/currentTimeMillis)
-                                                                      (c/ms->m timeout-ms))})))]
+                                                                      (time/ms->m timeout-ms))})))]
                           ;; update equivalence time
                           (swap! eq-time + (- (System/currentTimeMillis) eq-start))
 
@@ -117,7 +117,7 @@
           (let [now (System/currentTimeMillis)
                 diff (- now start)
                 minutes (/ diff 60000)]
-            (if (> minutes (c/ms->m timeout-ms))
+            (if (> minutes (time/ms->m timeout-ms))
               (do
                 (println)
                 (log/info "Timeout (Global)")
@@ -131,12 +131,6 @@
                  :status :incomplete
                  :equivalence :timeout})
               (do
-                (log/trace "Beginning next learning cycle (time left:" (float (- (c/ms->m timeout-ms) minutes)) "minutes)")
+                (log/trace "Beginning next learning cycle (time left:" (float (- (time/ms->m timeout-ms) minutes)) "minutes)")
                 (print \.)
                 (recur new-table)))))))))
-
-(defn -main
-  []
-  #_(evaluation/evaluate-regexlib)
-  (c/stop!)
-  (shutdown-agents))
