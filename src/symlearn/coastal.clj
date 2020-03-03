@@ -16,8 +16,6 @@
 
 (defonce ^Process coastal-instance nil)
 
-;; coastal integration
-
 (def redis-conn {:pool {}
                  :spec {:host (or (System/getenv "REDIS_HOST") "localhost")
                         :port 6379}})
@@ -156,8 +154,6 @@
     (log/info "Parser Ready:" {:target regex})
     ::ok))
 
-;; table manipulation
-
 (declare query)
 
 (defrecord PathCondition [accepted constraints]
@@ -193,8 +189,6 @@
                                  (map set)
                                  (vec)))]
      (->PathCondition accepted constraints))))
-
-;; evaluation
 
 (defn check-equivalence!
   [{:keys [depth target _]}]

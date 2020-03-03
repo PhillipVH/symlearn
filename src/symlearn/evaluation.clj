@@ -16,8 +16,6 @@
 
 (set! *warn-on-reflection* true)
 
-;; evaluation
-
 (defn load-benchmark
   [filename]
   (-> filename
@@ -113,7 +111,7 @@
      (spit "results/results.edn" (pr-str results))
      (log/info "Finished regexlib Evaluation"))))
 
-;; reporting
+;; reporting - particular for parallel sessions
 
 (defn load-results
   []

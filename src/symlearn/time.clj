@@ -2,8 +2,6 @@
 
 (set! *warn-on-reflection* true)
 
-;; time utilities
-
 (defn ms->m
   [ms]
   (/ ms 60000))

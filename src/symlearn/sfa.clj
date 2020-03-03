@@ -10,8 +10,6 @@
 
 (set! *warn-on-reflection* true)
 
-;; sfa creation
-
 (defn constraint-set->fn
   "[Constraint] -> (Char -> Boolean)"
   [constraint-set]

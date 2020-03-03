@@ -12,8 +12,6 @@
 
 (set! *warn-on-reflection* true)
 
-;; code generation and compilation
-
 (defn compile-parsers!
   "Compile the parsers installed in the Coastal system."
   []
