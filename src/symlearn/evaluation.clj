@@ -3,6 +3,7 @@
             [symlearn.sfa :as sfa]
             [symlearn.time :as time]
             [symlearn.core :as symlearn]
+            [symlearn.intervals :as intervals]
             [symlearn.table :as table]
             [taoensso.timbre :as log]
             [taoensso.tufte :as profile]
@@ -10,7 +11,8 @@
             [clojure.java.shell :as sh]
             [clojure.pprint :refer [pprint]]
             [clojure.string :as str]
-            [aero.core :as aero]))
+            [aero.core :as aero])
+  (:import automata.sfa.SFA))
 
 ;; evaluation
 
@@ -108,6 +110,113 @@
      (sh/sh "mkdir" "-p" "results")
      (spit "results/results.edn" (pr-str results))
      (log/info "Finished regexlib Evaluation"))))
+
+;; reporting
+
+(defn load-results
+  []
+  (let [files (map #(format "results/help-%d/results.edn" %) (range 8))
+        results (map (comp read-string slurp) files)]
+    results))
+
+(defn pad-results
+  []
+  (reduce (fn [results result-set]
+            (let [n-results (count result-set)
+                  n-pad (- 25 n-results)]
+              (conj results (concat result-set (repeat n-pad {:padding true})))))
+          []
+          (load-results)))
+
+(defn merge-results
+  []
+  (apply concat (pad-results)))
+
+(defn escape-string
+  [string]
+  (let [escapes (map char-escape-string string)
+        chars (str/split string #"")]
+    (reduce (fn [string idx]
+              (if (nth escapes idx)
+                (str string (nth escapes idx))
+                (str string (nth chars idx))))
+            ""
+            (range (count string)))))
+
+(defn benchmarks->csv
+  [benchmarks]
+  (let [indexed (map-indexed (fn [idx benchmark]
+                               (assoc benchmark :target-id idx))
+                             benchmarks)
+        header (str/join \, ["TargetID"
+                             "Model.StateCount"
+                             "Model.TransitionCount"
+                             "Model.CEDistance"
+                             "Memb.Queries"
+                             "Memb.SQueries"
+                             "Equiv.CE"
+                             "Equiv.Time"
+                             "Equiv.MaxDepth"
+                             "Learner.Type"
+                             "Time(ms)"
+                             "TargetRegex"
+                             "\n"])]
+    (reduce (fn [csv benchmark]
+              (if (:padding benchmark)
+                (str csv (:target-id benchmark) ",Padding\n")
+                (if (or (= ::timed-out (:equivalence benchmark))
+                        (= "Regex is not supported" (:equivalent? benchmark))
+                        (nil? (:table benchmark)))
+                  (str csv (:target-id benchmark) ",Timeout\n")
+                  (let [candidate ^SFA (sfa/make-sfa* (:table benchmark))
+                        state-count (.stateCount candidate)
+                        target (:target benchmark)
+                        target-sfa (sfa/regex->sfa* target)
+                        ce-distance (count (first (coastal/check-equivalence-perfect target-sfa candidate)))
+                        transition-count (.getTransitionCount candidate)
+                        target-id (:target-id benchmark)
+                        {:keys [s-mem mem eqv max-eqv-depth]} (:queries benchmark)
+                        line (str/join \, [target-id
+                                           state-count
+                                           transition-count
+                                           ce-distance
+                                           mem
+                                           s-mem
+                                           eqv
+                                           (:eq-time benchmark)
+                                           max-eqv-depth
+                                           (:equivalence benchmark)
+                                           (:time benchmark)
+                                           (escape-string target)])]
+                    (str csv line "\n")))))
+            header
+            indexed)))
+
+(defn path->str
+  [path]
+  (let [constraints (map intervals/constraint-set->CharPred (coastal/constraints path))]
+    (str/join constraints)))
+
+(defn row->str
+  [row]
+  (reduce (fn [row accepted]
+            (str row (if accepted "+" "-") ""))
+          ""
+          row))
+
+(defn entry->str
+  [[path row]]
+  (let [path-str (path->str path)
+        row-str (row->str row)]
+    (format "%-51s | %s \n" path-str row-str)))
+
+(defn table->str
+  [table]
+  (doseq [entry (:S table)]
+    (print (entry->str entry)))
+  (println "---------------------------------------------")
+  (doseq [entry (:R table)]
+    (print (entry->str entry))))
 
 (defn -main
   []
