@@ -245,9 +245,11 @@
   ;; get some stats from the evaluation
   (pprint (select-keys evaluation [:queries :time :eq-time]))
 
-  (def trimmed (table/shrink-table (:table evaluation) 1000))
+  ;; shrink the table obtained in the evaluation
+  (def trimmed (table/shrink-table (:table evaluation) 100))
 
-  (log/set-level! :info)
+  ;; verbose logging
+  (log/set-level! :trace)
 
   ;; stop all coastal instances
   (coastal/coastal-emergency-stop)

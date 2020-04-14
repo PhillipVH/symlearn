@@ -17,6 +17,8 @@
 
                  ;; code generation
                  [cljstache "2.0.4"]
+
+                 ;; logging
                  [com.taoensso/timbre "4.10.0"]
 
                  ;; utilities
@@ -33,16 +35,8 @@
                  [javacup/cup "11"]]
   :main ^:skip-aot symlearn.evaluation
   :repositories {"local" "file:lib"}
-  :java-source-paths ["src/main/java"]
   :target-path "target/%s"
   :resource-paths ["resources/"
-                   "results/"
-                   "symbolicautomata/commons-lang3-3.4.jar"
-                   "symbolicautomata/guava-18.0.jar"
-                   "symbolicautomata/org.ow2.sat4j.core-2.3.4.jar"
-                   "symbolicautomata/SVPAlib-1.0.jar"
-                   "symbolicautomata/SVPABenchmark-0.0.1-SNAPSHOT.jar"
-                   "symbolicautomata/Parsers-1.0.jar"
-                   "symbolicautomata/javacup-11c.jar"]
+                   "results/"]
   :jvm-opts ["-Xms4g" "-Xmx12g"]
   :profiles {:uberjar {:aot :all}})
