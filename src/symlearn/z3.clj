@@ -4,6 +4,8 @@
             [clojure.java.shell :as sh]
             [taoensso.tufte :as tufte]))
 
+(set! *warn-on-reflection* true)
+
 (defn- assert
   [[op bound]]
   (let [negation (= "!=" op)
