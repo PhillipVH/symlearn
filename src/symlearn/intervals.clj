@@ -103,15 +103,21 @@
   [from to ^CharPred guard]
   (SFAInputMove. (int from) (int to) guard))
 
-(defn ^SFA regex->sfa
-  "Returns an SFA that accepts the language described by `regex`."
+(defn ^SFA regex->sfa*
   [regex]
   (let [nodes (binding [*out* (java.io.StringWriter.)] ;; get rid of the "string to be parsed" message
                 (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array [regex])))
         root (.get ^java.util.List nodes 0)
-        sfa (RegexConverter/toSFA root solver)
-        completed (SFA/mkTotal sfa solver 1000)]
-    (.minimize completed solver)))
+        sfa (RegexConverter/toSFA root solver)]
+    (.determinize sfa solver)))
+
+(defn ^SFA regex->sfa
+  "Returns an SFA that accepts the language described by `regex`."
+  [regex]
+  (let [incomplete-sfa (regex->sfa* regex)
+        completed (SFA/mkTotal incomplete-sfa solver 1000)]
+    completed
+    #_(.minimize completed solver)))
 
 (defn sfa->java
   "Return the Java source code that represents a parser accepting the language
