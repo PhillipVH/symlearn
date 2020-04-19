@@ -188,3 +188,16 @@
 (defn equivalent?
   [^SFA target ^SFA candidate]
   (.isEquivalentTo target candidate intervals/solver))
+
+;; (show-sfa (intervals/regex->sfa* "[ab]|[cd]"))
+;; (show-sfa (intervals/regex->sfa "[ab]|[cd]"))
+
+;; (def ascii-printable (apply intervals/make-interval [\u0020 \u007E]))
+
+;; (defn only-printable
+;;   [interval]
+;;   (intervals/intersection ascii-printable interval))
+
+;; (let [an-interval (intervals/make-interval \u0000 \uffff)]
+;;   (only-printable an-interval))
+
