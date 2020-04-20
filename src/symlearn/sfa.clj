@@ -1,5 +1,6 @@
 (ns symlearn.sfa
   (:require [clojure.java.shell :as sh]
+            [clojure.string :as str]
             [taoensso.timbre :as log]
             [symlearn.coastal :as coastal]
             [symlearn.intervals :as intervals])
@@ -189,15 +190,47 @@
   [^SFA target ^SFA candidate]
   (.isEquivalentTo target candidate intervals/solver))
 
-;; (show-sfa (intervals/regex->sfa* "[ab]|[cd]"))
+;; (show-sfa (intervals/regex->sfa* "[ab]|[cd]e+"))
 ;; (show-sfa (intervals/regex->sfa "[ab]|[cd]"))
 
-;; (def ascii-printable (apply intervals/make-interval [\u0020 \u007E]))
+(def ascii-printable (apply intervals/make-interval [\u0020 \u007E]))
 
-;; (defn only-printable
-;;   [interval]
-;;   (intervals/intersection ascii-printable interval))
+(defn only-printable
+  [interval]
+  (intervals/intersection ascii-printable interval))
 
-;; (let [an-interval (intervals/make-interval \u0000 \uffff)]
-;;   (only-printable an-interval))
+(defn char-range [start end]
+  (map char (range (int start) (inc (int end)))))
 
+(defn escape-char [char]
+  (case char
+    \' "\\'"
+    \\ "\\\\"
+    char))
+
+(defn transition->rule
+  [transition]
+  (let [from (.from transition)
+        to (.to transition)
+        guard (only-printable (.guard transition))
+        expanded-range (char-range (intervals/left guard)
+                                   (intervals/right guard))]
+    (for [symbol expanded-range]
+      (format "s%s :- '%s', s%s." from (escape-char symbol) to))))
+
+(defn epsilon-rules
+  [sfa]
+  (map #(format "s%s :- epsilon." %)
+       (.getFinalStates sfa)))
+
+(defn regex->gtestr
+  [regex]
+  (let [machine (intervals/regex->sfa regex)
+        rules (flatten (map transition->rule (.getTransitions machine)))
+        epsilon-rules (epsilon-rules machine)
+        grammar (str/join "\n" (concat rules epsilon-rules))]
+    (println "--")
+    (println grammar)
+    (spit "gg.pl" grammar)))
+
+(comment (regex->gtestr "[ab]|[cd]e+"))
