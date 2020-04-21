@@ -24,6 +24,7 @@
                  ;; utilities
                  [com.rpl/specter "1.1.2"]
                  [aero "1.1.5"]
+                 [clj-glob "1.0.0"]
 
                  ;; symbolic automata
                  [cs.wisc.edu/Parsers "1.0"]

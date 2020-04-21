@@ -1,6 +1,7 @@
 (ns symlearn.gtestr
   (:require [clojure.string :as str]
             [clojure.java.shell :as sh]
+            [org.satta.glob :as glob]
             [symlearn.intervals :as intervals]))
 
 ;; conversion of a symbolic state machine into a gtestr grammar
@@ -33,11 +34,12 @@
        (.getFinalStates sfa)))
 
 (defn regex->gtestr [regex]
-  (let [machine (intervals/regex->sfa regex)
+  (let [machine (intervals/regex->sfa* regex)
         rules (flatten (map transition->rule (.getTransitions machine)))
         epsilon-rules (epsilon-rules machine)
+        header "gtestr :- assert(writer:token_separator(_,_,'') :- true).\n"
         grammar (str/join "\n" (concat rules epsilon-rules))]
-    grammar))
+    (str header grammar)))
 
 (defn save-grammar [grammar path]
   (spit path grammar))
@@ -66,25 +68,44 @@
     (apply sh/sh (concat ["./gtestr" grammar-file]
                          (options->seq options)))))
 
+(defn clean []
+  (sh/with-sh-dir "gtestr"
+    (sh/sh "rm" "-rf" "pos" "neg" "rand")))
+
 (def negative-opts {:dir "neg"
                     :dl-mutation true
                     :rule true
                     :negative-only true
                     :rule-mutation true
                     :nll true
-                    :no-explanations true
-                    :no-strict true})
+                    :no-explanations true})
 
 (def positive-opts {:dir "pos"
                     :full-cdrc true
-                    :no-strict true})
+                    :no-explanations true})
 
 (def random-opts {:dir "rand"
                   :random-size 5
                   :random-depth 25
-                  :no-explanations true
-                  :no-strict true})
+                  :no-explanations true})
 
 (comment
   (save-grammar (regex->gtestr "[ab]|[cd]e+") "test.pl")
-  (generate-test-suite "test.pl" positive-opts))
+  (clean)
+  (generate-test-suite "test.pl" negative-opts))
+
+;; run a test suite over an oracle
+
+(defn run-test-suite [{:keys [name expected-output membership-oracle]}]
+  (let [tests (glob/glob (format "gtestr/%s/**/*.test" name))]
+    (doseq [test tests]
+      (let [input (str/trim (slurp test))]
+        (if-not (= expected-output (.accepts membership-oracle
+                                             (map char (.toCharArray input)) intervals/solver))
+          (println "counter example: " input)
+          (print \.))))))
+
+(comment
+  (run-test-suite {:name "pos"
+                   :expected-output true
+                   :membership-oracle (intervals/regex->sfa "[ab]|[cd]e+")}))
