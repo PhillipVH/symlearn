@@ -34,7 +34,7 @@
        (.getFinalStates sfa)))
 
 (defn regex->gtestr [regex]
-  (let [machine (intervals/regex->sfa* regex)
+  (let [machine (intervals/regex->sfa regex)
         rules (flatten (map transition->rule (.getTransitions machine)))
         epsilon-rules (epsilon-rules machine)
         header "gtestr :- assert(writer:token_separator(_,_,'') :- true).\n"
@@ -78,10 +78,12 @@
                     :negative-only true
                     :rule-mutation true
                     :nll true
+                    :strict 2
                     :no-explanations true})
 
 (def positive-opts {:dir "pos"
                     :full-cdrc true
+                    :strict 2
                     :no-explanations true})
 
 (def random-opts {:dir "rand"
@@ -92,12 +94,15 @@
 (comment
   (save-grammar (regex->gtestr "[ab]|[cd]e+") "test.pl")
   (clean)
-  (generate-test-suite "test.pl" negative-opts))
+  (generate-test-suite "test.pl" positive-opts)
+  (generate-test-suite "test.pl" negative-opts)
+  )
 
 ;; run a test suite over an oracle
 
 (defn run-test-suite [{:keys [name expected-output membership-oracle]}]
   (let [tests (glob/glob (format "gtestr/%s/**/*.test" name))]
+    (println "Running " (count tests))
     (doseq [test tests]
       (let [input (str/trim (slurp test))]
         (if-not (= expected-output (.accepts membership-oracle
@@ -108,4 +113,9 @@
 (comment
   (run-test-suite {:name "pos"
                    :expected-output true
-                   :membership-oracle (intervals/regex->sfa "[ab]|[cd]e+")}))
+                   :membership-oracle (intervals/regex->sfa "[ab]|[cd]e+")})
+
+  (run-test-suite {:name "neg"
+                   :expected-output false
+                   :membership-oracle (intervals/regex->sfa "[ab]|[cd]e+")})
+  )
