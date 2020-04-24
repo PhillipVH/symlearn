@@ -81,17 +81,18 @@
                     :negative-only true
                     :rule-mutation true
                     :nll true
-                    :strict 1
+                    :strict 2
                     :no-explanations true})
 
 (def positive-opts {:dir "pos"
                     :full-cdrc true
-                    :strict 1
+                    :strict 2
                     :no-explanations true})
 
 (def random-opts {:dir "rand"
-                  :random-size 5
+                  :random-size 10
                   :random-depth 25
+                  :strict 2
                   :no-explanations true})
 
 ;; run a test suite over an oracle
@@ -122,19 +123,19 @@
   (save-grammar (sfa->gtestr hypothesis) "hypothesis.pl")
 
   ;; generate the test suites
-  (generate-test-suite "hypothesis.pl" positive-opts)
-  (generate-test-suite "hypothesis.pl" negative-opts)
+  (doseq [opts [positive-opts negative-opts random-opts]]
+    (generate-test-suite "hypothesis.pl" opts))
 
-  (let [positive (run-test-suite {:name "pos"
-                                  :membership-oracle oracle
-                                  :hypothesis hypothesis})
-        negative (run-test-suite {:name "neg"
-                                  :membership-oracle oracle
-                                  :hypothesis hypothesis})]
-    {:positive positive
-     :negative negative}))
+  ;; run the test suites and report counter examples
+  (apply concat
+         (map #(run-test-suite {:name %
+                                :membership-oracle oracle
+                                :hypothesis hypothesis})
+              ["pos" "neg" "rand"])))
 
 (comment
-  (println (check-equivalence {:oracle (intervals/regex->sfa* "ab|cd")
-                               :hypothesis  (intervals/regex->sfa* "ab")}))
+  (compile-gtestr!)
+
+  (println (check-equivalence {:oracle (intervals/regex->sfa "ab|cd")
+                               :hypothesis  (intervals/regex->sfa "cd|ls")}))
   )
