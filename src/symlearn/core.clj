@@ -2,6 +2,7 @@
   (:require [taoensso.timbre :as log]
             [taoensso.tufte :as tufte]
             [symlearn.coastal :as c]
+            [symlearn.gtestr :as gtestr]
             [symlearn.intervals :as intervals]
             [symlearn.table :as table]
             [symlearn.time :as time]
@@ -38,8 +39,8 @@
                                              max)))
                         (let [eq-start (System/currentTimeMillis)
                               counter-example
-                              (if (= :perfect oracle)
-                                (tufte/p ::equivalence-query (c/check-equivalence-perfect target-sfa conjecture))
+                              (if (= :gtestr oracle)
+                                (tufte/p ::equivalence-query (gtestr/check-equivalence target-sfa conjecture))
                                 (tufte/p ::equivalence-query
                                          (c/check-equivalence-timed!
                                           {:depth depth,

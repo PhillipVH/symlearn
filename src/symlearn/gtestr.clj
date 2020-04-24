@@ -2,7 +2,10 @@
   (:require [clojure.string :as str]
             [clojure.java.shell :as sh]
             [org.satta.glob :as glob]
-            [symlearn.intervals :as intervals]))
+            [symlearn.intervals :as intervals])
+  (:import (automata.sfa SFA SFAInputMove)))
+
+(set! *warn-on-reflection* true)
 
 ;; conversion of a symbolic state machine into a gtestr grammar
 
@@ -20,7 +23,7 @@
     \\ "\\\\"
     char))
 
-(defn transition->rule [transition]
+(defn transition->rule [^SFAInputMove transition]
   (let [from (.from transition)
         to (.to transition)
         guard (only-printable (.guard transition))
@@ -29,23 +32,23 @@
     (for [symbol expanded-range]
       (format "s%s :- '%s', s%s." from (escape-char symbol) to))))
 
-(defn epsilon-rules [sfa]
+(defn epsilon-rules [^SFA sfa]
   (map #(format "s%s :- epsilon." %)
        (.getFinalStates sfa)))
 
-(defn regex->gtestr [regex]
-  (let [machine (intervals/regex->sfa regex)
-        rules (flatten (map transition->rule (.getTransitions machine)))
-        epsilon-rules (epsilon-rules machine)
+(defn sfa->gtestr [^SFA sfa]
+  (let [rules (flatten (map transition->rule (.getTransitions sfa)))
+        epsilon-rules (epsilon-rules sfa)
         header "gtestr :- assert(writer:token_separator(_,_,'') :- true).\n"
         grammar (str/join "\n" (concat rules epsilon-rules))]
     (str header grammar)))
 
+(defn regex->gtestr [regex]
+  (let [machine (intervals/regex->sfa regex)]
+    (sfa->gtestr machine)))
+
 (defn save-grammar [grammar path]
   (spit path grammar))
-
-(comment
-  (regex->gtestr "[ab]|[cd]e+"))
 
 ;; compile gtestr
 
@@ -78,12 +81,12 @@
                     :negative-only true
                     :rule-mutation true
                     :nll true
-                    :strict 2
+                    :strict 1
                     :no-explanations true})
 
 (def positive-opts {:dir "pos"
                     :full-cdrc true
-                    :strict 2
+                    :strict 1
                     :no-explanations true})
 
 (def random-opts {:dir "rand"
@@ -91,31 +94,47 @@
                   :random-depth 25
                   :no-explanations true})
 
-(comment
-  (save-grammar (regex->gtestr "[ab]|[cd]e+") "test.pl")
-  (clean)
-  (generate-test-suite "test.pl" positive-opts)
-  (generate-test-suite "test.pl" negative-opts)
-  )
-
 ;; run a test suite over an oracle
 
-(defn run-test-suite [{:keys [name expected-output membership-oracle]}]
-  (let [tests (glob/glob (format "gtestr/%s/**/*.test" name))]
+(defn run-test-suite [{:keys [name ^SFA membership-oracle ^SFA hypothesis]}]
+  (let [tests (glob/glob (format "gtestr/%s/**/*.hypothesis" name))]
     (println "Running " (count tests))
-    (doseq [test tests]
-      (let [input (str/trim (slurp test))]
-        (if-not (= expected-output (.accepts membership-oracle
-                                             (map char (.toCharArray input)) intervals/solver))
-          (println "counter example: " input)
-          (print \.))))))
+    (reduce (fn [counter-examples test]
+              (let [input (->> test
+                               slurp
+                               str/trim
+                               .toCharArray
+                               (map char))]
+                (if (not= (.accepts hypothesis input intervals/solver)
+                          (.accepts membership-oracle input intervals/solver))
+                  (conj counter-examples (str/join input))
+                 counter-examples)))
+            nil
+            tests)))
+
+;; public equivalence API
+
+(defn check-equivalence [{:keys [^SFA oracle ^SFA hypothesis]}]
+  ;; delete old tests TODO cache
+  (clean)
+
+  ;; generate the grammar
+  (save-grammar (sfa->gtestr hypothesis) "hypothesis.pl")
+
+  ;; generate the test suites
+  (generate-test-suite "hypothesis.pl" positive-opts)
+  (generate-test-suite "hypothesis.pl" negative-opts)
+
+  (let [positive (run-test-suite {:name "pos"
+                                  :membership-oracle oracle
+                                  :hypothesis hypothesis})
+        negative (run-test-suite {:name "neg"
+                                  :membership-oracle oracle
+                                  :hypothesis hypothesis})]
+    {:positive positive
+     :negative negative}))
 
 (comment
-  (run-test-suite {:name "pos"
-                   :expected-output true
-                   :membership-oracle (intervals/regex->sfa "[ab]|[cd]e+")})
-
-  (run-test-suite {:name "neg"
-                   :expected-output false
-                   :membership-oracle (intervals/regex->sfa "[ab]|[cd]e+")})
+  (println (check-equivalence {:oracle (intervals/regex->sfa* "ab|cd")
+                               :hypothesis  (intervals/regex->sfa* "ab")}))
   )
