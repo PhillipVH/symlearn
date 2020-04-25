@@ -42,16 +42,8 @@ def evaluate(args):
     if args.parallel:
         evaluate_parallel(args)
     else:
-        subprocess.run(['mkdir', 'results/' + args.name])  # fails if the folder exists, sanity check for the lazy
-        subprocess.run(['cp', args.benchmark_file, 'results/' + args.name + '/benchmark.re'])
-
-        spec_file = open('results/' + args.name + '/benchmark.spec', 'w')
-
-        spec_file.write(str(args.depth_limit) + '\n' + str(1000 * 60 * args.timeout))
-        spec_file.close()
-
-        if not args.dry:
-            subprocess.run(['bash', 'docker/docker_start_pod.sh', args.name])
+        args.parallel = 1
+        evaluate_parallel(args)
 
 
 def logs(args):
@@ -77,7 +69,7 @@ parser_evaluate = subparsers.add_parser('evaluate')
 parser_evaluate.add_argument('--name', type=str, help='human-readable label for the evaluation', required=True)
 parser_evaluate.add_argument('--benchmark-file', type=str, metavar='FILE', help='file containing newline delimited regular expressions', required=True)
 parser_evaluate.add_argument('--timeout', type=int, metavar='N', help='timeout for each symbolic equivalence query in minutes', required=True)
-parser_evaluate.add_argument('--oracle', type=str, metavar='ORACLE', default='coastal', help='use coastal (default) or perfect as the equivalence oracle')
+parser_evaluate.add_argument('--oracle', type=str, metavar='ORACLE', default='coastal', help='use coastal (default), gtestr, or a perfect oracle for equivalence')
 parser_evaluate.add_argument('--max-string-length', type=int, metavar='N', default=30, help='maximum string length used in equivalence queries (default 30)')
 
 parser_evaluate.add_argument('--dry', action='store_true', help='do not start the experiments containers')
