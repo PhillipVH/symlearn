@@ -25,7 +25,7 @@
   [& body]
   `(car/wcar redis-conn ~@body))
 
-(defn- refine-string
+(defn refine-string
   "Returns [boolean list] of accepted? and path conditions"
   [string]
   (log/trace "Requesting refinement:" string)
