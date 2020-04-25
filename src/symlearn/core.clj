@@ -40,7 +40,8 @@
                         (let [eq-start (System/currentTimeMillis)
                               counter-example
                               (if (= :gtestr oracle)
-                                (tufte/p ::equivalence-query (gtestr/check-equivalence target-sfa conjecture))
+                                (tufte/p ::equivalence-query (gtestr/check-equivalence {:oracle target-sfa
+                                                                                        :hypothesis conjecture}))
                                 (tufte/p ::equivalence-query
                                          (c/check-equivalence-timed!
                                           {:depth depth,
@@ -54,8 +55,9 @@
 
                           (cond
                             ;; no counter example, search deeper or yield table
-                            (nil? counter-example)
-                            (if (< depth depth-limit)
+                            (or (nil? counter-example) (empty? counter-example))
+                            table
+                            #_(if (< depth depth-limit)
                               (recur (inc depth))
                               table)
 

@@ -203,30 +203,30 @@
       (let [ce (map second ce)]
         (set ce)))))
 
-(defn check-equivalence-timed!
-  [{:keys [depth target ^SFA candidate timeout-ms]}]
-  (codegen/install-equivalence-oracle! candidate target depth) ;; don't include compilation time
+(defn check-equivalence-concolic
+  [{:keys [symbolic-length ^SFA oracle ^SFA hypothesis timeout-ms]}]
+  (codegen/install-equivalence-oracle! hypothesis oracle symbolic-length) ;; don't include compilation time
   (log/info "Minutes for this check:" (time/ms->m timeout-ms))
-  (let [f (future (check-equivalence! {:depth depth
-                                       :target target
-                                       :candidate candidate}))
+  (let [f (future (check-equivalence! {:depth symbolic-length
+                                       :target oracle
+                                       :candidate hypothesis}))
         ce (deref f
                   timeout-ms
                   ::timeout)]
     (if (= ce ::timeout)
       (do
-        (log/trace "Equivalence Check for" target "timed out after" timeout-ms "ms")
+        (log/trace "Equivalence Check for" oracle "timed out after" timeout-ms "ms")
         (future-cancel f)
         (kill-pid! (coastal-pid :eqv))
         ::timeout)
       (do
-        (log/trace "Target" target "learnt successfully")
+        (log/trace "Target" oracle "learnt successfully")
         ce))))
 
 (defn check-equivalence-perfect
   "Use symbolicautomata to check our candidate against a perfect target."
-  [^SFA target ^SFA candidate]
-  (let [check (SFA/areEquivalentPlusWitness target candidate intervals/solver (time/m->ms 10))
+  [{:keys [^SFA oracle ^SFA hypothesis]}]
+  (let [check (SFA/areEquivalentPlusWitness oracle hypothesis intervals/solver (time/m->ms 10))
         equivalent? (.getFirst check)]
     (when-not equivalent?
       #{(str/join "" (.getSecond check))})))

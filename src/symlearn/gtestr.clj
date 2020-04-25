@@ -2,7 +2,9 @@
   (:require [clojure.string :as str]
             [clojure.java.shell :as sh]
             [org.satta.glob :as glob]
-            [symlearn.intervals :as intervals])
+            [symlearn.intervals :as intervals]
+            [symlearn.coastal :as coastal])
+
   (:import (automata.sfa SFA SFAInputMove)))
 
 (set! *warn-on-reflection* true)
@@ -40,7 +42,7 @@
   (let [rules (flatten (map transition->rule (.getTransitions sfa)))
         epsilon-rules (epsilon-rules sfa)
         header "gtestr :- assert(writer:token_separator(_,_,'') :- true).\n"
-        grammar (str/join "\n" (concat rules epsilon-rules))]
+        grammar (str/join \newline (concat rules epsilon-rules))]
     (str header grammar)))
 
 (defn regex->gtestr [regex]
@@ -124,18 +126,40 @@
 
   ;; generate the test suites
   (doseq [opts [positive-opts negative-opts random-opts]]
-    (generate-test-suite "hypothesis.pl" opts))
+    (println (generate-test-suite "hypothesis.pl" opts)))
 
   ;; run the test suites and report counter examples
-  (apply concat
-         (map #(run-test-suite {:name %
-                                :membership-oracle oracle
-                                :hypothesis hypothesis})
-              ["pos" "neg" "rand"])))
+  (set (apply concat
+              (map #(run-test-suite {:name %
+                                     :membership-oracle oracle
+                                     :hypothesis hypothesis})
+                   ["pos" "neg" "rand"]))))
 
 (comment
   (compile-gtestr!)
 
-  (println (check-equivalence {:oracle (intervals/regex->sfa "ab|cd")
-                               :hypothesis  (intervals/regex->sfa "cd|ls")}))
+  (clean)
+  (check-equivalence {:oracle      (intervals/regex->sfa "ab|cd")
+                      :hypothesis  (intervals/regex->sfa "x")})
+
+  ;; comparison of existing equivalence approximation strategies
+  (let [hypothesis (intervals/regex->sfa "ab")
+        oracle (intervals/regex->sfa "ab|cd")]
+
+    ;; perfect oracle + coastal for path conditions
+    (coastal/check-equivalence-perfect {:oracle oracle
+                                        :hypothesis hypothesis})
+
+    ;; coastal as oracle
+    (coastal/check-equivalence-concolic {:oracle oracle
+                                         :hypothesis hypothesis
+                                         :timeout-ms 120000
+                                         :symbolic-length 2})
+
+    ;; gtestr as oracle
+    (check-equivalence {:oracle oracle
+                        :hypothesis hypothesis})
+    )
   )
+
+
