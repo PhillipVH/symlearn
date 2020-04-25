@@ -81,18 +81,18 @@
                     :negative-only true
                     :rule-mutation true
                     :nll true
-                    :strict 2
+                    :strict 3
                     :no-explanations true})
 
 (def positive-opts {:dir "pos"
                     :full-cdrc true
-                    :strict 2
+                    :strict 3
                     :no-explanations true})
 
 (def random-opts {:dir "rand"
                   :random-size 10
                   :random-depth 25
-                  :strict 2
+                  :strict 3
                   :no-explanations true})
 
 ;; run a test suite over an oracle
