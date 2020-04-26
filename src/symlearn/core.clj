@@ -39,14 +39,14 @@
                                              max)))
                         (let [eq-start (System/currentTimeMillis)
                               counter-example
-                              (if (= :gtestr oracle)
-                                (tufte/p ::equivalence-query (gtestr/check-equivalence {:oracle target-sfa
-                                                                                        :hypothesis conjecture}))
+                              (if (= :perfect oracle)
+                                (tufte/p ::equivalence-query (c/check-equivalence-perfect {:oracle target-sfa
+                                                                                           :hypothesis conjecture}))
                                 (tufte/p ::equivalence-query
-                                         (c/check-equivalence-timed!
-                                          {:depth depth,
-                                           :target target
-                                           :candidate conjecture
+                                         (c/check-equivalence-concolic
+                                          {:symbolic-length depth,
+                                           :oracle target-sfa
+                                           :hypothesis conjecture
                                            :timeout-ms (time/ms-to-timeout start
                                                                         (System/currentTimeMillis)
                                                                       (time/ms->m timeout-ms))})))]
@@ -55,9 +55,8 @@
 
                           (cond
                             ;; no counter example, search deeper or yield table
-                            (or (nil? counter-example) (empty? counter-example))
-                            table
-                            #_(if (< depth depth-limit)
+                            (nil? counter-example)
+                            (if (< depth depth-limit)
                               (recur (inc depth))
                               table)
 
