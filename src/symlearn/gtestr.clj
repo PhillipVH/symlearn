@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.java.shell :as sh]
             [org.satta.glob :as glob]
-            [symlearn.intervals :as intervals]
+            [symlearn.intervals :as i :refer [negate union intersection]]
             [symlearn.coastal :as coastal])
 
   (:import (automata.sfa SFA SFAInputMove)))
@@ -11,10 +11,10 @@
 
 ;; conversion of a symbolic state machine into a gtestr grammar
 
-(def ascii-printable (apply intervals/make-interval [\u0020 \u007E]))
+(def ascii-printable (i/make-interval \u0020 \u007E))
 
 (defn only-printable [interval]
-  (intervals/intersection ascii-printable interval))
+  (i/intersection ascii-printable interval))
 
 (defn char-range [start end]
   (map char (range (int start) (inc (int end)))))
@@ -29,8 +29,8 @@
   (let [from (.from transition)
         to (.to transition)
         guard (only-printable (.guard transition))
-        expanded-range (char-range (intervals/left guard)
-                                   (intervals/right guard))]
+        expanded-range (char-range (i/left guard)
+                                   (i/right guard))]
     (for [symbol expanded-range]
       (format "s%s :- '%s', s%s." from (escape-char symbol) to))))
 
@@ -46,7 +46,7 @@
     (str header grammar)))
 
 (defn regex->gtestr [regex]
-  (let [machine (intervals/regex->sfa regex)]
+  (let [machine (i/regex->sfa regex)]
     (sfa->gtestr machine)))
 
 (defn save-grammar [grammar path]
@@ -108,8 +108,8 @@
                                str/trim
                                .toCharArray
                                (map char))]
-                (if (not= (.accepts hypothesis input intervals/solver)
-                          (.accepts membership-oracle input intervals/solver))
+                (if (not= (.accepts hypothesis input i/solver)
+                          (.accepts membership-oracle input i/solver))
                   (conj counter-examples (str/join input))
                  counter-examples)))
             nil
@@ -135,31 +135,63 @@
                                      :hypothesis hypothesis})
                    ["pos" "neg" "rand"]))))
 
+;; coastal-lite
+
+(defn init-coastal-lite [oracle]
+  (coastal/install-parser! oracle))
+
+(defn constraints [word]
+  (map i/constraint-set->CharPred (:constraints (coastal/query word))))
+
+(defn witness [guard]
+  (if (seq? guard)
+    (str/join (map i/left guard))
+    (str (i/left guard))))
+
+(defn mk-guard
+  ([bound] (mk-guard bound bound))
+  ([lower upper] (i/make-interval lower upper)))
+
+(defn unicode []
+  (i/make-interval \u0000 \uffff))
+
+(defn outgoing [prefix]
+  (let [outgoing-guard (last (constraints (str prefix ".")))]
+    (loop [explored outgoing-guard
+           outgoing-guards #{outgoing-guard}]
+      (if (= (unicode) explored)
+        outgoing-guards
+        (let [refined-guard (last (constraints (str prefix (witness (negate explored)))))]
+          (recur (union explored refined-guard)
+                 (conj outgoing-guards refined-guard)))))))
+
 (comment
-  (compile-gtestr!)
+  (init-coastal-lite  "abc|g+")
+  (outgoing ""))
 
-  (clean)
-  (check-equivalence {:oracle      (intervals/regex->sfa "ab|cd")
-                      :hypothesis  (intervals/regex->sfa "x")})
+;; (comment
+;;   (compile-gtestr!)
 
-  ;; comparison of existing equivalence approximation strategies
-  (let [hypothesis (intervals/regex->sfa "ab")
-        oracle (intervals/regex->sfa "ab|cd")]
+;;   (clean)
+;;   (check-equivalence {:oracle      (i/regex->sfa "ab|cd")
+;;                       :hypothesis  (i/regex->sfa "x")})
 
-    ;; perfect oracle + coastal for path conditions
-    (coastal/check-equivalence-perfect {:oracle oracle
-                                        :hypothesis hypothesis})
+;;   ;; comparison of existing equivalence approximation strategies
+;;   (let [hypothesis (i/regex->sfa "ab")
+;;         oracle (i/regex->sfa "ab|cd")]
 
-    ;; coastal as oracle
-    (coastal/check-equivalence-concolic {:oracle oracle
-                                         :hypothesis hypothesis
-                                         :timeout-ms 120000
-                                         :symbolic-length 2})
+;;     ;; perfect oracle + coastal for path conditions
+;;     (coastal/check-equivalence-perfect {:oracle oracle
+;;                                         :hypothesis hypothesis})
 
-    ;; gtestr as oracle
-    (check-equivalence {:oracle oracle
-                        :hypothesis hypothesis})
-    )
-  )
+;;     ;; coastal as oracle
+;;     (coastal/check-equivalence-concolic {:oracle oracle
+;;                                          :hypothesis hypothesis
+;;                                          :timeout-ms 120000
+;;                                          :symbolic-length 2})
 
-
+;;     ;; gtestr as oracle
+;;     (check-equivalence {:oracle oracle
+;;                         :hypothesis hypothesis})
+;;     )
+;;   )
