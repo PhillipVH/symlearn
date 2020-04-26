@@ -1,8 +1,9 @@
 (ns symlearn.gtestr
   (:require [clojure.string :as str]
+            [clojure.zip :as zip]
             [clojure.java.shell :as sh]
             [org.satta.glob :as glob]
-            [symlearn.intervals :as i :refer [negate union intersection]]
+            [symlearn.intervals :as i :refer [negate union]]
             [symlearn.coastal :as coastal])
 
   (:import (automata.sfa SFA SFAInputMove)))
@@ -140,8 +141,10 @@
 (defn init-coastal-lite [oracle]
   (coastal/install-parser! oracle))
 
-(defn constraints [word]
-  (map i/constraint-set->CharPred (:constraints (coastal/query word))))
+(defn guards [word]
+  (let [{:keys [constraints]} (coastal/query word)
+        guards (map i/constraint-set->CharPred constraints)]
+    guards))
 
 (defn witness [guard]
   (if (seq? guard)
@@ -156,14 +159,18 @@
   (i/make-interval \u0000 \uffff))
 
 (defn outgoing [prefix]
-  (let [outgoing-guard (last (constraints (str prefix ".")))]
-    (loop [explored outgoing-guard
-           outgoing-guards #{outgoing-guard}]
+    (loop [explored (negate (unicode))
+           outgoing-guards #{}]
       (if (= (unicode) explored)
         outgoing-guards
-        (let [refined-guard (last (constraints (str prefix (witness (negate explored)))))]
-          (recur (union explored refined-guard)
-                 (conj outgoing-guards refined-guard)))))))
+        (let [next-guard (->> explored
+                              negate
+                              witness
+                              (str prefix)
+                              guards
+                              last)]
+          (recur (union explored next-guard)
+                 (conj outgoing-guards next-guard))))))
 
 (comment
   (init-coastal-lite  "abc|g+")
