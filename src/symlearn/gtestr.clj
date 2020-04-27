@@ -1,11 +1,14 @@
 (ns symlearn.gtestr
   (:require [clojure.string :as str]
             [clojure.zip :as zip]
+            [clojure.walk :as walk]
+            [loom.graph :refer :all]
+            [loom.label :refer :all]
+            [loom.io :refer [view]]
             [clojure.java.shell :as sh]
             [org.satta.glob :as glob]
             [symlearn.intervals :as i :refer [negate union]]
             [symlearn.coastal :as coastal])
-
   (:import (automata.sfa SFA SFAInputMove)))
 
 (set! *warn-on-reflection* true)
@@ -172,33 +175,20 @@
           (recur (union explored next-guard)
                  (conj outgoing-guards next-guard))))))
 
-(comment
-  (init-coastal-lite  "abc|g+")
-  (outgoing ""))
+(defn initial-graph []
+  (let [graph (digraph)
+        initial-guards (outgoing "")]
+    (reduce (fn [graph guard]
+              (add-labeled-edges graph ["" (witness (only-printable guard))] guard))
+            graph
+            initial-guards)))
 
-;; (comment
-;;   (compile-gtestr!)
-
-;;   (clean)
-;;   (check-equivalence {:oracle      (i/regex->sfa "ab|cd")
-;;                       :hypothesis  (i/regex->sfa "x")})
-
-;;   ;; comparison of existing equivalence approximation strategies
-;;   (let [hypothesis (i/regex->sfa "ab")
-;;         oracle (i/regex->sfa "ab|cd")]
-
-;;     ;; perfect oracle + coastal for path conditions
-;;     (coastal/check-equivalence-perfect {:oracle oracle
-;;                                         :hypothesis hypothesis})
-
-;;     ;; coastal as oracle
-;;     (coastal/check-equivalence-concolic {:oracle oracle
-;;                                          :hypothesis hypothesis
-;;                                          :timeout-ms 120000
-;;                                          :symbolic-length 2})
-
-;;     ;; gtestr as oracle
-;;     (check-equivalence {:oracle oracle
-;;                         :hypothesis hypothesis})
-;;     )
-;;   )
+#_(loop [depth 1
+       graph (digraph)
+       frontier (outgoing "")]
+  (if (= depth 0)
+    graph
+    (reduce (fn [graph' node]
+              (discover-children node))
+            graph
+            frontier)))

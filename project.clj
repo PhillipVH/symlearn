@@ -21,6 +21,9 @@
                  ;; logging
                  [com.taoensso/timbre "4.10.0"]
 
+                 ;; graph library
+                 [aysylu/loom "1.0.2"]
+
                  ;; utilities
                  [com.rpl/specter "1.1.2"]
                  [aero "1.1.5"]
