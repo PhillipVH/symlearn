@@ -57,6 +57,11 @@
   [^Character bottom ^Character top]
   (CharPred. bottom top))
 
+(def ascii-printable (make-interval \u0020 \u007E))
+
+(defn printable [interval]
+  (intersection ascii-printable interval))
+
 (defprotocol ISFA
   "A protocol for SFAs over the domain of characters."
   (initial-state [this] "Return the initial state of `this`.")
