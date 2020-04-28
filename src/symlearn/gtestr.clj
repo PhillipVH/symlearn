@@ -175,14 +175,6 @@
           (recur (union explored next-guard)
                  (conj outgoing-guards next-guard))))))
 
-(defn initial-graph []
-  (let [graph (digraph)
-        initial-guards (outgoing "")]
-    (reduce (fn [graph guard]
-              (add-labeled-edges graph ["" (witness (printable guard))] guard))
-            graph
-            initial-guards)))
-
 (defn expand-graph [graph prefix]
   (let [guards (outgoing prefix)]
     (reduce (fn [graph guard]
@@ -190,26 +182,5 @@
             graph
             guards)))
 
-;; (init-coastal-lite "abc|g+")
-
-;; (-> (initial-graph)
-;;     (expand-graph "a")
-;;     (expand-graph "b")
-;;     (expand-graph "g")
-;;     (expand-graph "gg")
-;;     (expand-graph "ab")
-;;     (expand-graph "abc")
-;;     (expand-graph "abc ")
-;;     (expand-graph "abc  ")
-;;     view)
-
-
-#_(loop [depth 1
-       graph (digraph)
-       frontier (outgoing "")]
-  (if (= depth 0)
-    graph
-    (reduce (fn [graph' node]
-              (discover-children node))
-            graph
-            frontier)))
+(defn initial-graph []
+  (expand-graph (digraph) ""))
