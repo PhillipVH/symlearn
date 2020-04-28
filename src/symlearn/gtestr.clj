@@ -2,8 +2,8 @@
   (:require [clojure.string :as str]
             [clojure.zip :as zip]
             [clojure.walk :as walk]
-            [loom.graph :refer :all]
-            [loom.label :refer :all]
+            [loom.graph :refer [digraph]]
+            [loom.label :refer [add-labeled-edges]]
             [loom.io :refer [view]]
             [clojure.java.shell :as sh]
             [org.satta.glob :as glob]
@@ -17,7 +17,7 @@
 
 (def ascii-printable (i/make-interval \u0020 \u007E))
 
-(defn only-printable [interval]
+(defn printable [interval]
   (i/intersection ascii-printable interval))
 
 (defn char-range [start end]
@@ -32,7 +32,7 @@
 (defn transition->rule [^SFAInputMove transition]
   (let [from (.from transition)
         to (.to transition)
-        guard (only-printable (.guard transition))
+        guard (printable (.guard transition))
         expanded-range (char-range (i/left guard)
                                    (i/right guard))]
     (for [symbol expanded-range]
@@ -179,9 +179,30 @@
   (let [graph (digraph)
         initial-guards (outgoing "")]
     (reduce (fn [graph guard]
-              (add-labeled-edges graph ["" (witness (only-printable guard))] guard))
+              (add-labeled-edges graph ["" (witness (printable guard))] guard))
             graph
             initial-guards)))
+
+(defn expand-graph [graph prefix]
+  (let [guards (outgoing prefix)]
+    (reduce (fn [graph guard]
+              (add-labeled-edges graph [prefix (str prefix (witness (printable guard)))] guard))
+            graph
+            guards)))
+
+;; (init-coastal-lite "abc|g+")
+
+;; (-> (initial-graph)
+;;     (expand-graph "a")
+;;     (expand-graph "b")
+;;     (expand-graph "g")
+;;     (expand-graph "gg")
+;;     (expand-graph "ab")
+;;     (expand-graph "abc")
+;;     (expand-graph "abc ")
+;;     (expand-graph "abc  ")
+;;     view)
+
 
 #_(loop [depth 1
        graph (digraph)
