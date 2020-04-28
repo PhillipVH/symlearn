@@ -2,8 +2,9 @@
   (:require [clojure.string :as str]
             [clojure.zip :as zip]
             [clojure.walk :as walk]
+            [clojure.pprint :refer [pprint]]
             [loom.graph :refer [digraph predecessors edges nodes src dest]]
-            [loom.label :refer [add-labeled-edges]]
+            [loom.label :refer [add-labeled-edges label]]
             [loom.io :refer [view]]
             [clojure.java.shell :as sh]
             [org.satta.glob :as glob]
@@ -185,22 +186,46 @@
 (defn initial-graph []
   (expand-graph (digraph) ""))
 
-(defn frontier [graph]
+(defn frontier [graph & [{:keys [prune-fn] :or {prune-fn identity}}]]
   (let [edges (edges graph)
         edges+length (map (juxt (comp count dest) identity) edges)
         grouped-by (group-by first edges+length)
         frontier-index (apply max (keys grouped-by))
         frontier (get grouped-by frontier-index)
-        nodes-to-expand (map (fn [[_ node]] (dest node)) frontier)]
-    nodes-to-expand))
+        leaf-edges (map (fn [[_ edge]] edge) frontier)]
+    (filter #(prune-fn graph %) leaf-edges)))
 
-(defn naive-unroll [steps]
+(defn unroll [steps & [opts]]
   (loop [graph (initial-graph)
          steps steps]
     (if (= 0 steps)
       (view graph)
-      (let [graph' (reduce (fn [graph' prefix]
+      (let [frontier-prefixes (map dest (frontier graph opts))
+            graph' (reduce (fn [graph' prefix]
                              (expand-graph graph' prefix))
                            graph
-                           (frontier graph))]
+                           frontier-prefixes)]
         (recur graph' (dec steps))))))
+
+(defn find-edge* [graph [src-node dest-node]]
+  (first
+   (filter (fn [edge]
+             (and (= src-node (src edge))
+                  (= dest-node (dest edge))))
+           (edges graph))))
+
+(def find-edge (memoize find-edge*))
+
+(defn prefix [word]
+  (let [n (count word)]
+    (if (= 0 n)
+      word
+      (subs word 0 (dec n)))))
+
+(comment
+  (unroll 20 {:prune-fn (fn [graph edge]
+                          (let [guard (label graph edge)
+                                src (src edge)
+                                parent (find-edge graph [(prefix src) src])]
+                            (not (and parent
+                                      (= (unicode) guard (label graph parent))))))}))
