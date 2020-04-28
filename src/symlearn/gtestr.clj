@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.zip :as zip]
             [clojure.walk :as walk]
-            [loom.graph :refer [digraph]]
+            [loom.graph :refer [digraph predecessors edges nodes src dest]]
             [loom.label :refer [add-labeled-edges]]
             [loom.io :refer [view]]
             [clojure.java.shell :as sh]
@@ -159,7 +159,7 @@
   ([lower upper] (i/make-interval lower upper)))
 
 (defn unicode []
-  (i/make-interval \u0000 \uffff))
+  (mk-guard \u0000 \uffff))
 
 (defn outgoing [prefix]
     (loop [explored (negate (unicode))
@@ -184,3 +184,23 @@
 
 (defn initial-graph []
   (expand-graph (digraph) ""))
+
+(defn frontier [graph]
+  (let [edges (edges graph)
+        edges+length (map (juxt (comp count dest) identity) edges)
+        grouped-by (group-by first edges+length)
+        frontier-index (apply max (keys grouped-by))
+        frontier (get grouped-by frontier-index)
+        nodes-to-expand (map (fn [[_ node]] (dest node)) frontier)]
+    nodes-to-expand))
+
+(defn naive-unroll [steps]
+  (loop [graph (initial-graph)
+         steps steps]
+    (if (= 0 steps)
+      (view graph)
+      (let [graph' (reduce (fn [graph' prefix]
+                             (expand-graph graph' prefix))
+                           graph
+                           (frontier graph))]
+        (recur graph' (dec steps))))))
