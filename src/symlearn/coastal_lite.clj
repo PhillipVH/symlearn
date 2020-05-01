@@ -1,15 +1,21 @@
 (ns symlearn.coastal-lite
   (:require [clojure.string :as str]
-            [loom.graph :refer [digraph edges dest src successors]]
+            [clojure.pprint :refer [pprint]]
+            [loom.graph :refer [digraph edges nodes dest src successors]]
             [loom.io :refer [view]]
             [loom.label :refer [add-labeled-edges label]]
+            [taoensso.tufte :as tufte]
             [symlearn.coastal :as coastal]
+            [symlearn.table :as table]
+            [symlearn.sfa :as sfa]
+            [symlearn.evaluation :as evaluation]
             [symlearn.intervals :as i :refer [negate union printable]]))
 
 ;; coastal-lite
 
-(defn init-coastal-lite [oracle]
-  (coastal/install-parser! oracle))
+(defn init-coastal-lite [oracle-str]
+  (coastal/install-parser! oracle-str)
+  (reset! table/target-sfa (sfa/regex->sfa* oracle-str)))
 
 (defn guards [word]
   (let [{:keys [constraints]} (coastal/query word)
@@ -45,14 +51,14 @@
 (defn expand-graph [graph prefix]
   (let [guards (outgoing prefix)]
     (reduce (fn [graph guard]
-              (add-labeled-edges graph [prefix (str prefix (witness (printable guard)))] guard))
+              (add-labeled-edges graph [prefix (str prefix (witness guard #_(printable guard)))] guard))
             graph
             guards)))
 
 (defn initial-graph []
   (expand-graph (digraph) ""))
 
-(defn frontier [graph & [{:keys [prune-fn] :or {prune-fn identity}}]]
+(defn frontier [graph & [{:keys [prune-fn] :or {prune-fn (constantly true)}}]]
   (let [edges (edges graph)
         edges+length (map (juxt (comp count dest) identity) edges)
         grouped-by (group-by first edges+length)
@@ -98,14 +104,48 @@
 (defn leaf-nodes [graph]
   (reduce (fn [leaf-nodes edge]
             (if (nil? (successors graph (dest edge)))
-              (conj leaf-nodes (dest edge))
+                (conj leaf-nodes (dest edge))
               leaf-nodes))
           []
           (edges graph)))
 
-;; TODO instant automaton, just add leaf nodes!
+(defn accepted [nodes]
+  (filter (fn [node] (:accepted (coastal/query node))) nodes))
+
+(defn fixpoint-unroll [bound]
+  (loop [depth 0
+         table (table/make-table)]
+    (let [table' (reduce (fn [table word] (table/process-counter-example table word))
+                         table
+                         (filter accepted (nodes (unroll depth {:prune-fn fischer-prune}))))
+          equivalent (sfa/equivalent? (sfa/make-sfa table')
+                                      @table/target-sfa)]
+      (if (or equivalent (= bound depth))
+        {:depth depth
+         :table table
+         :equivalent equivalent}
+        (do
+          #_(sfa/show-sfa (sfa/make-sfa table'))
+          (recur (inc depth) table'))))))
+
 (comment
-  (init-coastal-lite "abc|g+|////")
-  (view (unroll 20 {:prune-fn fischer-prune}))
-  (leaf-nodes (unroll 20 {:prune-fn fischer-prune}))
-  )
+  (def bench (evaluation/load-benchmark "regexlib-stratified.re"))
+
+  (nth bench 30)
+  "([a-zA-Z0-9_\\-\\.]+)(@[a-zA-Z0-9_\\-\\.]+)"
+
+  (init-coastal-lite (nth bench 30))
+
+  (doseq [target bench]
+    (init-coastal-lite target)
+    (Thread/sleep 2000)
+    (let [{:keys [depth equivalent]} (fixpoint-unroll 10)]
+      (println (format "Depth: %d, Equivalent: %s"  depth equivalent))))
+)
+
+;; fixpoint unrolling fn
+;; - unroll until sfa/equivalent?
+;; - obtain conjecture -> need to validate (eqv oracle => coastal | gtestr | perfect)
+;; - regexlib perfect
+
+;; run negative examples after learnt from positive examples

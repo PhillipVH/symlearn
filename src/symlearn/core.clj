@@ -2,7 +2,6 @@
   (:require [taoensso.timbre :as log]
             [taoensso.tufte :as tufte]
             [symlearn.coastal :as c]
-            [symlearn.gtestr :as gtestr]
             [symlearn.intervals :as intervals]
             [symlearn.table :as table]
             [symlearn.time :as time]
