@@ -121,6 +121,7 @@
 (defn fixpoint-unroll [bound]
   (loop [depth 0
          table (table/make-table)]
+    (println "Unrolling to depth " depth)
     (let [table' (reduce (fn [table word] (table/process-counter-example table word))
                          table
                          (accepted (nodes (unroll depth {:prune-fn fischer-prune}))))
@@ -130,9 +131,7 @@
         {:depth depth
          :table table
          :equivalent equivalent}
-        (do
-          #_(sfa/show-sfa (sfa/make-sfa table'))
-          (recur (inc depth) table'))))))
+        (recur (inc depth) table')))))
 
 (defn profile-unroll []
   (tufte/add-basic-println-handler! {})
