@@ -53,7 +53,7 @@
    ::expand-graph
    (let [guards (outgoing prefix)]
      (reduce (fn [graph guard]
-               (add-labeled-edges graph [prefix (str prefix (witness guard #_(printable guard)))] guard))
+               (add-labeled-edges graph [prefix (str prefix (witness #_guard (printable guard)))] guard))
              graph
              guards))))
 
@@ -123,7 +123,7 @@
          table (table/make-table)]
     (let [table' (reduce (fn [table word] (table/process-counter-example table word))
                          table
-                         (filter accepted (nodes (unroll depth {:prune-fn fischer-prune}))))
+                         (accepted (nodes (unroll depth {:prune-fn fischer-prune}))))
           equivalent (sfa/equivalent? (sfa/make-sfa table')
                                       @table/target-sfa)]
       (if (or equivalent (= bound depth))
@@ -131,7 +131,7 @@
          :table table
          :equivalent equivalent}
         (do
-          #_(sfa/show-sfa (sfa/make-sfa table'))
+          (sfa/show-sfa (sfa/make-sfa table'))
           (recur (inc depth) table'))))))
 
 (defn profile-unroll []
@@ -144,8 +144,10 @@
     (println "Unrolling to depth" depth)
     (tufte/profile
      {}
-     (let [graph (unroll depth {:prune-fn fischer-prune})]
-       (println (count (nodes graph)))))))
+     (let [graph (unroll depth {:prune-fn fischer-prune})
+           nodes (nodes graph)]
+       (println (count nodes))
+       (println (count (accepted nodes)))))))
 
 (defn -main
   []
