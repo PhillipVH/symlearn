@@ -131,7 +131,7 @@
          :table table
          :equivalent equivalent}
         (do
-          (sfa/show-sfa (sfa/make-sfa table'))
+          #_(sfa/show-sfa (sfa/make-sfa table'))
           (recur (inc depth) table'))))))
 
 (defn profile-unroll []
@@ -149,9 +149,22 @@
        (println (count nodes))
        (println (count (accepted nodes)))))))
 
+(defn profile-fixpoint-unroll []
+  (tufte/add-basic-println-handler! {})
+  (let [bench (evaluation/load-benchmark "regexlib-stratified.re")]
+    (doseq [specimen bench]
+      (init-coastal-lite specimen)
+      (Thread/sleep 1000) ;; we start querying the oracle too quickly
+      (println "Learning " specimen)
+      (tufte/profile
+       {}
+       (let [{:keys [depth equivalent]} (fixpoint-unroll 7)]
+         (println "Depth" depth)
+         (println "Equivalent " equivalent))))))
+
 (defn -main
   []
-  (profile-unroll))
+  (profile-fixpoint-unroll))
 
 (comment
 
