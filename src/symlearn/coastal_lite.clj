@@ -5,6 +5,7 @@
             [loom.io :refer [view]]
             [loom.label :refer [add-labeled-edges label]]
             [taoensso.tufte :as tufte]
+            [taoensso.timbre :as log]
             [symlearn.coastal :as coastal]
             [symlearn.table :as table]
             [symlearn.sfa :as sfa]
@@ -21,6 +22,12 @@
   (let [{:keys [constraints]} (coastal/query word)
         guards (map i/constraint-set->CharPred constraints)]
     guards))
+
+(defn guards+acceptance [word]
+  (let [{:keys [constraints accepted]} (coastal/query word)
+        guards (map i/constraint-set->CharPred constraints)]
+    {:guards guards
+     :accepted accepted}))
 
 (defn witness [guard]
   (if (seq? guard)
@@ -43,28 +50,36 @@
                               negate
                               witness
                               (str prefix)
-                              guards
-                              last)]
+                              guards+acceptance)
+              {:keys [guards] :as out} next-guard
+              next-guard (last guards)]
           (recur (union explored next-guard)
-                 (conj outgoing-guards next-guard))))))
+                 (conj outgoing-guards out #_next-guard))))))
 
-(defn expand-graph [graph prefix]
+(defn expand-graph [graph [prefix _ :as origin]]
   (tufte/p
-   ::expand-graph
+   ::expand-prefix
    (let [guards (outgoing prefix)]
-     (reduce (fn [graph guard]
-               (add-labeled-edges graph [prefix (str prefix (witness #_guard (printable guard)))] guard))
+     (reduce (fn [graph {:keys [guards accepted]}]
+               (let [dest-prefix (str prefix (witness (last guards)))
+                     dest-node [dest-prefix accepted]]
+                 (add-labeled-edges
+                  graph
+                  [origin dest-node] guards)))
              graph
              guards))))
 
+(defn epsilon []
+  ["" (:accepted (coastal/query ""))])
+
 (defn initial-graph []
-  (expand-graph (digraph) ""))
+  (expand-graph (digraph) (epsilon)))
 
 (defn frontier [graph & [{:keys [prune-fn] :or {prune-fn (constantly true)}}]]
   (tufte/p
-   ::generate-frontier
+   ::select-frontier
    (let [edges (edges graph)
-         edges+length (map (juxt (comp count dest) identity) edges)
+         edges+length (map (juxt (comp count first dest) identity) edges)
          grouped-by (group-by first edges+length)
          frontier-index (apply max (keys grouped-by))
          frontier (get grouped-by frontier-index)
@@ -84,11 +99,15 @@
         (recur graph' (dec steps))))))
 
 (defn find-edge* [graph [src-node dest-node]]
-  (first
-   (filter (fn [edge]
-             (and (= src-node (src edge))
-                  (= dest-node (dest edge))))
-           (edges graph))))
+  (tufte/p
+   ::find-edge
+   (first
+    (filter (fn [edge]
+              (let [[src-prefix _] (src edge)
+                    [dest-prefix _] (dest edge)]
+                (and (= src-node src-prefix)
+                     (= dest-node dest-prefix))))
+            (edges graph)))))
 
 (def find-edge (memoize find-edge*))
 
@@ -100,10 +119,10 @@
 
 (defn fischer-prune [graph edge]
   (let [guard (label graph edge)
-        src (src edge)
-        parent (find-edge graph [(prefix src) src])]
-    (not (and parent
-              (= (unicode) guard (label graph parent))))))
+        [src-prefix _] (src edge)
+        parent (find-edge* graph [(prefix src-prefix) src-prefix])]
+    (not (and parent ;; parent exists and
+              (= (unicode) guard (label graph parent)))))) ;; guard is unicode
 
 (defn leaf-nodes [graph]
   (reduce (fn [leaf-nodes edge]
@@ -113,25 +132,26 @@
           []
           (edges graph)))
 
-(defn accepted [nodes]
+(defn accepted-nodes [nodes]
   (tufte/p
-   ::filted-accepted-nodes)
-  (filter (fn [node] (:accepted (coastal/query node))) nodes))
+   ::filter-accepted-nodes
+   (filter (fn [[_ accepted]] accepted) nodes)))
 
 (defn fixpoint-unroll [bound]
   (loop [depth 0
          table (table/make-table)]
-    (println "Unrolling to depth " depth)
-    (let [table' (reduce (fn [table word] (table/process-counter-example table word))
+    (log/info "Unrolling to depth " depth)
+    (let [table' (reduce (fn [table [word _]]
+                           (table/process-counter-example table word))
                          table
-                         (accepted (nodes (unroll depth {:prune-fn fischer-prune}))))
+                         (accepted-nodes (nodes (unroll depth {:prune-fn fischer-prune}))))
           equivalent (sfa/equivalent? (sfa/make-sfa table')
                                       @table/target-sfa)]
       (if (or equivalent (= bound depth))
         {:depth depth
          :table table
          :equivalent equivalent}
-        (recur (inc depth) table')))))
+        (recur (inc depth) (table/make-table) #_table')))))
 
 (defn profile-unroll []
   (tufte/add-basic-println-handler! {})
@@ -146,7 +166,7 @@
      (let [graph (unroll depth {:prune-fn fischer-prune})
            nodes (nodes graph)]
        (println (count nodes))
-       (println (count (accepted nodes)))))))
+       (println (count (accepted-nodes nodes)))))))
 
 (defn profile-fixpoint-unroll []
   (tufte/add-basic-println-handler! {})
