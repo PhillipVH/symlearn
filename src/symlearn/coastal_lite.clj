@@ -147,6 +147,10 @@
      (let [graph (unroll depth {:prune-fn fischer-prune})]
        (println (count (nodes graph)))))))
 
+(defn -main
+  []
+  (profile-unroll))
+
 (comment
 
   (tufte/add-basic-println-handler! {})
