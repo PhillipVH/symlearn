@@ -49,23 +49,27 @@
                  (conj outgoing-guards next-guard))))))
 
 (defn expand-graph [graph prefix]
-  (let [guards (outgoing prefix)]
-    (reduce (fn [graph guard]
-              (add-labeled-edges graph [prefix (str prefix (witness guard #_(printable guard)))] guard))
-            graph
-            guards)))
+  (tufte/p
+   ::expand-graph
+   (let [guards (outgoing prefix)]
+     (reduce (fn [graph guard]
+               (add-labeled-edges graph [prefix (str prefix (witness guard #_(printable guard)))] guard))
+             graph
+             guards))))
 
 (defn initial-graph []
   (expand-graph (digraph) ""))
 
 (defn frontier [graph & [{:keys [prune-fn] :or {prune-fn (constantly true)}}]]
-  (let [edges (edges graph)
-        edges+length (map (juxt (comp count dest) identity) edges)
-        grouped-by (group-by first edges+length)
-        frontier-index (apply max (keys grouped-by))
-        frontier (get grouped-by frontier-index)
-        leaf-edges (map (fn [[_ edge]] edge) frontier)]
-    (filter #(prune-fn graph %) leaf-edges)))
+  (tufte/p
+   ::generate-frontier
+   (let [edges (edges graph)
+         edges+length (map (juxt (comp count dest) identity) edges)
+         grouped-by (group-by first edges+length)
+         frontier-index (apply max (keys grouped-by))
+         frontier (get grouped-by frontier-index)
+         leaf-edges (map (fn [[_ edge]] edge) frontier)]
+     (filter #(prune-fn graph %) leaf-edges))))
 
 (defn unroll [steps & [opts]]
   (loop [graph (initial-graph)
@@ -110,6 +114,8 @@
           (edges graph)))
 
 (defn accepted [nodes]
+  (tufte/p
+   ::filted-accepted-nodes)
   (filter (fn [node] (:accepted (coastal/query node))) nodes))
 
 (defn fixpoint-unroll [bound]
@@ -128,13 +134,32 @@
           #_(sfa/show-sfa (sfa/make-sfa table'))
           (recur (inc depth) table'))))))
 
+(defn profile-unroll []
+  (tufte/add-basic-println-handler! {})
+  (let [bench (evaluation/load-benchmark "regexlib-stratified.re")
+        specimen (nth bench 30)]
+    (init-coastal-lite specimen))
+  (Thread/sleep 1000) ;; we start querying the oracle too quickly
+  (doseq [depth (range 5)]
+    (println "Unrolling to depth" depth)
+    (tufte/profile
+     {}
+     (let [graph (unroll depth {:prune-fn fischer-prune})]
+       (println (count (nodes graph)))))))
+
 (comment
+
+  (tufte/add-basic-println-handler! {})
+
   (def bench (evaluation/load-benchmark "regexlib-stratified.re"))
 
   (nth bench 30)
-  "([a-zA-Z0-9_\\-\\.]+)(@[a-zA-Z0-9_\\-\\.]+)"
 
   (init-coastal-lite (nth bench 30))
+
+  (def x (tufte/profile {} (unroll 5 {:prune-fn fischer-prune})))
+
+  ;; (filter accepted (leaf-nodes x))
 
   (doseq [target bench]
     (init-coastal-lite target)

@@ -37,7 +37,7 @@
                  [org.apache.commons/commons-lang3 "3.4"]
                  [com.google.guava/guava "18.0"]
                  [javacup/cup "11"]]
-  :main ^:skip-aot symlearn.evaluation
+  :main ^:skip-aot symlearn.coastal-lite
   :repositories {"local" "file:lib"}
   :target-path "target/%s"
   :resource-paths ["resources/"
