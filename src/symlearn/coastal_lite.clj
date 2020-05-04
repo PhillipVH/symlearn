@@ -42,32 +42,34 @@
   (mk-guard \u0000 \uffff))
 
 (defn outgoing [prefix]
-    (loop [explored (negate (unicode))
-           outgoing-guards #{}]
-      (if (= (unicode) explored)
-        outgoing-guards
-        (let [next-guard (->> explored
-                              negate
-                              witness
-                              (str prefix)
-                              guards+acceptance)
-              {:keys [guards] :as out} next-guard
-              next-guard (last guards)]
-          (recur (union explored next-guard)
-                 (conj outgoing-guards out #_next-guard))))))
+  (tufte/p
+   ::discover-outgoing-guards
+   (loop [explored (negate (unicode))
+          outgoing-guards #{}]
+     (if (= (unicode) explored)
+       outgoing-guards
+       (let [next-guard (->> explored
+                             negate
+                             witness
+                             (str prefix)
+                             guards+acceptance)
+             {:keys [guards] :as out} next-guard
+             next-guard (last guards)]
+         (recur (union explored next-guard)
+                (conj outgoing-guards out #_next-guard)))))))
 
 (defn expand-graph [graph [prefix _ :as origin]]
-  (tufte/p
-   ::expand-prefix
-   (let [guards (outgoing prefix)]
-     (reduce (fn [graph {:keys [guards accepted]}]
-               (let [dest-prefix (str prefix (witness (last guards)))
-                     dest-node [dest-prefix accepted]]
-                 (add-labeled-edges
-                  graph
-                  [origin dest-node] guards)))
-             graph
-             guards))))
+  (let [guards (outgoing prefix)]
+    (reduce (fn [graph {:keys [guards accepted]}]
+              (let [discovered-guard (last guards)
+                    dest-prefix (str prefix (witness discovered-guard))
+                    dest-node [dest-prefix accepted]]
+                (add-labeled-edges
+                 graph
+                 [origin dest-node]
+                 discovered-guard)))
+            graph
+            guards)))
 
 (defn epsilon []
   ["" (:accepted (coastal/query ""))])
@@ -141,32 +143,38 @@
   (loop [depth 0
          table (table/make-table)]
     (log/info "Unrolling to depth " depth)
-    (let [table' (reduce (fn [table [word _]]
+    (let [graph (unroll depth {:prune-fn fischer-prune})
+          table' (reduce (fn [table [word _]]
                            (table/process-counter-example table word))
                          table
-                         (accepted-nodes (nodes (unroll depth {:prune-fn fischer-prune}))))
+                         (accepted-nodes (nodes graph)))
           equivalent (sfa/equivalent? (sfa/make-sfa table')
                                       @table/target-sfa)]
       (if (or equivalent (= bound depth))
         {:depth depth
          :table table
-         :equivalent equivalent}
+         :equivalent equivalent
+         :graph graph}
         (recur (inc depth) (table/make-table) #_table')))))
+
+;; profiling
 
 (defn profile-unroll []
   (tufte/add-basic-println-handler! {})
   (let [bench (evaluation/load-benchmark "regexlib-stratified.re")
-        specimen (nth bench 30)]
+        specimen (nth bench 38)]
     (init-coastal-lite specimen))
   (Thread/sleep 1000) ;; we start querying the oracle too quickly
   (doseq [depth (range 5)]
     (println "Unrolling to depth" depth)
     (tufte/profile
      {}
-     (let [graph (unroll depth {:prune-fn fischer-prune})
-           nodes (nodes graph)]
-       (println (count nodes))
-       (println (count (accepted-nodes nodes)))))))
+     (let [graph (coastal/timeout (time/m->ms 10) #(unroll depth {:prune-fn fischer-prune}))]
+       (if (keyword? graph)
+         (println "timeout at depth " depth)
+         (do
+           (println (count (nodes graph)))
+           (println (count (accepted-nodes (nodes graph))))))))))
 
 (defn profile-fixpoint-unroll []
   (tufte/add-basic-println-handler! {})
@@ -177,9 +185,12 @@
       (println "Learning " specimen)
       (tufte/profile
        {}
-       (let [{:keys [depth equivalent]} (fixpoint-unroll 7)]
-         (println "Depth" depth)
-         (println "Equivalent " equivalent))))))
+       (let [tree (coastal/timeout (time/m->ms 5) #(fixpoint-unroll 5))]
+         (if (keyword? tree)
+           (println "timeout")
+           (let [{:keys [depth equivalent]} tree]
+             (println "Depth" depth)
+             (println "Equivalent " equivalent))))))))
 
 (defn -main
   []
