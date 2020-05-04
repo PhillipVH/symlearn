@@ -8,9 +8,12 @@
             [taoensso.timbre :as log]
             [symlearn.coastal :as coastal]
             [symlearn.table :as table]
+            [symlearn.time :as time]
             [symlearn.sfa :as sfa]
             [symlearn.evaluation :as evaluation]
             [symlearn.intervals :as i :refer [negate union printable]]))
+
+(set! *warn-on-reflection* true)
 
 ;; coastal-lite
 
@@ -144,10 +147,13 @@
          table (table/make-table)]
     (log/info "Unrolling to depth " depth)
     (let [graph (unroll depth {:prune-fn fischer-prune})
+          nodes (nodes graph)
+          accepted-nodes (accepted-nodes nodes)
+          _ (log/info "Node count:" (count nodes)", Accepted Nodes:" (count accepted-nodes))
           table' (reduce (fn [table [word _]]
                            (table/process-counter-example table word))
                          table
-                         (accepted-nodes (nodes graph)))
+                         accepted-nodes)
           equivalent (sfa/equivalent? (sfa/make-sfa table')
                                       @table/target-sfa)]
       (if (or equivalent (= bound depth))
@@ -180,21 +186,22 @@
   (tufte/add-basic-println-handler! {})
   (let [bench (evaluation/load-benchmark "regexlib-stratified.re")]
     (doseq [specimen bench]
+      (log/info "Learning" specimen)
       (init-coastal-lite specimen)
       (Thread/sleep 1000) ;; we start querying the oracle too quickly
-      (println "Learning " specimen)
       (tufte/profile
        {}
-       (let [tree (coastal/timeout (time/m->ms 5) #(fixpoint-unroll 5))]
+       (let [tree (coastal/timeout (time/m->ms 5) #(fixpoint-unroll 20))]
          (if (keyword? tree)
            (println "timeout")
            (let [{:keys [depth equivalent]} tree]
-             (println "Depth" depth)
-             (println "Equivalent " equivalent))))))))
+             (log/info "Depth" depth)
+             (log/info "Equivalent " equivalent))))))))
 
 (defn -main
   []
-  (profile-fixpoint-unroll))
+  (profile-fixpoint-unroll)
+  )
 
 (comment
 
@@ -202,11 +209,17 @@
 
   (def bench (evaluation/load-benchmark "regexlib-stratified.re"))
 
-  (nth bench 30)
+  (nth bench 38)
 
-  (init-coastal-lite (nth bench 30))
+  (init-coastal-lite (nth bench 38))
 
-  (def x (tufte/profile {} (unroll 5 {:prune-fn fischer-prune})))
+  (view (unroll 3))
+
+  (count (nodes (unroll 10 {:prune-fn fischer-prune})))
+
+  (def x (tufte/profile {} (unroll 3 {:prune-fn fischer-prune})))
+
+  (count (nodes x))
 
   ;; (filter accepted (leaf-nodes x))
 

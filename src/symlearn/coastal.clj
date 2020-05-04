@@ -32,11 +32,9 @@
   ;; enqueue the string for solving
   (let [exploded-string (map int (.toCharArray ^String string))
         strlen (count string)] ;; avoid "first byte is null" encoding issues
-    (tufte/p
-     ::submit-refinement
-     (wcar* (car/del :refined)
-            (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))
-            (car/rpush :mustrefine ::ready))))
+    (wcar* (car/del :refined)
+           (apply (partial car/rpush :refine) (if (= 0 strlen) ["epsilon"] exploded-string))
+           (car/rpush :mustrefine ::ready)))
 
   ;; block for a response
   (let [[_ refined-path] (tufte/p ::wait-for-refinement (wcar* (car/brpop :refined 0)))
