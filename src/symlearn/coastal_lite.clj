@@ -187,13 +187,16 @@
   (let [bench (evaluation/load-benchmark "regexlib-stratified.re")]
     (doseq [specimen bench]
       (log/info "Learning" specimen)
+      (Thread/sleep 1000)
       (init-coastal-lite specimen)
       (Thread/sleep 1000) ;; we start querying the oracle too quickly
       (tufte/profile
        {}
        (let [tree (coastal/timeout (time/m->ms 5) #(fixpoint-unroll 20))]
          (if (keyword? tree)
-           (println "timeout")
+           (do
+             (coastal/stop!)
+             (println "timeout"))
            (let [{:keys [depth equivalent]} tree]
              (log/info "Depth" depth)
              (log/info "Equivalent " equivalent))))))))
