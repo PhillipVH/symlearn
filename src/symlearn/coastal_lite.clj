@@ -58,6 +58,8 @@
                              guards+acceptance)
              {:keys [guards] :as out} next-guard
              next-guard (last guards)]
+         (when (nil? next-guard)
+           (pprint out))
          (recur (union explored next-guard)
                 (conj outgoing-guards out #_next-guard)))))))
 
@@ -149,7 +151,8 @@
     (let [graph (unroll depth {:prune-fn fischer-prune})
           nodes (nodes graph)
           accepted-nodes (accepted-nodes nodes)
-          _ (log/info "Node count:" (count nodes)", Accepted Nodes:" (count accepted-nodes))
+          edges (edges graph)
+          _ (log/info "Node count:" (count nodes)", Accepted Nodes:" (count accepted-nodes)", Edge Count: " (count edges))
           table' (reduce (fn [table [word _]]
                            (table/process-counter-example table word))
                          table
@@ -186,20 +189,23 @@
   (tufte/add-basic-println-handler! {})
   (let [bench (evaluation/load-benchmark "regexlib-stratified.re")]
     (doseq [specimen bench]
-      (log/info "Learning" specimen)
-      (Thread/sleep 1000)
-      (init-coastal-lite specimen)
-      (Thread/sleep 1000) ;; we start querying the oracle too quickly
-      (tufte/profile
-       {}
-       (let [tree (coastal/timeout (time/m->ms 5) #(fixpoint-unroll 20))]
-         (if (keyword? tree)
-           (do
-             (coastal/stop!)
-             (println "timeout"))
-           (let [{:keys [depth equivalent]} tree]
-             (log/info "Depth" depth)
-             (log/info "Equivalent " equivalent))))))))
+      (try
+        (log/info "Learning" specimen)
+        (Thread/sleep 1000)
+        (init-coastal-lite specimen)
+        (Thread/sleep 1000) ;; we start querying the oracle too quickly
+        (tufte/profile
+         {}
+         (let [tree (coastal/timeout (time/m->ms 0.5) #(fixpoint-unroll 20))]
+           (if (keyword? tree)
+             (do
+               (coastal/stop!)
+               (println "timeout"))
+             (let [{:keys [depth equivalent]} tree]
+               (log/info "Depth" depth)
+               (log/info "Equivalent " equivalent)))))
+        (catch Exception e (println e))))))
+
 
 (defn -main
   []
