@@ -196,7 +196,7 @@
         (Thread/sleep 1000) ;; we start querying the oracle too quickly
         (tufte/profile
          {}
-         (let [tree (coastal/timeout (time/m->ms 0.5) #(fixpoint-unroll 20))]
+         (let [tree (coastal/timeout (time/m->ms 5) #(fixpoint-unroll 20))]
            (if (keyword? tree)
              (do
                (coastal/stop!)
@@ -210,6 +210,7 @@
 (defn -main
   []
   (profile-fixpoint-unroll)
+  (coastal/stop!)
   )
 
 (comment
