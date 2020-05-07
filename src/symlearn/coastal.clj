@@ -85,8 +85,10 @@
 (defn stop!
   "Stop a Coastal process running in `coastal`."
   []
-  (let [coastal-pid (str/trim (:out (sh/sh "pgrep" "-f" "COASTAL.*Regex")))]
-    (sh/sh "kill" "-9" coastal-pid))
+  (let [coastal-pid (str/trim (:out (sh/sh "pgrep" "-f" "COASTAL.*Regex")))
+        daemon-pid (str/trim (:out (sh/sh "pgrep" "-f" "GradleDaemon 5.6.1")))]
+    (sh/sh "kill" "-9" coastal-pid)
+    (sh/sh "kill" "-9" daemon-pid))
   (wcar* (car/flushall))
   (if coastal-instance
     (do

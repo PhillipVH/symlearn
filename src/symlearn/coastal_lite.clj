@@ -188,9 +188,9 @@
 (defn profile-fixpoint-unroll []
   (tufte/add-basic-println-handler! {})
   (let [bench (evaluation/load-benchmark "regexlib-stratified.re")]
-    (doseq [specimen bench]
+    (doseq [[idx specimen] (map-indexed #(vec [%1 %2]) bench)]
       (try
-        (log/info "Learning" specimen)
+        (log/info "("idx"): Learning" specimen)
         (Thread/sleep 1000)
         (init-coastal-lite specimen)
         (Thread/sleep 1000) ;; we start querying the oracle too quickly
