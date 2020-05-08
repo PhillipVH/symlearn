@@ -41,15 +41,14 @@
   ([bound] (mk-guard bound bound))
   ([lower upper] (i/make-interval lower upper)))
 
-(defn unicode []
-  (mk-guard \u0000 \uffff))
+(def unicode (mk-guard \u0000 \uffff))
 
 (defn outgoing [prefix]
   (tufte/p
    ::discover-outgoing-guards
-   (loop [explored (negate (unicode))
+   (loop [explored (negate unicode)
           outgoing-guards #{}]
-     (if (= (unicode) explored)
+     (if (= unicode explored)
        outgoing-guards
        (let [next-guard (->> explored
                              negate
@@ -129,7 +128,7 @@
         [src-prefix _] (src edge)
         parent (find-edge* graph [(prefix src-prefix) src-prefix])]
     (not (and parent ;; parent exists and
-              (= (unicode) guard (label graph parent)))))) ;; guard is unicode
+              (= unicode guard (label graph parent)))))) ;; guard is unicode
 
 (defn leaf-nodes [graph]
   (reduce (fn [leaf-nodes edge]
@@ -187,7 +186,7 @@
 
 (defn profile-fixpoint-unroll []
   (tufte/add-basic-println-handler! {})
-  (let [bench (evaluation/load-benchmark "regexlib-stratified.re")]
+  (let [bench (evaluation/load-benchmark "regexlib-80%.re")]
     (doseq [[idx specimen] (map-indexed #(vec [%1 %2]) bench)]
       (try
         (log/info "("idx"): Learning" specimen)
