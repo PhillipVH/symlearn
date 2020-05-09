@@ -18,8 +18,10 @@
 ;; coastal-lite
 
 (defn init-coastal-lite [oracle-str]
+  (log/info "Initializing Coastal Lite")
   (coastal/install-parser! oracle-str)
-  (reset! table/target-sfa (sfa/regex->sfa* oracle-str)))
+  (reset! table/target-sfa (sfa/regex->sfa* oracle-str))
+  (log/info "Initialized Coastal Lite"))
 
 (defn guards [word]
   (let [{:keys [constraints]} (coastal/query word)
@@ -138,34 +140,84 @@
           []
           (edges graph)))
 
-(defn accepted-nodes [nodes]
+(defn accepted [nodes]
   (tufte/p
    ::filter-accepted-nodes
    (filter (fn [[_ accepted]] accepted) nodes)))
 
+(defn graph->table
+  "Returns a new table, with accepting nodes of `g` added."
+  [g]
+  (tufte/p
+   ::graph->table
+   (reduce (fn [table [word _]]
+             (table/process-counter-example table word))
+           (table/make-table)
+           (accepted (nodes g)))))
+
 (defn fixpoint-unroll [bound]
   (loop [depth 0
-         table (table/make-table)]
+         graph (initial-graph)
+         table nil #_(table/make-table)]
     (log/info "Unrolling to depth " depth)
-    (let [graph (unroll depth {:prune-fn fischer-prune})
-          nodes (nodes graph)
-          accepted-nodes (accepted-nodes nodes)
-          edges (edges graph)
-          _ (log/info "Node count:" (count nodes)", Accepted Nodes:" (count accepted-nodes)", Edge Count: " (count edges))
-          table' (reduce (fn [table [word _]]
-                           (table/process-counter-example table word))
-                         table
-                         accepted-nodes)
-          equivalent (sfa/equivalent? (sfa/make-sfa table')
-                                      @table/target-sfa)]
-      (if (or equivalent (= bound depth))
-        {:depth depth
-         :table table
-         :equivalent equivalent
-         :graph graph}
-        (recur (inc depth) (table/make-table) #_table')))))
+    (let [graph' (coastal/timeout (time/m->ms 5) #(unroll depth {:prune-fn fischer-prune}))]
+      (if (keyword? graph')
+        (do
+          (log/info "Unroll operation timed out after 5 minutes")
+          {:depth depth
+           :graph graph
+           :table table
+           :equivalent false
+           :timeout :unroll})
+        (let [nodes (nodes graph')
+              edges (edges graph')
+              _ (log/info "Node count:" (count nodes)", Accepted Nodes:" (count (accepted nodes))", Edge Count: " (count edges))
+              table' (coastal/timeout (time/m->ms 5) #(graph->table graph'))]
+          (if (keyword? table')
+            (do
+              (log/info "Graph to table conversion timed out after 5 minutes")
+              {:depth depth
+               :table table
+               :equivalent false
+               :graph graph'
+               :timeout :graph})
+            (let [equivalent (sfa/equivalent? (sfa/make-sfa table')
+                                              @table/target-sfa)]
+              (if (or equivalent
+                   (= bound depth))
+                {:depth depth
+                 :table table'
+                 :equivalent equivalent
+                 :graph graph'}
+                (recur (inc depth) graph' table')))))))))
 
 ;; profiling
+
+(defn profile-fixpoint-unroll []
+  (tufte/add-basic-println-handler! {})
+  (let [bench (evaluation/load-benchmark "regexlib-80%.re")
+        results-file "results.edn"]
+    (spit results-file "[\n")
+    (doseq [[idx specimen] (map-indexed #(vec [%1 %2]) bench)]
+      (try
+        (log/info "("idx"): Learning" specimen)
+        (Thread/sleep 1000)
+        (init-coastal-lite specimen)
+        (Thread/sleep 1000) ;; we start querying the oracle too quickly
+        (tufte/profile
+         {}
+         (let [tree (fixpoint-unroll 30)]
+           (spit results-file (pr-str (select-keys tree [:depth :table :equivalent])) :append true)
+           (spit results-file "\n" :append true)
+           (if (:timeout tree)
+             (do
+               (coastal/stop!)
+               (log/info "Timeout"))
+             (let [{:keys [depth equivalent]} tree]
+               (log/info "Depth" depth)
+               (log/info "Equivalent " equivalent)))))
+        (catch Exception e (log/error e))))
+    (spit results-file "]" :append true)))
 
 (defn profile-unroll []
   (tufte/add-basic-println-handler! {})
@@ -182,62 +234,16 @@
          (println "timeout at depth " depth)
          (do
            (println (count (nodes graph)))
-           (println (count (accepted-nodes (nodes graph))))))))))
+           (println (count (accepted (nodes graph))))))))))
 
-(defn profile-fixpoint-unroll []
-  (tufte/add-basic-println-handler! {})
-  (let [bench (evaluation/load-benchmark "regexlib-80%.re")]
-    (doseq [[idx specimen] (map-indexed #(vec [%1 %2]) bench)]
-      (try
-        (log/info "("idx"): Learning" specimen)
-        (Thread/sleep 1000)
-        (init-coastal-lite specimen)
-        (Thread/sleep 1000) ;; we start querying the oracle too quickly
-        (tufte/profile
-         {}
-         (let [tree (coastal/timeout (time/m->ms 5) #(fixpoint-unroll 20))]
-           (if (keyword? tree)
-             (do
-               (coastal/stop!)
-               (println "timeout"))
-             (let [{:keys [depth equivalent]} tree]
-               (log/info "Depth" depth)
-               (log/info "Equivalent " equivalent)))))
-        (catch Exception e (println e))))))
-
+(defn load-profile-report []
+  (read-string (slurp "results.edn")))
 
 (defn -main
   []
   (profile-fixpoint-unroll)
   (coastal/stop!)
   )
-
-(comment
-
-  (tufte/add-basic-println-handler! {})
-
-  (def bench (evaluation/load-benchmark "regexlib-stratified.re"))
-
-  (nth bench 38)
-
-  (init-coastal-lite (nth bench 38))
-
-  (view (unroll 3))
-
-  (count (nodes (unroll 10 {:prune-fn fischer-prune})))
-
-  (def x (tufte/profile {} (unroll 3 {:prune-fn fischer-prune})))
-
-  (count (nodes x))
-
-  ;; (filter accepted (leaf-nodes x))
-
-  (doseq [target bench]
-    (init-coastal-lite target)
-    (Thread/sleep 2000)
-    (let [{:keys [depth equivalent]} (fixpoint-unroll 10)]
-      (println (format "Depth: %d, Equivalent: %s"  depth equivalent))))
-)
 
 ;; fixpoint unrolling fn
 ;; - unroll until sfa/equivalent?
