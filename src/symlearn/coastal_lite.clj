@@ -204,39 +204,29 @@
         (Thread/sleep 1000)
         (init-coastal-lite specimen)
         (Thread/sleep 1000) ;; we start querying the oracle too quickly
-        (tufte/profile
-         {}
-         (let [tree (fixpoint-unroll 30)]
-           (spit results-file (pr-str (select-keys tree [:depth :table :equivalent])) :append true)
-           (spit results-file "\n" :append true)
-           (if (:timeout tree)
-             (do
-               (coastal/stop!)
-               (log/info "Timeout"))
-             (let [{:keys [depth equivalent]} tree]
-               (log/info "Depth" depth)
-               (log/info "Equivalent " equivalent)))))
+        (let [[report pstats] (tufte/profiled {} (fixpoint-unroll 30))
+              nodes (nodes (:graph report))
+              edges (edges (:graph report))
+              report+pstats (-> report
+                                (dissoc :graph)
+                                (assoc :skeleton-graph {:nodes nodes
+                                                        :edges edges})
+                                (assoc :pstats @pstats)
+                                (assoc :target specimen))]
+          (if (:timeout report)
+            (do
+              (coastal/stop!)
+              (log/info "Timeout"))
+            (let [{:keys [depth equivalent]} report]
+              (log/info "Depth" depth)
+              (log/info "Equivalent " equivalent)))
+
+          (spit results-file (pr-str report+pstats) :append true)
+          (spit results-file "\n" :append true))
         (catch Exception e (log/error e))))
     (spit results-file "]" :append true)))
 
-(defn profile-unroll []
-  (tufte/add-basic-println-handler! {})
-  (let [bench (evaluation/load-benchmark "regexlib-stratified.re")
-        specimen (nth bench 38)]
-    (init-coastal-lite specimen))
-  (Thread/sleep 1000) ;; we start querying the oracle too quickly
-  (doseq [depth (range 5)]
-    (println "Unrolling to depth" depth)
-    (tufte/profile
-     {}
-     (let [graph (coastal/timeout (time/m->ms 10) #(unroll depth {:prune-fn fischer-prune}))]
-       (if (keyword? graph)
-         (println "timeout at depth " depth)
-         (do
-           (println (count (nodes graph)))
-           (println (count (accepted (nodes graph))))))))))
-
-(defn load-profile-report []
+(defn load-profile-reports []
   (read-string (slurp "results.edn")))
 
 (defn -main
