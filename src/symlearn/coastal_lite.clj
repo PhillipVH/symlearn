@@ -181,13 +181,17 @@
                :equivalent false
                :graph graph'
                :timeout :graph})
-            (let [equivalent (sfa/equivalent? (sfa/make-sfa table')
-                                              @table/target-sfa)]
+            (let [hypothesis (sfa/make-sfa table')
+                  equivalent (sfa/equivalent? hypothesis
+                                              @table/target-sfa)
+                  ce (coastal/check-equivalence-perfect {:oracle @table/target-sfa
+                                                         :hypothesis hypothesis})]
               (if (or equivalent
                    (= bound depth))
                 {:depth depth
                  :table table'
                  :equivalent equivalent
+                 :ce (if ce (count (first ce)) -1)
                  :graph graph'}
                 (recur (inc depth) graph' table')))))))))
 
@@ -209,7 +213,7 @@
               edges (edges (:graph report))
               report+pstats (-> report
                                 (dissoc :graph)
-                                (assoc :skeleton-graph {:nodes nodes
+                                #_(assoc :skeleton-graph {:nodes nodes
                                                         :edges edges})
                                 (assoc :pstats @pstats)
                                 (assoc :target specimen))]
