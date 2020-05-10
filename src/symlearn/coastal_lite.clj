@@ -210,10 +210,13 @@
         (init-coastal-lite specimen)
         (Thread/sleep 1000) ;; we start querying the oracle too quickly
         (let [[report pstats] (tufte/profiled {} (fixpoint-unroll 30))
+              nodes (nodes (:graph report))
+              node-count (count nodes)
+              accepted-node-count (count (accepted nodes))
               report+pstats (-> report
                                 (dissoc :graph)
-                                #_(assoc :skeleton-graph {:nodes nodes
-                                                        :edges edges})
+                                (assoc :graph {:node-count node-count
+                                               :accepted-node-count accepted-node-count})
                                 (assoc :pstats @pstats)
                                 (assoc :target specimen))]
           (if (:timeout report)
