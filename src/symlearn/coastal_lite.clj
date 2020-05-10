@@ -21,7 +21,7 @@
 (defn init-coastal-lite [oracle-str]
   (log/info "Initializing Coastal Lite")
   (coastal/install-parser! oracle-str)
-  (reset! table/target-sfa (sfa/regex->sfa* oracle-str))
+  (reset! table/target-sfa (.minimize ^SFA (sfa/regex->sfa* oracle-str) i/solver))
   (log/info "Initialized Coastal Lite"))
 
 (defn guards [word]
