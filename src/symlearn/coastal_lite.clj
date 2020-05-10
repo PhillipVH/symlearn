@@ -11,7 +11,8 @@
             [symlearn.time :as time]
             [symlearn.sfa :as sfa]
             [symlearn.evaluation :as evaluation]
-            [symlearn.intervals :as i :refer [negate union printable]]))
+            [symlearn.intervals :as i :refer [negate union printable]])
+  (:import automata.sfa.SFA))
 
 (set! *warn-on-reflection* true)
 
@@ -209,8 +210,6 @@
         (init-coastal-lite specimen)
         (Thread/sleep 1000) ;; we start querying the oracle too quickly
         (let [[report pstats] (tufte/profiled {} (fixpoint-unroll 30))
-              nodes (nodes (:graph report))
-              edges (edges (:graph report))
               report+pstats (-> report
                                 (dissoc :graph)
                                 #_(assoc :skeleton-graph {:nodes nodes
@@ -233,15 +232,53 @@
 (defn load-profile-reports []
   (read-string (slurp "results.edn")))
 
+(defn clock-time [report]
+  (:total (:clock (:pstats report))))
+
+(defn transition-count [^SFA sfa]
+  (.getTransitionCount sfa))
+
+(defn state-count [^SFA sfa]
+  (.stateCount sfa))
+
+(defn report->csv [report]
+  (log/info "Generating CSV line for" (:target report))
+  (let [{:keys [depth equivalent target timeout table]} report
+        clock-time (clock-time report)
+        hypothesis (sfa/make-sfa table)
+        oracle (.minimize ^SFA (i/regex->sfa target) i/solver)
+        ce (coastal/check-equivalence-perfect {:oracle oracle
+                                               :hypothesis hypothesis})
+        ce (if ce (count (first ce)) 0)
+        info [(state-count oracle)
+              (transition-count oracle)
+              (state-count hypothesis)
+              (transition-count hypothesis)
+              (inc depth)
+              equivalent
+              ce
+              (time/ns->s clock-time)
+              timeout target]]
+    (str/join \, info)))
+
+(defn reports->csv [reports]
+  (let [header "target-states,target-transitions,conj-states,conj-transitions,depth,equivalent?,ce-length,wall-time(s),timeout?,target\n"]
+    (reduce (fn [body report]
+              (str body (report->csv report) "\n"))
+            header
+            reports)))
+
 (defn -main
   []
   (profile-fixpoint-unroll)
   (coastal/stop!)
-  )
+  (->> (load-profile-reports)
+       reports->csv
+       (spit "results.csv")))
 
 ;; fixpoint unrolling fn
-;; - unroll until sfa/equivalent?
-;; - obtain conjecture -> need to validate (eqv oracle => coastal | gtestr | perfect)
-;; - regexlib perfect
+;; - unroll until sfa/equivalent? -- check
+;; - obtain conjecture -> need to validate (eqv oracle => coastal | gtestr | perfect) -- 
+;; - regexlib perfect -- check
 
-;; run negative examples after learnt from positive examples
+;; run negative examples after learnt from positive examples -- 
