@@ -254,8 +254,8 @@
                                                :hypothesis hypothesis})
         ce (if ce (count (first ce)) 0)
         info [(state-count oracle)
-              (transition-count oracle)
               (state-count hypothesis)
+              (transition-count oracle)
               (transition-count hypothesis)
               (inc depth)
               equivalent
@@ -265,7 +265,7 @@
     (str/join \, info)))
 
 (defn reports->csv [reports]
-  (let [header "target-states,target-transitions,conj-states,conj-transitions,depth,equivalent?,ce-length,wall-time(s),timeout?,target\n"]
+  (let [header "target-states,conj-states,target-transitions,conj-transitions,depth,equivalent?,ce-length,wall-time(s),timeout?,target\n"]
     (reduce (fn [body report]
               (str body (report->csv report) "\n"))
             header
@@ -278,6 +278,85 @@
   (->> (load-profile-reports)
        reports->csv
        (spit "results.csv")))
+
+
+
+(defn complete [table {:keys [^SFA oracle]}]
+  (loop [table table
+         counter-examples #{}
+         limit 100]
+    (let [hypothesis (sfa/make-sfa table)
+          ?counter-example (first (coastal/check-equivalence-perfect
+                                   {:oracle oracle
+                                    :hypothesis hypothesis}))]
+      (if (and ?counter-example
+               (> limit 0))
+        (do
+          (log/info "Added" ?counter-example "to table")
+          (recur (table/process-counter-example table ?counter-example)
+                 (conj counter-examples ?counter-example)
+                 (dec limit)))
+        (let [equivalent (nil? ?counter-example)]
+          [table counter-examples equivalent])))))
+
+(defn perfect-completion []
+  (spit "completion.edn" \[)
+  (let [reports (load-profile-reports)
+        timed-out-reports (filter #(= :unroll (:timeout %)) reports)]
+    (doseq [[index {:keys [table target]}] (map-indexed #(vec [%1 %2]) timed-out-reports)]
+      (log/info "Progress:" index)
+      (log/info "Attempting to complete" target)
+      (init-coastal-lite target)
+      (let [oracle (i/regex->sfa target)
+            [[_ _ equivalent :as report] pstats] (tufte/profiled {} (complete table {:oracle oracle}))]
+        (spit "completion.edn" (str (pr-str (conj report @pstats target)) \newline) :append true)
+        (if equivalent
+          (log/info "Achieved equivalence for target" target)
+          (log/info "Not equivalent after 100 counter examples" target)))))
+  (spit "completion.edn" \] :append true))
+
+
+(comment
+
+(tufte/add-basic-println-handler! {})
+(perfect-completion)
+
+(def completed-reports (read-string (slurp "completion.edn")))
+
+(def edn-repo (for [[table counter-examples equivalent pstats target] completed-reports]
+   {:table table
+    :counter-examples counter-examples
+    :equivalent equivalent
+    :pstats pstats
+    :target target}))
+
+(spit "completed.csv", "n,equivalent-after-n?,target\n")
+(doseq [{:keys [counter-examples equivalent pstats target]} edn-repo]
+  (let [n (count counter-examples)]
+    (spit "completed.csv" (str (str/join \, [n equivalent #_(str/join "   ||||||   " counter-examples) target]) \newline) :append true))
+  )
+
+(def edn-repo-not (filter #(not (:equivalent %)) edn-repo))
+(def edn-repo-eq (filter #(:equivalent %) edn-repo))
+
+;;
+
+  (def bench (evaluation/load-benchmark "regexlib-80%.re"))
+
+(init-coastal-lite (nth bench 58))
+
+(def zi-table (:table (fixpoint-unroll 30)))
+
+(let [counter-example (first (coastal/check-equivalence-perfect
+                              {:oracle (i/regex->sfa (nth bench 58))
+                               :hypothesis (sfa/make-sfa zi-table)}))]
+  (table/process-counter-example zi-table counter-example))
+
+
+
+(complete zi-table {:oracle (i/regex->sfa (nth bench 58))})
+
+)
 
 ;; fixpoint unrolling fn
 ;; - unroll until sfa/equivalent? -- check
