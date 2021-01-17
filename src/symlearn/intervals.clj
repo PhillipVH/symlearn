@@ -122,7 +122,7 @@
   (let [incomplete-sfa (regex->sfa* regex)
         completed (SFA/mkTotal incomplete-sfa solver 1000)]
     completed
-    #_(.minimize completed solver)))
+    (.minimize completed solver)))
 
 (defn sfa->java
   "Return the Java source code that represents a parser accepting the language
