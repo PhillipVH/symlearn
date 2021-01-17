@@ -2,3 +2,6 @@
 	path = eqv-coastal
 	url = git@github.com:PhillipVH/coastal.git
 	branch = feature/equivalence-oracle
+[submodule "gtestr"]
+	path = gtestr
+	url = git@github.com:thefischsun/gtestr.git

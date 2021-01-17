@@ -11,6 +11,10 @@
   [m]
   (* 1000 60 m))
 
+(defn ns->s
+  [ns]
+  (/ ns 1e9))
+
 (defn ms-to-timeout
   "Returns the number of milliseconds left between `now` and `minutes-limit`."
   [start now minutes-limit]

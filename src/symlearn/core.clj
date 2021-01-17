@@ -39,12 +39,13 @@
                         (let [eq-start (System/currentTimeMillis)
                               counter-example
                               (if (= :perfect oracle)
-                                (tufte/p ::equivalence-query (c/check-equivalence-perfect target-sfa conjecture))
+                                (tufte/p ::equivalence-query (c/check-equivalence-perfect {:oracle target-sfa
+                                                                                           :hypothesis conjecture}))
                                 (tufte/p ::equivalence-query
-                                         (c/check-equivalence-timed!
-                                          {:depth depth,
-                                           :target target
-                                           :candidate conjecture
+                                         (c/check-equivalence-concolic
+                                          {:symbolic-length depth,
+                                           :oracle target-sfa
+                                           :hypothesis conjecture
                                            :timeout-ms (time/ms-to-timeout start
                                                                         (System/currentTimeMillis)
                                                                       (time/ms->m timeout-ms))})))]
@@ -59,7 +60,7 @@
                               table)
 
                             ;; equivalence check timed out
-                            (= counter-example ::timeout)
+                            (= counter-example :symlearn.coastal/timeout)
                             ::timeout
 
                             ;; found a counter example, process and return new table

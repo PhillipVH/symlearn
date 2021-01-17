@@ -127,13 +127,13 @@
     (.toString java-src)))
 
 (defn mk-equivalence-oracle
-  [^SFA candidate-sfa target depth]
-  (render-resource "templates/Example.java" {:target-fn (sfa->java (intervals/regex->sfa target) "target")
+  [^SFA candidate-sfa ^SFA target depth]
+  (render-resource "templates/Example.java" {:target-fn (sfa->java target "target")
                                              :candidate-fn (sfa->java candidate-sfa "candidate")
                                              :input (mk-input depth)}))
 
 (defn install-equivalence-oracle!
-  [^SFA candidate target depth]
+  [^SFA candidate ^SFA target depth]
   (spit "eqv-coastal/src/main/java/learning/Example.java"
         (mk-equivalence-oracle candidate target depth))
   (log/info "Compiling Equivalence Oracle:" {:target target, :depth depth})

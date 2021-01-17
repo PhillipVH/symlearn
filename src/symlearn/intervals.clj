@@ -57,6 +57,11 @@
   [^Character bottom ^Character top]
   (CharPred. bottom top))
 
+(def ascii-printable (make-interval \u0020 \u007E))
+
+(defn printable [interval]
+  (intersection ascii-printable interval))
+
 (defprotocol ISFA
   "A protocol for SFAs over the domain of characters."
   (initial-state [this] "Return the initial state of `this`.")
@@ -103,14 +108,20 @@
   [from to ^CharPred guard]
   (SFAInputMove. (int from) (int to) guard))
 
-(defn ^SFA regex->sfa
-  "Returns an SFA that accepts the language described by `regex`."
+(defn ^SFA regex->sfa*
   [regex]
   (let [nodes (binding [*out* (java.io.StringWriter.)] ;; get rid of the "string to be parsed" message
                 (RegexParserProvider/parse ^"[Ljava.lang.String;" (into-array [regex])))
         root (.get ^java.util.List nodes 0)
-        sfa (RegexConverter/toSFA root solver)
-        completed (SFA/mkTotal sfa solver 1000)]
+        sfa (RegexConverter/toSFA root solver)]
+    (.determinize sfa solver)))
+
+(defn ^SFA regex->sfa
+  "Returns an SFA that accepts the language described by `regex`."
+  [regex]
+  (let [incomplete-sfa (regex->sfa* regex)
+        completed (SFA/mkTotal incomplete-sfa solver 1000)]
+    completed
     (.minimize completed solver)))
 
 (defn sfa->java
