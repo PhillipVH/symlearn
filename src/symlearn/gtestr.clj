@@ -24,8 +24,11 @@
         guard (i/printable (.guard transition))
         expanded-range (char-range (i/left guard)
                                    (i/right guard))]
-    (for [symbol expanded-range]
-      (format "s%s :- '%s', s%s." from (escape-char symbol) to))))
+    (format "s%s :- '%s', s%s." from (str guard) to)
+    #_(format "\\mathit{s%s} & \\rightarrow \\texttt{%s} \\mathit{s%s}\\\\[0.2ex]" from (str guard) to)
+    #_(for [symbol expanded-range]
+        (format "s%s :- '%s', s%s." from (escape-char symbol) to))))
+
 
 (defn epsilon-rules [^SFA sfa]
   (map #(format "s%s :- epsilon." %)
