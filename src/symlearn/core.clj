@@ -60,7 +60,7 @@
                               table)
 
                             ;; equivalence check timed out
-                            (= counter-example ::timeout)
+                            (= counter-example :symlearn.coastal/timeout)
                             ::timeout
 
                             ;; found a counter example, process and return new table
